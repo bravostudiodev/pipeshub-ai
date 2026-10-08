@@ -3,7 +3,7 @@
 
 - ✅ Next.js 15 with App Router
 - ✅ TypeScript configuration
-- ✅ Tailwind CSS for styling
+- ✅ Radix UI Themes for styling (Tailwind is not used)
 - ✅ Radix UI components
 - ✅ Authentication flow (Phone OTP)
 - ✅ State management with Zustand
@@ -11,6 +11,21 @@
 - ✅ Sidebar navigation
 - ✅ Responsive layout
 - ✅ Material Icons support
+
+## Fork-specific source connections
+
+This frontend is part of an independent internal knowledge platform fork. The
+`/chat` page keeps a compact, wrapping row of employee source
+connections visible during new chats and active conversations. The cards cover
+Slack, Notion, Miro, Jira, Gmail, Google Drive, and Superhuman Docs. Confluence
+Data Center Personal remains in connector administration, not this chat strip.
+OAuth-backed MCP cards operate on the current user's authorization. Superhuman
+Docs accepts an employee's read-only token and links to `/superhuman-guide/`;
+
+The workspace MCP Diagnostics page is at
+`/workspace/mcp-servers/diagnostics/` and is restricted to administrators.
+Trace collection is off by default. Implementation and security details are
+documented in [`../docs/fork-customizations.md`](../docs/fork-customizations.md).
 
 ## Project Structure
 
@@ -121,7 +136,7 @@ function MyComponent() {
 
 ### Styling
 
-- Use Tailwind utility classes for styling
+- Use Radix UI Themes components and inline styles, following `CLAUDE.md`
 - Global CSS variables are defined in `globals.css`
 - Follow the no-scrollbar pattern for custom scrollable areas
 
@@ -172,7 +187,6 @@ Detailed documentation is available in the `docs/` folder:
 3. Add route to sidebar menu items
 
 ### Modify Theme
-- Update Tailwind config in `tailwind.config.ts`
 - Modify CSS variables in `globals.css`
 - Customize Radix UI theme in layout files
 
@@ -187,7 +201,7 @@ Detailed documentation is available in the `docs/` folder:
 
 - **Framework**: Next.js 15
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS 4
+- **Styling**: Radix UI Themes and inline styles (no Tailwind CSS)
 - **UI Components**: Radix UI
 - **State Management**: Zustand
 - **Data Fetching**: SWR

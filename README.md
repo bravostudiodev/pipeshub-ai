@@ -48,6 +48,29 @@
 
 Connect Slack, Google Drive, GitHub, Microsoft 365, Notion and 50+ other systems. Search across them and get answers with citations, filtered by what each person is allowed to see — or give that same context to your own agents, workflows and MCP clients.
 
+## This fork: internal knowledge platform
+
+This repository is an independent, self-hosted fork adapting PipesHub for
+employees to ask questions across company knowledge. It adds a compact,
+wrapping source-connection strip to `/chat`, with user-specific connections
+for Slack, Notion, Miro, Jira, Gmail, Google Drive, and Superhuman Docs. Slack uses the official live MCP server with each employee's own
+Slack authorization; it does not use the Slack ingestion connector for that
+chat flow. The existing organization-managed **Confluence Data Center
+Personal** connector remains available in connector administration, preserving
+shared sync settings while each user provides their own login; it is not shown
+in the chat strip. Superhuman Docs uses a user-provided, read-only token
+and includes an in-app setup guide.
+
+Organization MCP configuration and employee authorization are separate. MCP
+OAuth credentials belong to the authorizing user. Admins can diagnose MCP
+retrieval differences through the feature-flagged, content-minimizing view at
+`/workspace/mcp-servers/diagnostics/`; tracing is off by default. See
+[`docs/fork-customizations.md`](docs/fork-customizations.md) for connection
+behavior, implementation paths, trace retention, and security invariants.
+
+The fork remains self-hosted and uses configurable OpenAI-compatible model
+routing through its LiteLLM-compatible gateway.
+
 > [!TIP]
 > Deploy with a single command:
 > ```bash
@@ -366,4 +389,3 @@ PipesHub supports image, diagram, and scanned-file understanding, plus voice-bas
 <p><sub>Built with ❤️ by the <a href="https://www.pipeshub.com/">PipesHub team</a> and contributors around the world.</sub></p>
 
 </div>
-

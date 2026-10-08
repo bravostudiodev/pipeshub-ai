@@ -38,6 +38,9 @@ class AgentContext(BaseModel):
     # Identity
     org_id: str
     user_id: str
+    # Authenticated API caller. May differ from `user_id` for service-account agents,
+    # whose MCP credentials are stored under the agent owner.
+    authenticated_user_id: str | None = None
     user_email: str
     user_info: dict[str, Any] = Field(default_factory=dict)
     org_info: dict[str, Any] = Field(default_factory=dict)
@@ -347,7 +350,7 @@ class AgentContext(BaseModel):
         cls, state: dict[str, Any], *, event_sink: Any = None, protocol: str = "legacy",
         llm_provider: str = "", context_length: int | None = None,
         is_reasoning_model: bool = False, run_id: str | None = None,
-        cancellation_token: Any = None,
+        cancellation_token: Any = None, authenticated_user_id: str | None = None,
     ) -> "AgentContext":
         """Builds an `AgentContext` from an already-built `ChatState` dict
         (Phase 8, `stream_bridge.py`) rather than re-deriving every field a
@@ -365,6 +368,7 @@ class AgentContext(BaseModel):
         return cls(
             org_id=state.get("org_id", ""),
             user_id=state.get("user_id", ""),
+            authenticated_user_id=authenticated_user_id or state.get("user_id", ""),
             user_email=state.get("user_email", ""),
             user_info=state.get("user_info") or {},
             org_info=state.get("org_info") or {},

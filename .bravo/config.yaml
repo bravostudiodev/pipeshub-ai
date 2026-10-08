@@ -1,0 +1,12 @@
+version: v2alpha4
+pipeline:
+  stages:
+    "Image build":
+      imageBuild:
+        name: platform/pipeshubai
+        tags:
+          - oddyssey1.0.0.1-1
+        securityScan:
+          failSeverity: CRITICAL
+        context: .
+        push: false

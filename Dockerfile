@@ -8,6 +8,7 @@ ARG PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps
 ARG RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime
 
 FROM ${PYTHON_DEPS_IMAGE} AS python-deps
+ARG BUNDLE_BGE_EMBEDDING=0
 # The base image bakes in dependencies as of its publish time. Reconcile with the
 # current pyproject.toml so packages added since the base was published (e.g. new
 # connector SDKs like opensearch-py) end up in the app image. uv skips
@@ -20,7 +21,13 @@ COPY backend/python/pyproject.toml ./
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install --system -e . && \
     crawl4ai-setup && \
-    playwright install chromium
+    playwright install chromium && \
+    if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
+        rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5; \
+    fi && \
+    # The app uses bge-reranker-base; this differently named model was stale
+    # data inherited from a published dependency base and is not used.
+    rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3
 
 
 FROM ${RUNTIME_BASE_IMAGE} AS runtime-base

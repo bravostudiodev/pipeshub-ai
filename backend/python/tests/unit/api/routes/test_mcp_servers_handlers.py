@@ -36,10 +36,20 @@ from app.api.routes.mcp_servers import (
     delete_instance,
     get_agent_mcp_servers,
     get_agent_oauth_authorization_url,
+    get_atlassian_connection,
+    get_gmail_connection,
+    get_google_drive_connection,
+    get_miro_connection,
     get_catalog_template,
     get_instance,
     get_instance_tools,
     get_my_mcp_servers,
+    get_slack_connection,
+    _is_atlassian_rovo_mcp_instance,
+    _is_gmail_mcp_instance,
+    _is_google_drive_mcp_instance,
+    _is_miro_mcp_instance,
+    _is_official_slack_mcp_instance,
     get_oauth_authorization_url,
     get_oauth_config,
     list_catalog,
@@ -629,6 +639,207 @@ class TestOauthRouteWrappers:
 
 
 class TestDiscoveryHandlers:
+    def test_official_slack_match_excludes_legacy_bot_template(self) -> None:
+        official = {
+            "url": "https://mcp.slack.com/mcp",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+        }
+        assert _is_official_slack_mcp_instance(official)
+        assert not _is_official_slack_mcp_instance({
+            **official,
+            "url": None,
+            "transport": MCPTransport.STDIO.value,
+            "authMode": MCPAuthMode.API_TOKEN.value,
+        })
+
+    @pytest.mark.asyncio
+    async def test_slack_status_is_scoped_to_current_user_and_minimal(self) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            _id="org-slack-instance",
+            url="https://mcp.slack.com/mcp",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+            typeId=None,
+            clientSecret="must-not-escape",
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})) as resolve_auth,
+            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock()) as discover_tools_mock,
+        ):
+            result = await get_slack_connection(request)
+
+        resolve_auth.assert_awaited_once_with(instance, "admin-1", config_service)
+        discover_tools_mock.assert_not_awaited()
+        assert result == {
+            "configured": True,
+            "instanceId": "org-slack-instance",
+            "isConnected": True,
+            "hasCredentials": True,
+        }
+        assert "clientSecret" not in result
+
+    @pytest.mark.asyncio
+    async def test_slack_status_does_not_probe_tools_to_check_saved_authorization(self) -> None:
+        request = _admin_request()
+        instance = _api_token_instance(
+            _id="org-slack-instance",
+            url="https://mcp.slack.com/mcp",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+            typeId=None,
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})),
+            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock()) as discover_tools_mock,
+        ):
+            result = await get_slack_connection(request)
+        assert result["isConnected"] is True
+        assert result["hasCredentials"] is True
+        discover_tools_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_slack_status_is_unavailable_when_ambiguous(self) -> None:
+        request = _admin_request()
+        instance = {
+            "_id": "slack",
+            "url": "https://mcp.slack.com/mcp",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+        }
+        with patch(
+            "app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance",
+            new=AsyncMock(return_value=[instance, {**instance, "_id": "duplicate"}]),
+        ):
+            assert await get_slack_connection(request) == {"configured": False, "isConnected": False}
+
+    def test_miro_designation_uses_name_and_user_oauth(self) -> None:
+        miro = {
+            "name": "Miro",
+            "url": "https://custom-mcp.example.com/miro",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+            "useAdminAuth": False,
+        }
+        assert _is_miro_mcp_instance(miro)
+        assert _is_miro_mcp_instance({**miro, "name": "  miro  "})
+        assert not _is_miro_mcp_instance({**miro, "authMode": MCPAuthMode.API_TOKEN.value})
+        assert not _is_miro_mcp_instance({**miro, "useAdminAuth": True})
+        assert not _is_miro_mcp_instance({**miro, "name": "Miro Test"})
+
+    @pytest.mark.asyncio
+    async def test_miro_status_resolves_only_authenticated_callers_credentials(self) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            _id="org-miro-instance",
+            name="Miro",
+            url="https://custom-mcp.example.com/miro",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+            useAdminAuth=False,
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})) as resolve_auth,
+        ):
+            result = await get_miro_connection(request)
+
+        resolve_auth.assert_awaited_once_with(instance, "admin-1", config_service)
+        assert result == {
+            "configured": True,
+            "instanceId": "org-miro-instance",
+            "isConnected": True,
+            "hasCredentials": True,
+        }
+
+    def test_atlassian_rovo_designation_requires_official_oauth_instance(self) -> None:
+        official = {
+            "typeId": "atlassian_rovo",
+            "url": "https://mcp.atlassian.com/v1/mcp",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+        }
+        assert _is_atlassian_rovo_mcp_instance(official)
+        assert not _is_atlassian_rovo_mcp_instance({**official, "url": "https://example.com/v1/mcp"})
+        assert not _is_atlassian_rovo_mcp_instance({**official, "authMode": MCPAuthMode.API_TOKEN.value})
+
+    @pytest.mark.asyncio
+    async def test_atlassian_status_checks_only_current_users_connection(self) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            _id="org-atlassian-instance",
+            typeId="atlassian_rovo",
+            url="https://mcp.atlassian.com/v1/mcp",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})) as resolve_auth,
+        ):
+            result = await get_atlassian_connection(request)
+
+        resolve_auth.assert_awaited_once_with(instance, "admin-1", config_service)
+        assert result == {
+            "configured": True,
+            "instanceId": "org-atlassian-instance",
+            "isConnected": True,
+            "hasCredentials": True,
+        }
+
+    @pytest.mark.parametrize(
+        ("type_id", "host", "matcher"),
+        [
+            ("gmail", "gmailmcp.googleapis.com", _is_gmail_mcp_instance),
+            ("google_drive", "drivemcp.googleapis.com", _is_google_drive_mcp_instance),
+        ],
+    )
+    def test_google_mcp_designations_match_official_oauth_instances(self, type_id, host, matcher) -> None:
+        instance = {
+            "typeId": type_id,
+            "url": f"https://{host}/mcp/v1",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+        }
+        assert matcher(instance)
+        assert not matcher({**instance, "url": f"https://{host}/other"})
+        assert not matcher({**instance, "authMode": MCPAuthMode.API_TOKEN.value})
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("type_id", "host", "status_handler"),
+        [
+            ("gmail", "gmailmcp.googleapis.com", get_gmail_connection),
+            ("google_drive", "drivemcp.googleapis.com", get_google_drive_connection),
+        ],
+    )
+    async def test_google_connection_status_resolves_only_current_users_credentials(self, type_id, host, status_handler) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            _id=f"org-{type_id}-instance",
+            typeId=type_id,
+            url=f"https://{host}/mcp/v1",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})) as resolve_auth,
+        ):
+            result = await status_handler(request)
+
+        resolve_auth.assert_awaited_once_with(instance, "admin-1", config_service)
+        assert result["instanceId"] == f"org-{type_id}-instance"
+        assert result["isConnected"] is True
+        assert result["hasCredentials"] is True
+
     @pytest.mark.asyncio
     async def test_get_my_mcp_servers_without_tools(self) -> None:
         config_service = MagicMock()

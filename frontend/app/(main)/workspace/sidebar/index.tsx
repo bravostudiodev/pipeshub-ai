@@ -66,6 +66,7 @@ const WORKSPACE_ITEMS: NavItem[] = [
   { icon: 'security', labelKey: 'workspace.sidebar.nav.authentication', route: '/workspace/authentication', adminOnly: true },
   { icon: 'hub', labelKey: 'workspace.sidebar.nav.connectors', route: '/workspace/connectors/team', adminOnly: true },
   { icon: 'device_hub', labelKey: 'workspace.sidebar.nav.mcpServers', route: '/workspace/mcp-servers/team', adminOnly: true, requiresFlag: 'mcp' },
+  { icon: 'query_stats', labelKey: 'workspace.sidebar.nav.mcpDiagnostics', route: '/workspace/mcp-servers/diagnostics', adminOnly: true, requiresFlag: 'mcp' },
   { icon: 'bolt', labelKey: 'workspace.sidebar.nav.actions', route: '/workspace/actions/team', adminOnly: true, requiresFlag: 'actions' },
   { icon: 'support_agent', labelKey: 'workspace.sidebar.nav.bots', route: '/workspace/bots', adminOnly: true },
   { icon: 'manage_accounts', labelKey: 'workspace.sidebar.nav.services', route: '/workspace/services', adminOnly: true },
@@ -213,7 +214,7 @@ export default function WorkspaceSidebar() {
               <WorkspaceSidebarItem
                 key={item.route}
                 icon={<MaterialIcon name={item.icon} size={ICON_SIZE_DEFAULT} color="var(--slate-11)" />}
-                label={t(item.labelKey)}
+                label={t(item.labelKey, { defaultValue: item.labelKey === 'workspace.sidebar.nav.mcpDiagnostics' ? 'MCP Diagnostics' : undefined })}
                 href={`${item.route}/`}
                 isActive={isActive(item.route)}
               />

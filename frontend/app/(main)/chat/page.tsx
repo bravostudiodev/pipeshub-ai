@@ -57,6 +57,15 @@ import { useFeatureFlagsStore, selectProjectsEnabled } from '@/lib/store/feature
 import { ProjectApi } from '@/chat/project-api';
 import type { ProjectDetail } from '@/chat/project-types';
 import { useProjectScopeHydration } from '@/chat/hooks/use-project-scope-hydration';
+import {
+  JiraConnectionCard,
+  MiroConnectionCard,
+  GmailConnectionCard,
+  GoogleDriveConnectionCard,
+  NotionConnectionCard,
+  SlackConnectionCard,
+  SuperhumanDocsConnectionCard,
+} from './components/slack-connection-card';
 
 const footerLinkStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -1197,72 +1206,33 @@ function ChatContent() {
   // ── Chat column body (shared between split-pane and full-width modes) ──────
   const chatColumnBody = (
     <>
-      {/* Top-left of the chat column (position:relative parent) so it never
-          overlaps the agent header or share buttons on the right. */}
-      <SidebarExpandButton />
-
-      {historyAndShareAgentId && (
-        <AgentChatHeader
-          agentId={historyAndShareAgentId}
-          displayName={agentContextDisplayName}
-          isMobile={isMobile}
-          hasExpandButton={!isMobile && isNavCollapsed}
-        />
-      )}
-
-      {/* Agent creator chip */}
-      {historyAndShareAgentId && agentCreatorName && (
-        <Box
-          style={{
-            position: 'absolute',
-            top: 10,
-            right: showConversationShare ? 200 : 16,
-            zIndex: 19,
-          }}
+      <Box
+        style={{
+          flexShrink: 0,
+          width: '100%',
+          boxSizing: 'border-box',
+          paddingTop: 10,
+          paddingLeft: isNavCollapsed ? 48 : 16,
+          paddingRight: 16,
+          paddingBottom: 8,
+        }}
+      >
+        <Flex
+          align="center"
+          gap="2"
+          role="region"
+          aria-label="Connected integrations"
+          style={{ flexWrap: 'wrap', width: '100%' }}
         >
-          <Tooltip content={`${t('agentBuilder.createdBy')}: ${agentCreatorName}`}>
-            <Flex
-              align="center"
-              gap="2"
-              px="2"
-              py="1"
-              style={{
-                background: 'var(--color-panel)',
-                borderRadius: 'var(--radius-2)',
-                maxWidth: isMobile ? 140 : 220,
-                cursor: 'default',
-              }}
-            >
-              <Avatar
-                size="1"
-                fallback={agentCreatorName.charAt(0).toUpperCase()}
-                src={agentCreatorAvatarUrl}
-                radius="full"
-                style={{ flexShrink: 0 }}
-              />
-              <Text
-                size="2"
-                style={{
-                  color: 'var(--gray-12)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {agentCreatorName}
-              </Text>
-            </Flex>
-          </Tooltip>
-        </Box>
-      )}
-
-      {/* Share header group — owners only */}
-      {showConversationShare && (
-        <Box style={{ position: 'absolute', top: 12, right: 16, zIndex: 20 }}>
-          <ShareHeaderGroup members={sharedMembers} onShareClick={handleShareClick} />
-        </Box>
-      )}
-
+          <SlackConnectionCard />
+          <NotionConnectionCard />
+          <MiroConnectionCard />
+          <JiraConnectionCard />
+          <GmailConnectionCard />
+          <GoogleDriveConnectionCard />
+          <SuperhumanDocsConnectionCard />
+        </Flex>
+      </Box>
       {/* Full-width pane: message list scrolls here (scrollbar on the pane edge).
           Message content + composer share chatContentColumnStyle so widths match. */}
       <Flex
@@ -1285,6 +1255,70 @@ function ChatContent() {
                 : '40px',
         }}
       >
+        {/* Header controls are anchored to the chat pane below the connection
+            strip, so they keep their own space and cannot cover its cards. */}
+        <SidebarExpandButton />
+
+        {historyAndShareAgentId && (
+          <AgentChatHeader
+            agentId={historyAndShareAgentId}
+            displayName={agentContextDisplayName}
+            isMobile={isMobile}
+            hasExpandButton={!isMobile && isNavCollapsed}
+          />
+        )}
+
+        {historyAndShareAgentId && agentCreatorName && (
+          <Box
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: showConversationShare ? 200 : 16,
+              zIndex: 19,
+            }}
+          >
+            <Tooltip content={`${t('agentBuilder.createdBy')}: ${agentCreatorName}`}>
+              <Flex
+                align="center"
+                gap="2"
+                px="2"
+                py="1"
+                style={{
+                  background: 'var(--color-panel)',
+                  borderRadius: 'var(--radius-2)',
+                  maxWidth: isMobile ? 140 : 220,
+                  cursor: 'default',
+                }}
+              >
+                <Avatar
+                  size="1"
+                  fallback={agentCreatorName.charAt(0).toUpperCase()}
+                  src={agentCreatorAvatarUrl}
+                  radius="full"
+                  style={{ flexShrink: 0 }}
+                />
+                <Text
+                  size="2"
+                  style={{
+                    color: 'var(--gray-12)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {agentCreatorName}
+                </Text>
+              </Flex>
+            </Tooltip>
+          </Box>
+        )}
+
+        {showConversationShare && (
+          <Box style={{ position: 'absolute', top: 12, right: 16, zIndex: 20 }}>
+            <ShareHeaderGroup members={sharedMembers} onShareClick={handleShareClick} />
+          </Box>
+        )}
+
         {showInitialLoading || showLoading ? (
           <Flex
             direction="column"

@@ -15939,6 +15939,303 @@ security:
   - oauth2: []
 
 paths:
+  /mcp-servers/retrieval-traces:
+    get:
+      tags:
+        - MCP Servers
+      summary: Inspect redacted MCP retrieval traces
+      description: Lists recent non-expired trace runs for the caller's organization when no selector is provided, or returns metadata for up to 10 selected trace IDs or run IDs. Requires an administrator role and ENABLE_MCP_RETRIEVAL_TRACE. Message text, queries, credentials, URLs, and raw tool responses are excluded.
+      operationId: getMcpRetrievalTraces
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: traceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: runId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: traceIds
+          in: query
+          required: false
+          description: Comma-separated trace IDs to compare (up to 10).
+          schema:
+            type: string
+        - name: runIds
+          in: query
+          required: false
+          description: Comma-separated chat run IDs to compare (up to 10).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent indexed runs, optionally with redacted discovery and invocation events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  truncated:
+                    type: boolean
+        '400':
+          description: Invalid selector or comparison limit exceeded
+        '403':
+          description: Administrator access is required
+        '404':
+          description: Tracing is disabled
+
+  /mcp-servers/slack-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Slack connection status
+      description: |
+        Returns only the availability of the organization's designated official
+        Slack MCP instance and the authenticated user's own connection state.
+        The server is identified by the official Slack endpoint, Streamable HTTP,
+        and OAuth configuration. OAuth client credentials are never returned.
+      operationId: getSlackMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Slack connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/notion-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Notion connection status
+      description: |
+        Returns only the availability of the organization's designated Notion MCP
+        instance and the authenticated user's own connection state. The instance is
+        identified by Notion's official MCP endpoint, Notion type, Streamable HTTP,
+        and OAuth configuration. OAuth client credentials are never returned.
+      operationId: getNotionMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Notion connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/miro-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Miro connection status
+      description: |
+        Returns whether the organization has a Streamable HTTP MCP instance
+        named Miro configured for user OAuth and whether the authenticated user
+        has their own saved credentials. Credentials are never returned.
+      operationId: getMiroMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Miro connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/atlassian-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Atlassian Rovo connection status
+      description: |
+        Returns only the availability of the organization's designated Atlassian
+        Rovo MCP instance and the authenticated user's own connection state.
+        The instance is identified by its official endpoint, catalog type,
+        Streamable HTTP transport, and OAuth configuration. Credentials are never returned.
+      operationId: getAtlassianMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Atlassian connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/gmail-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Gmail MCP connection status
+      description: |
+        Returns whether the organization's designated Gmail MCP instance is
+        configured and whether the authenticated user has their own saved OAuth
+        credentials. The instance must use Google's official Gmail MCP endpoint,
+        Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGmailMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Gmail connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/google-drive-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Google Drive MCP connection status
+      description: |
+        Returns whether the organization's designated Google Drive MCP instance
+        is configured and whether the authenticated user has their own saved
+        OAuth credentials. The instance must use Google's official Drive MCP
+        endpoint, Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGoogleDriveMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Google Drive connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/superhuman-docs-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Superhuman Docs connection status
+      description: |
+        Returns whether the organization's Streamable HTTP instance for
+        docs.superhuman.com/apis/mcp is configured and whether the authenticated
+        user has saved their own token. Credentials are never returned.
+      operationId: getSuperhumanDocsConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Superhuman Docs connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
   # ==================== IN-APP NOTIFICATIONS ====================
   /notifications:
     get:
@@ -41206,6 +41503,7 @@ paths:
         **Available Feature Flags:**
         - ENABLE_BETA_CONNECTORS: Enable beta connector integrations (default: false)
         - ENABLE_MCP: Enable MCP servers (default: false)
+        - ENABLE_MCP_RETRIEVAL_TRACE: Enable redacted MCP retrieval trace recording (default: false; records expire after seven days)
         - ENABLE_ACTIONS: Enable toolset actions (default: true)
         - ENABLE_VECTOR_STORE_REBUILD: Enable vector store cleanup/reindex from Connectors (default: false)
         - ENABLE_SKILLS: Enable Skills — SKILL.md packages agents can load (default: true)

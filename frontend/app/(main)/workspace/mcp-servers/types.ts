@@ -132,6 +132,70 @@ export interface McpMyServersResponse {
   instances: McpMyServerEntry[];
 }
 
+export interface SlackConnectionStatus {
+  configured: boolean;
+  instanceId?: string;
+  isConnected: boolean;
+  hasCredentials?: boolean;
+}
+
+export type NotionConnectionStatus = SlackConnectionStatus;
+export type MiroConnectionStatus = SlackConnectionStatus;
+export type AtlassianConnectionStatus = SlackConnectionStatus;
+export type GmailConnectionStatus = SlackConnectionStatus;
+export type GoogleDriveConnectionStatus = SlackConnectionStatus;
+export type SuperhumanDocsConnectionStatus = SlackConnectionStatus;
+
+export interface McpTraceRunIndex {
+  traceId: string;
+  runId: string;
+  userId: string;
+  effectiveUserId: string;
+  orgId: string;
+  conversationId?: string | null;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export interface McpTraceEvent extends McpTraceRunIndex {
+  eventId: string;
+  eventType: 'discovery' | 'invocation';
+  recordedAt: string;
+  instanceId: string;
+  serverName?: string;
+  transport?: string;
+  authMode?: string;
+  credentialOwnerId?: string;
+  credentialExists?: boolean;
+  credentialScopes?: string[];
+  credentialExpiresAt?: string | null;
+  outcome?: string;
+  errorClass?: string | null;
+  tools?: Array<{ name: string; schemaFingerprint: string }>;
+  toolName?: string;
+  durationMs?: number;
+  error?: { class?: string; code?: string } | null;
+  arguments?: Record<string, unknown>;
+  response?: {
+    resultCount?: number;
+    returnedIds?: Array<Record<string, string | number>>;
+    oldestTimestamp?: string;
+    newestTimestamp?: string;
+    paginated?: boolean;
+    truncated?: boolean;
+    sourceMetadata?: string;
+  };
+}
+
+export interface McpTraceRun extends McpTraceRunIndex {
+  events?: McpTraceEvent[];
+}
+
+export interface McpRetrievalTraceResponse {
+  runs: McpTraceRun[];
+  truncated: boolean;
+}
+
 export interface McpToolsResponse {
   tools: McpToolInfo[];
 }
