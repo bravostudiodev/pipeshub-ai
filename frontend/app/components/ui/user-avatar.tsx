@@ -113,8 +113,8 @@ export function UserAvatar({
   return (
     <Badge
       style={{
-        backgroundColor: 'var(--accent-a3)',
-        color: 'var(--accent-a11)',
+        backgroundColor: 'var(--brand-a3)',
+        color: 'var(--brand-a11)',
         padding: 'var(--space-1)',
         borderRadius: 'var(--radius-2)',
         flexShrink: 0,

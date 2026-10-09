@@ -88,7 +88,7 @@ export function LottieLoader({
     </LottieErrorBoundary>
   );
 
-  const visual = variant === 'loader' || variant === 'thinking' ? (
+  const visual = variant === 'loader' || variant === 'thinking' || variant === 'still' ? (
     <PipesHubIcon size={size} style={style} />
   ) : lottie;
 

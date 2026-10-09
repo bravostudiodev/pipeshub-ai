@@ -63,6 +63,8 @@ html.light .oddjeeves-logo-light { display: block; }
 
 /* Light Mode */
 :root, .light, .light-theme {
+  --app-chat-canvas: #f0f1f2;
+  --app-sidebar-surface: #e4e6e8;
   --effects-translucent: rgba(255, 255, 255, 0.8);
   --tokens-colors-surface: rgba(139, 139, 139, 0.084);
   --accent-surface: rgba(253, 83, 60, 0.04);
@@ -135,6 +137,8 @@ html.light .oddjeeves-logo-light { display: block; }
 .dark, .dark-theme,
 [data-is-root-theme="true"].dark,
 :root[class~="dark"] {
+  --app-chat-canvas: #151517;
+  --app-sidebar-surface: #101012;
   --effects-translucent: rgba(29, 29, 33, 0.70);
   --tokens-colors-surface: rgba(0, 0, 0, 0.25);
   --accent-surface: rgba(253, 83, 60, 0.06);

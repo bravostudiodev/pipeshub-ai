@@ -1456,7 +1456,7 @@ function ChatContent() {
         width: '100%',
         position: 'relative',
         overflow: 'hidden',
-        background: 'linear-gradient(to bottom, var(--olive-2), var(--olive-1))',
+        background: 'var(--app-chat-canvas)',
       }}
     >
       {/*

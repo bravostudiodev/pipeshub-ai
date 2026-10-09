@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import Image from 'next/image';
 import { useTranslation } from 'react-i18next';
 import { Box, Button, Flex, Text } from '@radix-ui/themes';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
+import { PipesHubIcon } from '@/app/components/ui';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import { isProcessedError } from '@/lib/api';
 import {
@@ -114,9 +114,7 @@ export function McpOAuthCallbackClient() {
     case 'processing':
       statusPanel = (
         <Flex direction="column" align="center" gap="5">
-          <Box style={{ width: 48, height: 48, flexShrink: 0 }}>
-            <Image src="/ob.svg" alt="" width={48} height={48} />
-          </Box>
+          <PipesHubIcon size={48} />
           <Flex direction="column" align="center" gap="1">
             <Text as="p" size="4" weight="medium" style={{ margin: 0, color: 'var(--gray-12)', letterSpacing: '-0.04px', lineHeight: '26px' }}>
               {t('workspace.mcpServers.oauth.completingTitle')}
