@@ -265,12 +265,12 @@
   --mode-image-active-bg: var(--blue-3);
   --mode-image-toggle: var(--blue-9);
 
-  /* Agent Mode (green) */
-  --mode-agent-bg: var(--green-a3);
-  --mode-agent-fg: var(--green-11);
-  --mode-agent-icon: var(--green-11);
-  --mode-agent-active-bg: var(--green-3);
-  --mode-agent-toggle: var(--green-9);
+  /* Agent Mode */
+  --mode-agent-bg: var(--accent-a3);
+  --mode-agent-fg: var(--accent-11);
+  --mode-agent-icon: var(--accent-11);
+  --mode-agent-active-bg: var(--accent-3);
+  --mode-agent-toggle: var(--accent-9);
 
   /* Agent builder — neutral panel chrome (matches Radix gray scale; no accent tint) */
   --agent-flow-node-border: var(--gray-7);

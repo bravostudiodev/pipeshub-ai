@@ -101,7 +101,6 @@ export function LottieLoader({
         width: size,
         height: size,
         objectFit: 'contain',
-        animation: autoplay ? 'spin 1.4s linear infinite' : undefined,
         ...style,
       }}
     />
