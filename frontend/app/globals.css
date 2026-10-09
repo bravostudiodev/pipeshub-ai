@@ -66,17 +66,30 @@ html.light .oddjeeves-logo-light { display: block; }
   background-color: #212121 !important;
   color: #fff !important;
 }
+.rt-BaseMenuContent .chat-connection-disconnect-item:is(:hover, [data-highlighted]),
+.rt-BaseMenuContent .chat-connection-disconnect-item:is(:hover, [data-highlighted]) * {
+  background-color: #212121 !important;
+  color: #fff !important;
+}
+
+/* Org logos may fail to load, leaving Radix's initials fallback visible. */
+.rt-AvatarRoot.oddjeeves-org-avatar {
+  --accent-a3: var(--brand-a3);
+  --accent-a11: var(--brand-a11);
+}
 
 /* Portaled chat search palettes can sit outside the app's themed subtree. */
 .chat-search-input:where(:focus-within) {
-  border-color: var(--brand-9) !important;
-  box-shadow: 0 0 0 1px var(--brand-9) !important;
+  --text-field-focus-color: var(--brand-9);
+  outline: 2px solid var(--brand-9) !important;
+  outline-offset: -1px;
 }
 
 /* Light Mode */
 :root, .light, .light-theme {
   --app-chat-canvas: #f0f1f2;
   --app-sidebar-surface: #e4e6e8;
+  --app-auth-surface: #f0f1f2;
   --effects-translucent: rgba(255, 255, 255, 0.8);
   --tokens-colors-surface: rgba(139, 139, 139, 0.084);
   --accent-surface: rgba(253, 83, 60, 0.04);

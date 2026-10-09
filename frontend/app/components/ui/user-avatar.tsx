@@ -100,6 +100,7 @@ export function UserAvatar({
   if (src) {
     return (
       <Avatar
+        className="oddjeeves-org-avatar"
         size={toRadixSize(size)}
         variant="soft"
         radius={radius}
