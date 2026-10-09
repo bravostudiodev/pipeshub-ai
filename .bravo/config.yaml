@@ -14,6 +14,8 @@ pipeline:
             - CVE-2026-44172
             - CVE-2026-6653
             - CVE-2026-85394
+            - CVE-2026-90711
+            - CVE-2026-8838
         context: .
         push: true #TODO
     "Image build and push":
@@ -29,5 +31,7 @@ pipeline:
             - CVE-2026-44172
             - CVE-2026-6653
             - CVE-2026-85394
+            - CVE-2026-90711
+            - CVE-2026-8838
         context: .
         push: true
