@@ -1,6 +1,6 @@
 # Internal knowledge platform fork
 
-This repository is an independent PipesHub fork adapted into a self-hosted,
+This repository is an independent PipesHub fork branded **OddJeeves** and adapted into a self-hosted,
 internal knowledge platform for nontechnical employees. The upstream services
 and connector catalog remain in place; the changes below add a simpler source
 connection experience and protect each employee's source identity.

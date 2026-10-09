@@ -80,26 +80,6 @@ export default function AuthHero({ splitLayout }: AuthHeroProps) {
         }}
       />
 
-      {/* ── Title text — top left ────────────────────────────────── */}
-      <Text
-        style={{
-          position: 'absolute',
-          left: '32px',
-          top: '27px',
-          color: '#ffffff',
-          fontSize: '25.6px',
-          fontWeight: 400,
-          lineHeight: 'normal',
-          width: '346px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.02em',
-          zIndex: 1,
-          fontFamily: 'ClashGrotesk, sans-serif',
-        }}
-      >
-        Explainable Enterprise Search for modern enterprises.
-      </Text>
-
       {/* ── Search pill ──────────────────────────────────────────── */}
       <Box
         style={{

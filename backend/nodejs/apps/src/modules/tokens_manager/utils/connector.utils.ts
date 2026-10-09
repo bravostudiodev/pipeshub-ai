@@ -217,15 +217,15 @@ const DESKTOP_REFUSAL: Record<
     message: (connectorId, ownerDeviceName) =>
       ownerDeviceName
         ? `Device "${ownerDeviceName}" that owns connector ${connectorId} is not connected. ` +
-          'Open the Pipeshub desktop app on that machine.'
+          'Open the OddJeeves desktop app on that machine.'
         : `No desktop is connected for connector ${connectorId}. ` +
-          'Open the Pipeshub desktop app on the machine that owns this folder.',
+          'Open the OddJeeves desktop app on the machine that owns this folder.',
   },
   unclaimed: {
     code: DESKTOP_UNCLAIMED_CODE,
     message: (connectorId) =>
       `Connector ${connectorId} has not been set up on a desktop yet. ` +
-      'Open the Pipeshub desktop app on the machine that owns this folder ' +
+      'Open the OddJeeves desktop app on the machine that owns this folder ' +
       'and enable sync there once.',
   },
   other_device: {
@@ -233,7 +233,7 @@ const DESKTOP_REFUSAL: Record<
     message: (connectorId, ownerDeviceName) =>
       `Connector ${connectorId} is owned by ` +
       `${ownerDeviceName ? `"${ownerDeviceName}"` : 'another device'}. ` +
-      'Enable sync from the Pipeshub desktop app on that machine.',
+      'Enable sync from the OddJeeves desktop app on that machine.',
   },
 };
 

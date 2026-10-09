@@ -1,46 +1,24 @@
 # syntax=docker/dockerfile:1
 # Slow layers (APT, Rust, Python deps, ML models, runtime stack) live in Dockerfile.base.
-# Override with local tags if registry images are missing:
-#   docker build --build-arg PYTHON_DEPS_IMAGE=myreg/python-deps --build-arg RUNTIME_BASE_IMAGE=myreg/runtime .
+# The pipeline uses the company-published bases. Override these for local builds:
+#   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps --build-arg RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime .
 # Slim app image (no pre-baked BGE; ~1.3 GB smaller — model downloads on first use):
 #   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps-slim -t pipeshubai/pipeshub-ai:slim .
-ARG PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps
-ARG RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime
+ARG PYTHON_DEPS_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:python-deps
+ARG RUNTIME_BASE_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:runtime
 
 FROM ${PYTHON_DEPS_IMAGE} AS python-deps
 ARG BUNDLE_BGE_EMBEDDING=0
-# The base image bakes in dependencies as of its publish time. Reconcile with the
-# current pyproject.toml so packages added since the base was published (e.g. new
-# connector SDKs like opensearch-py) end up in the app image. uv skips
-# already-satisfied packages, so this is a fast no-op when the base is current and
-# installs only the delta otherwise. The base carries uv + the build toolchain
-# (it is built FROM build-base in Dockerfile.base), so native wheels can still
-# compile here when a new dependency needs it.
-WORKDIR /app/python
-COPY backend/python/pyproject.toml ./
-RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install --system -e . && \
-    crawl4ai-setup && \
-    playwright install chromium && \
-    if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
+# This base is built from the current backend/python/pyproject.toml and already
+# contains Python dependencies, Crawl4AI, Chromium, and model assets. Rebuild and
+# publish it when Python dependencies or bundled models change.
+RUN if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
         rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5; \
     fi && \
-    # The app uses bge-reranker-base; this differently named model was stale
-    # data inherited from a published dependency base and is not used.
     rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3
 
 
 FROM ${RUNTIME_BASE_IMAGE} AS runtime-base
-
-# Presentation previews are converted to PDF at request time. The published
-# runtime base historically included Writer and Calc only, leaving the soffice
-# wrapper present but unable to load PPT/PPTX files.
-# Install CJK fallback fonts until they are available in the published runtime
-# base image. LibreOffice uses these when documents reference unavailable fonts.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-impress-nogui fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # -----------------------------------------------------------------------------
 # Runtime image. Node.js and frontend application artifacts are prepared by the

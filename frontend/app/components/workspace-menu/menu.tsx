@@ -161,7 +161,7 @@ export function WorkspaceMenu({ isOpen, onClose, org, triggerRef }: WorkspaceMen
                 weight="medium"
                 style={{
                   flex: 1,
-                  color: 'var(--accent-12)',
+                  color: 'var(--brand-9)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',

@@ -68,7 +68,7 @@ export default function RootLayout({
   }, [language])
 
   useEffect(() => {
-    document.title = "Knowledge Platform"
+    document.title = 'OddJeeves'
   }, [])
 
   const currentLang = mounted ? language : 'en'

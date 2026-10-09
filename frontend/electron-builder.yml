@@ -1,5 +1,5 @@
 appId: com.pipeshub.desktop
-productName: PipesHub
+productName: OddJeeves
 icon: electron/out/logo/pipes-hub-1024.png
 directories:
   output: dist-electron
@@ -48,7 +48,7 @@ asarUnpack:
 # scheme. Writes CFBundleURLTypes on macOS and the .desktop MimeType on Linux;
 # Windows is registered at runtime by app.setAsDefaultProtocolClient.
 protocols:
-  - name: PipesHub
+  - name: OddJeeves
     schemes:
       - pipeshub
 afterPack: scripts/electron/after-pack.cjs
@@ -62,8 +62,8 @@ mac:
   target:
     - dmg
 dmg:
-  title: PipesHub
-  artifactName: PipesHub-mac-${arch}.${ext}
+  title: OddJeeves
+  artifactName: OddJeeves-mac-${arch}.${ext}
 win:
   # Arch is selected per `build.mjs` invocation via `--x64` / `--arm64`.
   target:
@@ -75,20 +75,20 @@ nsis:
   deleteAppDataOnUninstall: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: PipesHub
+  shortcutName: OddJeeves
   runAfterFinish: true
-  artifactName: PipesHub-win-${arch}.${ext}
+  artifactName: OddJeeves-win-${arch}.${ext}
 linux:
   # Arch is selected per `build.mjs` invocation via `--x64` / `--arm64`.
   target:
     - AppImage
     - deb
   category: Utility
-  synopsis: PipesHub Desktop App
-  description: PipesHub Desktop App
-  maintainer: PipesHub
-  vendor: PipesHub
+  synopsis: OddJeeves Desktop App
+  description: OddJeeves Desktop App
+  maintainer: OddJeeves
+  vendor: OddJeeves
 appImage:
-  artifactName: PipesHub-linux-${arch}.${ext}
+  artifactName: OddJeeves-linux-${arch}.${ext}
 deb:
-  artifactName: PipesHub-linux-${arch}.${ext}
+  artifactName: OddJeeves-linux-${arch}.${ext}

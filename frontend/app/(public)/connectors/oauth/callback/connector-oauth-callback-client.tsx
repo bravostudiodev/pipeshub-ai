@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import Image from 'next/image';
 import { Box, Button, Flex, Text } from '@radix-ui/themes';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
-import { LottieLoader } from '@/app/components/ui/lottie-loader';
 import { ConnectorsApi } from '@/app/(main)/workspace/connectors/api';
 import { isProcessedError } from '@/lib/api';
 import {
@@ -131,9 +131,13 @@ export function ConnectorOAuthCallbackClient() {
     case 'processing':
       statusPanel = (
         <Flex direction="column" align="center" gap="5">
-          <Box style={{ width: 48, height: 48, flexShrink: 0 }}>
-            <LottieLoader variant="still" size={48} />
-          </Box>
+          <Image
+            src="/ob.svg"
+            alt=""
+            width={48}
+            height={48}
+            style={{ flexShrink: 0 }}
+          />
           <Flex direction="column" align="center" gap="1">
             <Text
               as="p"

@@ -7,7 +7,7 @@ const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 // refused here, before any handler runs.
 const documentIdSchema = z.string().regex(OBJECT_ID_REGEX, {
   message:
-    "The document id in the address isn't valid. Use the 24-character id PipesHub returned when the document was uploaded or created, then try again.",
+    "The document id in the address isn't valid. Use the 24-character id OddJeeves returned when the document was uploaded or created, then try again.",
 });
 
 // Common Schema Components

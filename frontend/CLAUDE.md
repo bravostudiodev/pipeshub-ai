@@ -1,10 +1,14 @@
-# CLAUDE.md - PipesHub Dashboard UI
+# CLAUDE.md - OddJeeves Dashboard UI
 
 When implementing backend or repo-wide changes, also read the repository-root `AGENTS.md`. This file is the UI conventions for `frontend/`.
 
 ## Project Overview
 
-PipesHub is an AI-powered knowledge management dashboard on **Next.js** (App Router, client-rendered React).
+OddJeeves is an internal knowledge platform built on **Next.js** (App Router, client-rendered React), based on an independent PipesHub fork.
+
+Use **OddJeeves** in user-facing UI, emails, and application labels. Keep legacy
+technical identifiers such as package names and `pipeshub://` callbacks when a
+rename would break compatibility.
 
 In Docker Compose the built UI is served by Express on port **3000** (same origin as `/api` and `/mcp`). When you run `PORT=3001 npm run dev` from this directory, the dashboard is on 3001 and calls Express on 3000. Do not assume 3001 is where operators open the product.
 

@@ -157,7 +157,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 375,
     minHeight: 600,
-    title: 'PipesHub',
+    title: 'OddJeeves',
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

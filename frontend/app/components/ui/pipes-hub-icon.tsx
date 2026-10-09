@@ -16,13 +16,13 @@ export function PipesHubIcon({
   className,
 }: PipesHubIconProps) {
   return (
-    <img
-      src="/ob.svg"
-      alt=""
-      width={size}
-      height={size}
-      style={{ display: 'inline-flex', flexShrink: 0, objectFit: 'contain', ...style }}
-      className={className}
-    />
+    <span
+      className={`oddjeeves-logo ${className ?? ''}`}
+      style={{ width: size, height: size, display: 'inline-flex', flexShrink: 0, ...style }}
+      aria-hidden="true"
+    >
+      <img src="/ob.svg" alt="" width={size} height={size} className="oddjeeves-logo-dark" />
+      <img src="/ob-light.svg" alt="" width={size} height={size} className="oddjeeves-logo-light" />
+    </span>
   );
 }

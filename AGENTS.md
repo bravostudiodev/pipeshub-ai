@@ -14,6 +14,13 @@ Human onboarding is [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Product direction for this fork
 
+The product name shown to employees is **OddJeeves**. Use OddJeeves in user-
+facing UI, emails, and application labels. PipesHub is the upstream project name
+and should appear only when describing this fork's origin or compatibility.
+Keep legacy package names, API identifiers, storage paths, and the
+`pipeshub://` desktop callback scheme where changing them would break
+compatibility.
+
 This is an independent, self-hosted fork adapting PipesHub into an internal,
 nontechnical workplace knowledge platform. Employees should be able to ask
 questions across company sources (including Slack, Google Drive, Gmail, Notion,

@@ -2,19 +2,20 @@
 # pipeshubai/pipeshub-ai-base — slow layers factored out of the root Dockerfile.
 # Build context: repository root (same as Dockerfile).
 #
-# Rebuild :python-deps when backend/python/pyproject.toml or bundled models change.
+# Rebuild :python-deps when backend/python/pyproject.toml, browser setup, or bundled models change.
 # Rebuild :runtime when APT stack, Node major, Neo4j repo, or OCR/LibreOffice needs change.
 #
 # CI: integration tests pull pipeshubai/pipeshub-ai-base:{python-deps,runtime} before
 # building the app image; avoid unconditional Dockerfile.base builds in CI (slow).
 #
-# Incremental rebuild (when only a few packages change in pyproject.toml):
-#   Pass the currently-published image as PYTHON_DEPS_BASE so uv skips already-satisfied
-#   packages (fast no-op) and only downloads/compiles the delta.  ML model downloads
-#   (NLTK, HuggingFace, fastembed) are also no-ops when already present.
+# For a clean published Python base, build from `build-base` (the default).
+# Do not use a legacy dependency image as PYTHON_DEPS_BASE if it bundled BGE or
+# contains obsolete large layers: removing files in later Docker layers does not
+# reduce the size of those inherited layers. Incremental builds are only useful
+# when the parent image is known to be clean and current.
 #
 #   docker buildx build -f Dockerfile.base --target python-deps \
-#     --build-arg PYTHON_DEPS_BASE=pipeshubai/pipeshub-ai-base:python-deps \
+#     --build-arg PYTHON_DEPS_BASE=build-base --build-arg BUNDLE_BGE_EMBEDDING=0 \
 #     -t pipeshubai/pipeshub-ai-base:python-deps --platform linux/amd64,linux/arm64 --push .
 #
 #   For a full rebuild from scratch (e.g. major dependency overhaul or first-time setup),
@@ -32,6 +33,9 @@
 # Multi-arch push (example):
 #   docker buildx build -f Dockerfile.base --target python-deps -t pipeshubai/pipeshub-ai-base:python-deps --platform linux/amd64,linux/arm64 --push .
 #   docker buildx build -f Dockerfile.base --target runtime-base -t pipeshubai/pipeshub-ai-base:runtime --platform linux/amd64,linux/arm64 --push .
+# For this fork, publish the prepared bases to the same private `platform/`
+# registry namespace used by `.bravo/config.yaml`, then keep those tags in sync
+# with the defaults in `Dockerfile`.
 #
 # Versioned release (publish new base before retagging :python-deps / :runtime):
 #   DATE=2026-05-18
@@ -149,6 +153,8 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     rustup default stable && \
     uv pip install --system -e . && \
+    crawl4ai-setup && \
+    playwright install chromium && \
     # Download ML models so the runtime image doesn't have to pull them over
     # the network on first use (which previously stalled query service
     # startup by minutes on cold caches).

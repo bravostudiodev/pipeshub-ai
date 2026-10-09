@@ -20,7 +20,7 @@ export default function PublicLayoutClient({
 
   useEffect(() => {
     setMounted(true);
-    document.title = 'Knowledge Platform';
+    document.title = 'OddJeeves';
     if (language) {
       import('@/lib/i18n/config').then((module) => {
         module.default.changeLanguage(language);

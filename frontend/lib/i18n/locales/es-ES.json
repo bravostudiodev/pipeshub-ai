@@ -213,7 +213,7 @@
     "save": "Guardar",
     "saving": "Guardando…",
     "footer": {
-      "copyright": "© 2026 Pipeshub LLC",
+      "copyright": "© 2026 OddJeeves",
       "privacyPolicy": "Política de privacidad",
       "website": "Sitio web",
       "visitDocs": "Visita la",
@@ -427,9 +427,9 @@
   },
   "electron": {
     "serverUrlSetup": {
-      "title": "Conectar al servidor PipesHub",
-      "subtitleFirstRun": "Introduce la URL de tu servidor PipesHub para comenzar.",
-      "subtitleExisting": "Confirma o actualiza la URL de tu servidor PipesHub.",
+      "title": "Conectar al servidor OddJeeves",
+      "subtitleFirstRun": "Introduce la URL de tu servidor OddJeeves para comenzar.",
+      "subtitleExisting": "Confirma o actualiza la URL de tu servidor OddJeeves.",
       "label": "URL del servidor",
       "submit": "Conectar",
       "changeServer": "Cambiar servidor",
@@ -876,11 +876,11 @@
     "deleteAgent": "Eliminar agente",
     "deleteAgentConfirm": "¿Eliminar este agente?",
     "deleteAgentDescription": "El agente llamado",
-    "deleteAgentWarning": "será eliminado permanentemente de Pipeshub. Los chats que lo utilicen podrían dejar de funcionar como se espera.",
+    "deleteAgentWarning": "será eliminado permanentemente de OddJeeves. Los chats que lo utilicen podrían dejar de funcionar como se espera.",
     "deleteChat": "Eliminar",
     "deleteChatConfirm": "¿Estás seguro?",
     "deleteChatDescription": "El chat titulado",
-    "deleteChatWarning": "será eliminado permanentemente de Pipeshub. Todos los usuarios con acceso compartido perderán su acceso.",
+    "deleteChatWarning": "será eliminado permanentemente de OddJeeves. Todos los usuarios con acceso compartido perderán su acceso.",
     "editAgent": "Editar agente",
     "failedToArchive": "Error al archivar el chat",
     "failedToDelete": "Error al eliminar el chat",
@@ -1474,11 +1474,11 @@
     },
     "oauth2": {
       "title": "OAuth 2.0",
-      "subtitle": "Administre aplicaciones OAuth 2.0 que pueden acceder a su organizaci├│n a trav├⌐s de Pipeshub",
+      "subtitle": "Administre aplicaciones OAuth 2.0 que pueden acceder a su organizaci├│n a trav├⌐s de OddJeeves",
       "searchPlaceholder": "Buscar aplicaciones por nombre o descripci├│n...",
       "newApplication": "Nueva aplicaci├│n OAuth",
       "emptyTitle": "No hay aplicaciones OAuth 2.0",
-      "emptyDescription": "Cree una aplicaci├│n OAuth 2.0 para permitir que integraciones de terceros accedan a su organizaci├│n a trav├⌐s de Pipeshub.",
+      "emptyDescription": "Cree una aplicaci├│n OAuth 2.0 para permitir que integraciones de terceros accedan a su organizaci├│n a trav├⌐s de OddJeeves.",
       "loading": "Cargando aplicaciones...",
       "errorGeneric": "No se pudieron cargar las aplicaciones OAuth",
       "retry": "Reintentar",
@@ -1609,7 +1609,7 @@
         "clientIdLabel": "ID de cliente",
         "clientSecretLabel": "Secreto del cliente",
         "hideSecretAria": "Ocultar secreto del cliente",
-        "clientCredentialsWarning": "Los tokens de credenciales de cliente siempre acceden a Pipeshub como el usuario que creó esta aplicación, no como quien llama al endpoint del token. Dentro de los ámbitos que le concedas, el token puede alcanzar todo lo que esa persona puede alcanzar, y hereda su rol, por lo que una aplicación creada por un administrador tiene acceso de administrador. Además, deja de funcionar si esa cuenta se elimina. Si esta aplicación también admite el flujo de código de autorización, los usuarios aún pueden autorizarla para sí mismos por esa vía.",
+        "clientCredentialsWarning": "Los tokens de credenciales de cliente siempre acceden a OddJeeves como el usuario que creó esta aplicación, no como quien llama al endpoint del token. Dentro de los ámbitos que le concedas, el token puede alcanzar todo lo que esa persona puede alcanzar, y hereda su rol, por lo que una aplicación creada por un administrador tiene acceso de administrador. Además, deja de funcionar si esa cuenta se elimina. Si esta aplicación también admite el flujo de código de autorización, los usuarios aún pueden autorizarla para sí mismos por esa vía.",
         "returnToAppsButton": "Volver a aplicaciones OAuth 2.0",
         "showSecretAria": "Mostrar secreto del cliente",
         "successPanelTitle": "Aplicación OAuth creada",
@@ -1648,8 +1648,8 @@
       "configUpdateModel": "Actualizar modelo",
       "configFillRequiredTooltip": "Rellene todos los campos obligatorios",
       "configSaveErrorFallback": "No se pudo guardar la configuración del modelo",
-      "configSaveOutboundError": "PipesHub no puede alcanzar este proveedor de modelos desde el contenedor. Los proveedores en la nube necesitan acceso a Internet de salida — véase deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
-      "configSaveTimeoutError": "La solicitud superó el tiempo de espera al validar el modelo. Los proveedores en la nube necesitan acceso a Internet de salida desde el contenedor de PipesHub — véase deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveOutboundError": "OddJeeves no puede alcanzar este proveedor de modelos desde el contenedor. Los proveedores en la nube necesitan acceso a Internet de salida — véase deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveTimeoutError": "La solicitud superó el tiempo de espera al validar el modelo. Los proveedores en la nube necesitan acceso a Internet de salida desde el contenedor de OddJeeves — véase deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
       "configNoConfigRequired": "No se requiere configuración para este proveedor.",
       "configDefaultModelNotice": "\"{{modelName}}\" será utilizado por el sistema de forma predeterminada.",
       "configSectionModelConfiguration": "Configuración del modelo",
@@ -1956,7 +1956,7 @@
       "selectPrompt": "Seleccione un chat archivado para previsualizar",
       "restore": "Restaurar",
       "permanentlyDelete": "Eliminar permanentemente",
-      "deleteConfirmMessage": "Este chat se eliminará permanentemente de Pipeshub. Se perderá cualquier acceso compartido.",
+      "deleteConfirmMessage": "Este chat se eliminará permanentemente de OddJeeves. Se perderá cualquier acceso compartido.",
       "restoreSuccess": "Chat restaurado",
       "restoreError": "No se pudo restaurar el chat",
       "deleteSuccess": "Eliminado correctamente",
@@ -1999,7 +1999,7 @@
       "postalCodePlaceholder": "eg: 94107",
       "dataCollection": "Data Collection Settings",
       "enableDataCollection": "Enable",
-      "dataCollectionDescription": "PipesHub collects and processes personal information for a variety of business purposes.",
+      "dataCollectionDescription": "OddJeeves collects and processes personal information for a variety of business purposes.",
       "dataCollectionReason1": "To provide customer service and support for our products",
       "dataCollectionReason2": "To send marketing communications",
       "dataCollectionReason3": "To manage your subscription to newsletters or other updates",
@@ -2179,7 +2179,7 @@
       },
       "successDialog": {
         "title": "Instance is configured and ready to sync!",
-        "description": "You can start syncing your {{name}} data with Pipeshub now,",
+        "description": "You can start syncing your {{name}} data with OddJeeves now,",
         "descriptionSuffix": "or choose to do it later from settings.",
         "later": "I'll do it later",
         "startSync": "Start Syncing Now"
@@ -2290,8 +2290,8 @@
         "additionalSettingsDescription": "Configure connector-specific sync options",
         "nonEditableUrlFieldTooltip": "La URL del sitio web no se puede cambiar después de establecerla.",
         "nonEditableLockedFieldTooltip": "Este valor no se puede cambiar después de establecerlo.",
-        "localFsDesktopOnlyBanner": "La configuración del sistema de archivos local solo se puede cambiar en la aplicación de escritorio de PipesHub. Esta vista es de solo lectura.",
-        "localFsDesktopOnlySaveTooltip": "Abra la aplicación de escritorio de PipesHub para cambiar esta configuración.",
+        "localFsDesktopOnlyBanner": "La configuración del sistema de archivos local solo se puede cambiar en la aplicación de escritorio de OddJeeves. Esta vista es de solo lectura.",
+        "localFsDesktopOnlySaveTooltip": "Abra la aplicación de escritorio de OddJeeves para cambiar esta configuración.",
         "importDate": "Import start date",
         "importDateDescription": "Choose the date from which messages are imported",
         "importAllTime": "Import All Time Data",
@@ -2398,11 +2398,11 @@
         }
       },
       "localFsDesktop": {
-        "offlineToast": "Abre la aplicación de escritorio de PipesHub en el equipo que gestiona esta carpeta para sincronizar.",
-        "offlineNamedToast": "{{deviceName}}, el dispositivo que gestiona esta carpeta, no está conectado. Abre la aplicación de escritorio de PipesHub en ese dispositivo para sincronizar.",
-        "unclaimedToast": "Este conector aún no se ha configurado en un escritorio. Abre la aplicación de escritorio de PipesHub en el equipo que gestiona esta carpeta y activa allí la sincronización una vez.",
-        "ownedByOtherDeviceToast": "Este conector pertenece a {{deviceName}}. Activa la sincronización desde la aplicación de escritorio de PipesHub en ese dispositivo.",
-        "ownedByOtherDeviceUnknownToast": "Este conector pertenece a otro dispositivo. Activa la sincronización desde la aplicación de escritorio de PipesHub en ese dispositivo.",
+        "offlineToast": "Abre la aplicación de escritorio de OddJeeves en el equipo que gestiona esta carpeta para sincronizar.",
+        "offlineNamedToast": "{{deviceName}}, el dispositivo que gestiona esta carpeta, no está conectado. Abre la aplicación de escritorio de OddJeeves en ese dispositivo para sincronizar.",
+        "unclaimedToast": "Este conector aún no se ha configurado en un escritorio. Abre la aplicación de escritorio de OddJeeves en el equipo que gestiona esta carpeta y activa allí la sincronización una vez.",
+        "ownedByOtherDeviceToast": "Este conector pertenece a {{deviceName}}. Activa la sincronización desde la aplicación de escritorio de OddJeeves en ese dispositivo.",
+        "ownedByOtherDeviceUnknownToast": "Este conector pertenece a otro dispositivo. Activa la sincronización desde la aplicación de escritorio de OddJeeves en ese dispositivo.",
         "deviceIdentityError": "No se pudo identificar este dispositivo: {{error}}"
       },
       "schemaForm": {
@@ -2414,7 +2414,7 @@
       },
       "personal": {
         "desktopRequiredTitle": "Se requiere la aplicación de escritorio",
-        "desktopRequiredDescription": "El conector del sistema de archivos local solo está disponible en la aplicación de escritorio de PipesHub. Utilice la aplicación de escritorio para configurar este conector."
+        "desktopRequiredDescription": "El conector del sistema de archivos local solo está disponible en la aplicación de escritorio de OddJeeves. Utilice la aplicación de escritorio para configurar este conector."
       },
       "syncStatus": {
         "paused": "Sync Paused",
@@ -2623,7 +2623,7 @@
         "authMode": "Modo de autenticación",
         "headerName": "Nombre del encabezado",
         "authorizationUrl": "URL de autorización",
-        "dcrHint": "Déjalo vacío: PipesHub detectará y usará el registro dinámico de clientes automáticamente cuando el servidor lo admita",
+        "dcrHint": "Déjalo vacío: OddJeeves detectará y usará el registro dinámico de clientes automáticamente cuando el servidor lo admita",
         "tokenUrl": "URL del token",
         "scopes": "Ámbitos",
         "scopesPlaceholder": "Añadir un ámbito",
@@ -2648,14 +2648,14 @@
         "saved": "App de OAuth guardada",
         "saveError": "No se pudo guardar la app de OAuth",
         "title": "Configurar app de OAuth",
-        "description": "PipesHub detecta automáticamente si este servidor admite el registro dinámico de clientes. Las credenciales del cliente solo son necesarias cuando no lo admite.",
+        "description": "OddJeeves detecta automáticamente si este servidor admite el registro dinámico de clientes. Las credenciales del cliente solo son necesarias cuando no lo admite.",
         "alreadyConfigured": "Ya hay una app de OAuth configurada para este servidor.",
         "clientId": "ID de cliente",
         "clientIdPlaceholder": "Introduce el ID de cliente",
         "clientSecret": "Secreto de cliente",
         "clientSecretPlaceholder": "Introduce el secreto de cliente",
         "dcrProbing": "Comprobando si este servidor puede registrarse automáticamente…",
-        "dcrSupportedHint": "Este servidor admite el registro automático. PipesHub se registrará por sí mismo y no se requieren credenciales de cliente.",
+        "dcrSupportedHint": "Este servidor admite el registro automático. OddJeeves se registrará por sí mismo y no se requieren credenciales de cliente.",
         "dcrUnsupportedHint": "Este servidor requiere una app de OAuth registrada manualmente. Crea una con la URL de callback de abajo y luego introduce su ID de cliente y secreto.",
         "dcrUnknownHint": "No se pudo confirmar el soporte de registro automático. Si no es compatible, registra una app de OAuth con la URL de callback de abajo e introduce su ID de cliente y secreto.",
         "callbackUrlLabel": "URL de callback",
@@ -2667,7 +2667,7 @@
         "completingTitle": "Completando el inicio de sesión…",
         "processingHint": "Espera mientras terminamos de conectar tu cuenta.",
         "successTitle": "Conectado correctamente",
-        "successBody": "Puedes cerrar esta ventana y volver a PipesHub.",
+        "successBody": "Puedes cerrar esta ventana y volver a OddJeeves.",
         "failedTitle": "Error de conexión",
         "retryHint": "Algo salió mal. Cierra esta ventana e inténtalo de nuevo.",
         "providerError": "El proveedor devolvió un error: {{error}}",
@@ -2938,7 +2938,7 @@
         "title": "Roles & Permissions",
         "role": "Role",
         "groups": "Groups",
-        "roleDescription": "Your role on Pipeshub app",
+        "roleDescription": "Your role on OddJeeves app",
         "groupsDescription": "User groups you belong to",
         "noGroups": "No user groups found"
       },
@@ -3016,7 +3016,7 @@
       },
       "demoData": {
         "title": "Datos de demostración",
-        "description": "Acme Corp es una empresa ficticia que se ha cargado para que pueda probar PipesHub. Esto solo cambia lo que usted ve; no se elimina nada.",
+        "description": "Acme Corp es una empresa ficticia que se ha cargado para que pueda probar OddJeeves. Esto solo cambia lo que usted ve; no se elimina nada.",
         "label": "Mostrar los datos de demostración de Acme Corp en mis respuestas, búsquedas y registros",
         "followingDefault": "Siguiendo el valor predeterminado: se muestran hasta que su organización tenga datos propios y después se ocultan.",
         "yourChoice": "Su propia elección.",
@@ -3285,7 +3285,7 @@
       "subtitle": "Cree tokens de larga duración para sus propios scripts e integraciones, como el servidor MCP. Solo usted ve sus tokens aquí.",
       "newToken": "Nuevo token",
       "emptyTitle": "No hay tokens de acceso personal",
-      "emptyDescription": "Cree un token para conectar el servidor MCP de PipesHub o sus propios scripts.",
+      "emptyDescription": "Cree un token para conectar el servidor MCP de OddJeeves o sus propios scripts.",
       "errorGeneric": "No se han podido cargar los tokens de acceso personal",
       "retry": "Reintentar",
       "columnName": "Nombre",
@@ -3507,7 +3507,7 @@
       "errorGeneric": "No se han podido cargar las cuentas de servicio.",
       "retry": "Inténtelo de nuevo",
       "emptyTitle": "Todavía no hay cuentas de servicio",
-      "emptyDescription": "Una cuenta de servicio permite que un script lea de PipesHub sin iniciar sesión como un compañero. Solo ve lo que usted le conceda y sigue funcionando cuando alguien se marcha.",
+      "emptyDescription": "Una cuenta de servicio permite que un script lea de OddJeeves sin iniciar sesión como un compañero. Solo ve lo que usted le conceda y sigue funcionando cuando alguien se marcha.",
       "columnName": "Nombre",
       "columnDescription": "Para qué sirve",
       "columnStatus": "Estado",
@@ -4080,12 +4080,12 @@
   },
   "auth": {
     "titleSection": {
-      "defaultTitle": "Bienvenido a Pipeshub",
+      "defaultTitle": "Bienvenido a OddJeeves",
       "defaultSubtitle": "El conocimiento de tu organización, por fin buscable y conectado."
     },
     "signUp": {
       "title": "Comenzar",
-      "subtitle": "¡Bienvenido a Pipeshub, empecemos!",
+      "subtitle": "¡Bienvenido a OddJeeves, empecemos!",
       "firstNameLabel": "Nombre*",
       "lastNameLabel": "Apellido*",
       "orgNameLabel": "Nombre de la organización*",
@@ -4128,10 +4128,10 @@
         "fullNameRequired": "El nombre completo es obligatorio."
       },
       "confirmDialog": {
-        "title": "Cómo PipesHub asigna permisos",
-        "description": "PipesHub usa tu correo electrónico para identificarte en toda la plataforma y en todas las aplicaciones conectadas.",
+        "title": "Cómo OddJeeves asigna permisos",
+        "description": "OddJeeves usa tu correo electrónico para identificarte en toda la plataforma y en todas las aplicaciones conectadas.",
         "permissionsTitle": "Los permisos reflejan tus aplicaciones nativas",
-        "permissionsBody": "El acceso que tienes dentro de PipesHub es el mismo que en cada aplicación conectada, ni más ni menos. Si un documento está restringido en Google Drive, aquí también lo estará.",
+        "permissionsBody": "El acceso que tienes dentro de OddJeeves es el mismo que en cada aplicación conectada, ni más ni menos. Si un documento está restringido en Google Drive, aquí también lo estará.",
         "emailNotePre": "Asegúrate de que el correo con el que te registraste —",
         "emailNotePost": "— sea el mismo que usas en las aplicaciones de tu organización para que tus permisos se reconozcan correctamente.",
         "cancelButton": "Cancelar",
@@ -4151,7 +4151,7 @@
       "orgEmailVerifyFailedTitle": "Verificación fallida",
       "orgEmailVerifyFailedDescription": "El enlace puede ser inválido o haber expirado. Por favor, regístrate nuevamente.",
       "loadFailedTitle": "No se pudo cargar el inicio de sesión",
-      "loadFailedDescription": "PipesHub no pudo conectar con el servidor para cargar las opciones de inicio de sesión. Comprueba tu conexión o la dirección del servidor e inténtalo de nuevo.",
+      "loadFailedDescription": "OddJeeves no pudo conectar con el servidor para cargar las opciones de inicio de sesión. Comprueba tu conexión o la dirección del servidor e inténtalo de nuevo.",
       "retry": "Reintentar"
     },
     "common": {
@@ -4188,15 +4188,15 @@
       "tooManyIncorrectCredentials": "Ha introducido credenciales incorrectas demasiadas veces"
     },
     "desktopHandoff": {
-      "title": "Inicio de sesión enviado a PipesHub",
-      "description": "Puedes cerrar esta pestaña y volver a la aplicación de PipesHub.",
-      "openApp": "Abrir PipesHub"
+      "title": "Inicio de sesión enviado a OddJeeves",
+      "description": "Puedes cerrar esta pestaña y volver a la aplicación de OddJeeves.",
+      "openApp": "Abrir OddJeeves"
     }
   },
   "healthGate": {
     "title": "No se puede conectar al servidor",
     "description": "El servidor no está disponible en este momento. Es posible que se esté iniciando o en mantenimiento. Estamos intentando reconectar.",
-    "contactAdmin": "Si el problema persiste, comuníquese con su administrador de PipesHub."
+    "contactAdmin": "Si el problema persiste, comuníquese con su administrador de OddJeeves."
   },
   "askUserQuestion": {
     "questionsHeadingSingular": "Pregunta :",
@@ -4284,7 +4284,7 @@
       "noneRestored_one": "No se ha podido restaurar {{count}} elemento",
       "noneRestored_many": "No se ha podido restaurar ninguno de los {{count}} de elementos",
       "noneRestored_other": "No se ha podido restaurar ninguno de los {{count}} elementos",
-      "reindexPending": "Restaurado, pero algunos archivos aún no se pueden buscar porque no se pudieron poner en cola para indexarse. PipesHub los vuelve a poner en cola por sí solo en aproximadamente una hora. Para hacerlo antes, abre el menú de cada archivo y elige {{action}}.",
+      "reindexPending": "Restaurado, pero algunos archivos aún no se pueden buscar porque no se pudieron poner en cola para indexarse. OddJeeves los vuelve a poner en cola por sí solo en aproximadamente una hora. Para hacerlo antes, abre el menú de cada archivo y elige {{action}}.",
       "searchableAfterIndexing": "Los elementos restaurados vuelven a estar donde estaban y aparecerán de nuevo en la búsqueda cuando termine la indexación.",
       "renamed": "«{{from}}» se ha restaurado como «{{to}}» porque otro elemento ya tiene ese nombre allí.",
       "partiallyRestored": "Se han restaurado {{restored}} de {{total}} elementos",
@@ -4388,7 +4388,7 @@
     },
     "team": "Equipo",
     "teamsNoRoles": "Los equipos no tienen roles",
-    "invite": "Invitar a Pipeshub",
+    "invite": "Invitar a OddJeeves",
     "memberCount_many": "{{count}} de miembros"
   },
   "demoData": {
@@ -4398,7 +4398,7 @@
     },
     "removalNotice": {
       "title": "Los datos de demostración de Acme Corp siguen en su espacio de trabajo",
-      "description": "Los datos propios de su empresa ya están en PipesHub. La demostración está oculta en las respuestas de forma predeterminada, pero cualquiera puede volver a activarla y sus cuentas de ejemplo todavía pueden iniciar sesión. Desactívela para todos o quítela permanentemente.",
+      "description": "Los datos propios de su empresa ya están en OddJeeves. La demostración está oculta en las respuestas de forma predeterminada, pero cualquiera puede volver a activarla y sus cuentas de ejemplo todavía pueden iniciar sesión. Desactívela para todos o quítela permanentemente.",
       "remove": "Quitar permanentemente",
       "keep": "Mantener por ahora",
       "turnOff": "Desactivar para todos"

@@ -11,7 +11,7 @@ export const CHAT_ERROR_MESSAGES = {
   saveFailed:
     "The answer couldn't be saved to this conversation. Click Regenerate or send your message again.",
   unavailable:
-    "PipesHub couldn't answer right now. Please try again in a minute.",
+    "OddJeeves couldn't answer right now. Please try again in a minute.",
   failed:
     'Something went wrong while answering. Please send your message again, and if it keeps happening, contact your workspace admin.',
 } as const;

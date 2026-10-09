@@ -1,10 +1,10 @@
 openapi: 3.0.0
 info:
-  title: PipesHub API
+  title: OddJeeves API
   description: |
-    Unified API documentation for PipesHub services.
+    Unified API documentation for OddJeeves services.
 
-    PipesHub is an enterprise-grade platform providing:
+    OddJeeves is an enterprise-grade platform providing:
     - User authentication and management
     - Document storage and version control
     - Knowledge base management
@@ -52,7 +52,7 @@ tags:
     description: OAuth 2.0 token exchange for third-party authentication providers
   - name: OAuth Provider
     description: |
-      PipesHub OAuth 2.0 Authorization Server implementing RFC 6749, RFC 7636 (PKCE), and OpenID Connect.
+      OddJeeves OAuth 2.0 Authorization Server implementing RFC 6749, RFC 7636 (PKCE), and OpenID Connect.
 
       **Supported Grant Types:**
       - `authorization_code` - Standard OAuth flow with PKCE support
@@ -78,9 +78,9 @@ tags:
       **Operational note:** Prefer tokens whose JWT already carries the creator as **`userId`**; use **`POST /oauth-clients/{appId}/revoke-all-tokens`** and obtain new tokens from **`POST /oauth2/token`** when rotating integrations.
   - name: OAuth Apps
     description: |
-      Manage OAuth 2.0 client applications registered with PipesHub.
+      Manage OAuth 2.0 client applications registered with OddJeeves.
 
-      OAuth apps allow third-party applications to access PipesHub APIs on behalf of users
+      OAuth apps allow third-party applications to access OddJeeves APIs on behalf of users
       or organizations. Each app receives a client ID and secret for authentication.
 
       **Who can see which apps**
@@ -311,7 +311,7 @@ tags:
     description: |
       Configure telemetry and metrics collection for application monitoring and analytics.
 
-      PipesHub collects anonymized usage metrics to help improve the product. Metrics are pushed
+      OddJeeves collects anonymized usage metrics to help improve the product. Metrics are pushed
       to a configurable remote server at regular intervals.
 
       **Collected Metrics:**
@@ -334,8 +334,8 @@ tags:
     description: |
       Model Context Protocol (MCP) endpoints for AI tool integration.
 
-      PipesHub exposes a Streamable HTTP MCP server that allows MCP-compatible clients
-      (such as Claude Desktop, Cursor, or custom agents) to interact with PipesHub tools
+      OddJeeves exposes a Streamable HTTP MCP server that allows MCP-compatible clients
+      (such as Claude Desktop, Cursor, or custom agents) to interact with OddJeeves tools
       including search, conversations, knowledge base management, and connector operations.
 
       **Transport:** Streamable HTTP (JSON-RPC over HTTP)
@@ -352,7 +352,7 @@ tags:
       Endpoints for scheduling, managing, and monitoring data crawling jobs for enterprise connectors.
 
       The Crawling Manager uses BullMQ (Redis-based queue) to schedule and execute crawling jobs that
-      sync data from external connectors (Google Drive, OneDrive, Slack, Jira, etc.) into PipesHub's
+      sync data from external connectors (Google Drive, OneDrive, Slack, Jira, etc.) into OddJeeves's
       search index.
 
       **Key Features:**
@@ -1856,7 +1856,7 @@ components:
           type: string
           description: App description
           maxLength: 500
-          example: "Integrates PipesHub with our internal tools"
+          example: "Integrates OddJeeves with our internal tools"
         redirectUris:
           type: array
           items:
@@ -3525,7 +3525,7 @@ components:
     Document:
       type: object
       description: |
-        Represents a document stored in PipesHub storage system. Documents can be versioned to maintain complete history of changes. Supports multiple storage backends (S3, Azure Blob, Local).
+        Represents a document stored in OddJeeves storage system. Documents can be versioned to maintain complete history of changes. Supports multiple storage backends (S3, Azure Blob, Local).
       required:
         - _id
         - documentName
@@ -5012,7 +5012,7 @@ components:
         Response returned by GET /connectors/navigate.
 
         Field names are snake_case, matching the knowledge graph's internal
-        view models. `text` carries the same flat-text rendering PipesHub's
+        view models. `text` carries the same flat-text rendering OddJeeves's
         own agent sees for this node; the remaining fields carry the same
         information in structured form.
       required:
@@ -6699,7 +6699,7 @@ components:
 
         **Query Processing:**
 
-        The query is processed through PipesHub's AI pipeline which:
+        The query is processed through OddJeeves's AI pipeline which:
 
         - Performs semantic search across indexed knowledge bases
         - Retrieves relevant context from matching documents
@@ -12725,7 +12725,7 @@ components:
           description: |
             UTF-8 text to synthesize. Capped at 4096 characters to match the
             underlying provider limit (OpenAI TTS) and avoid unbounded cost.
-          example: "Hello, this is a PipesHub voice test."
+          example: "Hello, this is a OddJeeves voice test."
         voice:
           type: string
           nullable: true
@@ -13333,7 +13333,7 @@ components:
           enum: [DESKTOP_OFFLINE, DESKTOP_UNCLAIMED, DESKTOP_OWNED_BY_OTHER_DEVICE]
         message:
           type: string
-          example: "No desktop is connected for connector conn_abc123. Open the Pipeshub desktop app on the machine that owns this folder."
+          example: "No desktop is connected for connector conn_abc123. Open the OddJeeves desktop app on the machine that owns this folder."
         details:
           type: object
           required:
@@ -13497,7 +13497,7 @@ components:
               example: "12345678-1234-1234-1234-123456789abc"
         baseUrl:
           type: string
-          description: "PipesHub's public origin, prefixed to the connector's redirect path to build the stored redirectUri. When omitted, the frontend public endpoint is used. Not the provider's URL; a self-hosted provider's address goes in config."
+          description: "OddJeeves's public origin, prefixed to the connector's redirect path to build the stored redirectUri. When omitted, the frontend public endpoint is used. Not the provider's URL; a self-hosted provider's address goes in config."
           format: uri
           example: "https://pipeshub.mycompany.com"
 
@@ -14282,7 +14282,7 @@ components:
       type: object
       description: |
         Skill metadata (SKILL.md YAML frontmatter, agentskills.io-compatible, plus
-        PipesHub lifecycle fields nested under `metadata["agent-loop"]` on the wire
+        OddJeeves lifecycle fields nested under `metadata["agent-loop"]` on the wire
         format — flattened here for the REST response). Returned by list/search/
         create/update/deprecate/rollback; `GET /skills/{name}` returns this shape
         plus `body`/`resources` (see Skill).
@@ -15648,7 +15648,7 @@ components:
         productName:
           type: string
           description: Name of the product sending the email (used in templates for branding)
-          example: "PipesHub"
+          example: "OddJeeves"
         emailTemplateType:
           type: string
           enum: [loginWithOTP, resetPassword, accountCreation, appuserInvite, suspiciousLoginAttempt]
@@ -15683,7 +15683,7 @@ components:
         subject:
           type: string
           description: Email subject line
-          example: "Your OTP Code for PipesHub"
+          example: "Your OTP Code for OddJeeves"
         templateData:
           description: |
             Dynamic data to populate the email template. Required fields depend on <code>emailTemplateType</code>.<br><br>
@@ -16665,7 +16665,7 @@ paths:
 
         **Flow:**
         1. Client redirects user to this endpoint with required parameters
-        2. If not logged in, user is redirected to PipesHub login
+        2. If not logged in, user is redirected to OddJeeves login
         3. User sees consent page with requested scopes
         4. User grants or denies consent
         5. User is redirected back to client with authorization code
@@ -19159,7 +19159,7 @@ paths:
           in: query
           required: false
           description: |
-            `desktop` for a sign-in started by the PipesHub desktop app. Needs `state`
+            `desktop` for a sign-in started by the OddJeeves desktop app. Needs `state`
             and `code_challenge`; without both it is ignored. The callback then sends
             no cookies and redirects to `/auth/sign-in/samlSso/success` with `state`
             and a single-use `code` (or `saml_error`), redeemed at `/saml/desktop/exchange`.
@@ -19310,7 +19310,7 @@ paths:
       summary: Redeem a desktop SAML handoff code
       description: |
         Exchanges the single-use code from a desktop SAML sign-in (see `client=desktop`
-        on `/saml/signIn`) for PipesHub tokens. The code expires after 2 minutes and is
+        on `/saml/signIn`) for OddJeeves tokens. The code expires after 2 minutes and is
         consumed by the first attempt, whether or not the verifier matches.
       operationId: exchangeSamlDesktopCode
       security: []
@@ -22436,11 +22436,11 @@ paths:
         - Organizations
       summary: Create organization
       description: |
-        Create a new organization and its first admin user. This is the initial setup endpoint for new PipesHub installations.
+        Create a new organization and its first admin user. This is the initial setup endpoint for new OddJeeves installations.
 
         **Overview:**
 
-        This endpoint performs the complete initial setup of a PipesHub instance, including creating the organization entity and its first administrator account. Should only be called once during initial setup.
+        This endpoint performs the complete initial setup of a OddJeeves instance, including creating the organization entity and its first administrator account. Should only be called once during initial setup.
 
         **Setup Flow:**
 
@@ -35535,7 +35535,7 @@ paths:
       summary: Get a record's full parsed content and metadata
       description: |
         Retrieve the full parsed content and metadata of a single record —
-        the same content PipesHub's own RAG/chat pipeline uses to answer
+        the same content OddJeeves's own RAG/chat pipeline uses to answer
         questions, returned directly instead of via chat.
 
         **When to use this vs. the other record endpoints:**
@@ -35823,7 +35823,7 @@ paths:
         - Connector
       summary: Resolve a URL, issue key or external ID to a Record ID
       description: |
-        Turn an external reference into the matching PipesHub record. Accepts a
+        Turn an external reference into the matching OddJeeves record. Accepts a
         pasted link, a Jira-style issue key, or a bare external system ID from
         any connected source. Repeat `identifiers` to batch-resolve up to ten
         in one call.
@@ -39561,7 +39561,7 @@ paths:
                       type: string
                 baseUrl:
                   type: string
-                  description: "PipesHub's public origin. Used only when the stored configuration has no redirectUri yet, to build one; an existing redirectUri is kept whether or not this is sent."
+                  description: "OddJeeves's public origin. Used only when the stored configuration has no redirectUri yet, to build one; an existing redirectUri is kept whether or not this is sent."
       responses:
         '200':
           description: OAuth configuration updated
@@ -39807,7 +39807,7 @@ paths:
                 summary: Local Storage
                 value:
                   storageType: local
-                  mountName: PipesHub
+                  mountName: OddJeeves
       responses:
         '200':
           description: Storage configuration saved successfully
@@ -40681,7 +40681,7 @@ paths:
         '500':
           description: |
             The health check failed for a reason other than the settings, for
-            example PipesHub cannot reach the internet to call a cloud provider.
+            example OddJeeves cannot reach the internet to call a cloud provider.
           content:
             application/json:
               schema:
@@ -41400,7 +41400,7 @@ paths:
       description: |
         Returns the server's configured public frontend URL. Unauthenticated.
 
-        The PipesHub desktop app builds its OAuth redirect URI from this value. It cannot
+        The OddJeeves desktop app builds its OAuth redirect URI from this value. It cannot
         derive it: the app knows only the API base URL the operator typed into it, and the
         two are different origins whenever the UI is served separately from the API. The
         app calls this as the sign-in screen loads, before any provider button renders.
@@ -42781,7 +42781,7 @@ paths:
 
         <b>Overview:</b><br>
         Creates a scheduled crawling job that will sync data from the specified connector into
-        PipesHub's search index. The job is added to a BullMQ queue and will execute according
+        OddJeeves's search index. The job is added to a BullMQ queue and will execute according
         to the specified schedule configuration.<br><br>
 
         <b>Schedule Types:</b><br>

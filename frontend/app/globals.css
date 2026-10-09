@@ -54,6 +54,13 @@
    Base color: #FD533C
    ======================== */
 
+/* The white logo works on dark surfaces; light mode uses dark mark shapes. */
+.oddjeeves-logo { position: relative; }
+.oddjeeves-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.oddjeeves-logo-light { display: none; }
+html.light .oddjeeves-logo-dark { display: none; }
+html.light .oddjeeves-logo-light { display: block; }
+
 /* Light Mode */
 :root, .light, .light-theme {
   --effects-translucent: rgba(255, 255, 255, 0.8);

@@ -206,7 +206,7 @@
     "save": "सहेजें",
     "saving": "सहेजा जा रहा है…",
     "footer": {
-      "copyright": "© 2026 Pipeshub LLC",
+      "copyright": "© 2026 OddJeeves",
       "privacyPolicy": "गोपनीयता नीति",
       "website": "वेबसाइट",
       "visitDocs": "देखें",
@@ -420,9 +420,9 @@
   },
   "electron": {
     "serverUrlSetup": {
-      "title": "PipesHub सर्वर से कनेक्ट करें",
-      "subtitleFirstRun": "आरंभ करने के लिए अपने PipesHub सर्वर का URL दर्ज करें।",
-      "subtitleExisting": "अपने PipesHub सर्वर URL की पुष्टि करें या उसे अपडेट करें।",
+      "title": "OddJeeves सर्वर से कनेक्ट करें",
+      "subtitleFirstRun": "आरंभ करने के लिए अपने OddJeeves सर्वर का URL दर्ज करें।",
+      "subtitleExisting": "अपने OddJeeves सर्वर URL की पुष्टि करें या उसे अपडेट करें।",
       "label": "सर्वर URL",
       "submit": "कनेक्ट करें",
       "changeServer": "सर्वर बदलें",
@@ -869,11 +869,11 @@
     "deleteAgent": "एजेंट हटाएं",
     "deleteAgentConfirm": "इस एजेंट को हटाएं?",
     "deleteAgentDescription": "नाम वाला एजेंट",
-    "deleteAgentWarning": "Pipeshub से स्थायी रूप से हटा दिया जाएगा। इसका उपयोग करने वाली चैट अपेक्षित रूप से काम नहीं कर सकतीं।",
+    "deleteAgentWarning": "OddJeeves से स्थायी रूप से हटा दिया जाएगा। इसका उपयोग करने वाली चैट अपेक्षित रूप से काम नहीं कर सकतीं।",
     "deleteChat": "हटाएं",
     "deleteChatConfirm": "क्या आप सुनिश्चित हैं?",
     "deleteChatDescription": "शीर्षक वाली चैट",
-    "deleteChatWarning": "Pipeshub से स्थायी रूप से हटा दी जाएगी। साझा पहुंच वाले सभी उपयोगकर्ता अपनी पहुंच खो देंगे।",
+    "deleteChatWarning": "OddJeeves से स्थायी रूप से हटा दी जाएगी। साझा पहुंच वाले सभी उपयोगकर्ता अपनी पहुंच खो देंगे।",
     "editAgent": "एजेंट संपादित करें",
     "failedToArchive": "चैट संग्रहित करने में विफल",
     "failedToDelete": "चैट हटाने में विफल",
@@ -1453,11 +1453,11 @@
     },
     "oauth2": {
       "title": "OAuth 2.0",
-      "subtitle": "उन OAuth 2.0 अनुप्रयोगों को प्रबंधित करें जो Pipeshub के माध्यम से आपके संगठन तक पहुँच सकते हैं",
+      "subtitle": "उन OAuth 2.0 अनुप्रयोगों को प्रबंधित करें जो OddJeeves के माध्यम से आपके संगठन तक पहुँच सकते हैं",
       "searchPlaceholder": "नाम या विवरण से अनुप्रयोग खोजें...",
       "newApplication": "नया OAuth अनुप्रयोग",
       "emptyTitle": "कोई OAuth 2.0 अनुप्रयोग नहीं",
-      "emptyDescription": "तृतीय-पक्ष एकीकरण को Pipeshub के माध्यम से आपके संगठन तक पहुँचने देने के लिए OAuth 2.0 ऐप बनाएँ।",
+      "emptyDescription": "तृतीय-पक्ष एकीकरण को OddJeeves के माध्यम से आपके संगठन तक पहुँचने देने के लिए OAuth 2.0 ऐप बनाएँ।",
       "loading": "अनुप्रयोग लोड हो रहे हैं...",
       "errorGeneric": "OAuth अनुप्रयोग लोड नहीं हो सके",
       "retry": "पुनः प्रयास करें",
@@ -1582,7 +1582,7 @@
         "returnToAppsButton": "OAuth 2.0 ऐप्स पर लौटें",
         "showSecretAria": "क्लाइंट सीक्रेट दिखाएँ",
         "hideSecretAria": "क्लाइंट सीक्रेट छिपाएँ",
-        "clientCredentialsWarning": "क्लाइंट क्रेडेंशियल टोकन हमेशा Pipeshub तक उस उपयोगकर्ता की पहचान से पहुँचते हैं जिसने यह एप्लिकेशन बनाया था — न कि टोकन एंडपॉइंट को कॉल करने वाले की। आपके द्वारा दिए गए स्कोप के भीतर, टोकन वह सब कुछ देख सकता है जो वह व्यक्ति देख सकता है, और वह उसकी भूमिका भी प्राप्त करता है, इसलिए किसी एडमिन द्वारा बनाए गए एप्लिकेशन को एडमिन पहुँच मिलती है। यदि वह खाता हटा दिया जाए तो टोकन काम करना बंद कर देता है। यदि यह एप्लिकेशन authorization code फ़्लो का भी समर्थन करता है, तो उपयोगकर्ता उस रास्ते से इसे अपने लिए अधिकृत कर सकते हैं।",
+        "clientCredentialsWarning": "क्लाइंट क्रेडेंशियल टोकन हमेशा OddJeeves तक उस उपयोगकर्ता की पहचान से पहुँचते हैं जिसने यह एप्लिकेशन बनाया था — न कि टोकन एंडपॉइंट को कॉल करने वाले की। आपके द्वारा दिए गए स्कोप के भीतर, टोकन वह सब कुछ देख सकता है जो वह व्यक्ति देख सकता है, और वह उसकी भूमिका भी प्राप्त करता है, इसलिए किसी एडमिन द्वारा बनाए गए एप्लिकेशन को एडमिन पहुँच मिलती है। यदि वह खाता हटा दिया जाए तो टोकन काम करना बंद कर देता है। यदि यह एप्लिकेशन authorization code फ़्लो का भी समर्थन करता है, तो उपयोगकर्ता उस रास्ते से इसे अपने लिए अधिकृत कर सकते हैं।",
         "successTitle": "अनुप्रयोग बनाया गया",
         "successDescription": "आपका OAuth अनुप्रयोग सफलतापूर्वक बनाया गया।",
         "errorCreateTitle": "अनुप्रयोग नहीं बनाया जा सका",
@@ -1627,8 +1627,8 @@
       "configUpdateModel": "मॉडल अपडेट करें",
       "configFillRequiredTooltip": "सभी आवश्यक फ़ील्ड भरें",
       "configSaveErrorFallback": "मॉडल कॉन्फ़िगरेशन सहेजा नहीं जा सका",
-      "configSaveOutboundError": "PipesHub कंटेनर से इस मॉडल प्रदाता तक नहीं पहुँच सकता। क्लाउड प्रदाताओं के लिए आउटबाउंड इंटरनेट आवश्यक है — देखें deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
-      "configSaveTimeoutError": "मॉडल सत्यापित करते समय अनुरोध का समय समाप्त हो गया। क्लाउड प्रदाताओं के लिए PipesHub कंटेनर से आउटबाउंड इंटरनेट आवश्यक है — देखें deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveOutboundError": "OddJeeves कंटेनर से इस मॉडल प्रदाता तक नहीं पहुँच सकता। क्लाउड प्रदाताओं के लिए आउटबाउंड इंटरनेट आवश्यक है — देखें deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveTimeoutError": "मॉडल सत्यापित करते समय अनुरोध का समय समाप्त हो गया। क्लाउड प्रदाताओं के लिए OddJeeves कंटेनर से आउटबाउंड इंटरनेट आवश्यक है — देखें deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
       "configNoConfigRequired": "इस प्रदाता के लिए कोई कॉन्फ़िगरेशन आवश्यक नहीं।",
       "configDefaultModelNotice": "\"{{modelName}}\" सिस्टम द्वारा डिफ़ॉल्ट रूप से उपयोग किया जाएगा।",
       "configSectionModelConfiguration": "मॉडल कॉन्फ़िगरेशन",
@@ -1935,7 +1935,7 @@
       "selectPrompt": "पूर्वावलोकन के लिए एक संग्रहीत चैट चुनें",
       "restore": "पुनर्स्थापित करें",
       "permanentlyDelete": "स्थायी रूप से हटाएँ",
-      "deleteConfirmMessage": "यह चैट Pipeshub से स्थायी रूप से हटा दी जाएगी। कोई भी साझा पहुँच खो जाएगी।",
+      "deleteConfirmMessage": "यह चैट OddJeeves से स्थायी रूप से हटा दी जाएगी। कोई भी साझा पहुँच खो जाएगी।",
       "restoreSuccess": "चैट पुनर्स्थापित की गई",
       "restoreError": "चैट पुनर्स्थापित नहीं हो सकी",
       "deleteSuccess": "सफलतापूर्वक हटाया गया",
@@ -1978,7 +1978,7 @@
       "postalCodePlaceholder": "eg: 94107",
       "dataCollection": "Data Collection Settings",
       "enableDataCollection": "Enable",
-      "dataCollectionDescription": "PipesHub collects and processes personal information for a variety of business purposes.",
+      "dataCollectionDescription": "OddJeeves collects and processes personal information for a variety of business purposes.",
       "dataCollectionReason1": "To provide customer service and support for our products",
       "dataCollectionReason2": "To send marketing communications",
       "dataCollectionReason3": "To manage your subscription to newsletters or other updates",
@@ -2158,7 +2158,7 @@
       },
       "successDialog": {
         "title": "Instance is configured and ready to sync!",
-        "description": "You can start syncing your {{name}} data with Pipeshub now,",
+        "description": "You can start syncing your {{name}} data with OddJeeves now,",
         "descriptionSuffix": "or choose to do it later from settings.",
         "later": "I'll do it later",
         "startSync": "Start Syncing Now"
@@ -2269,8 +2269,8 @@
         "additionalSettingsDescription": "Configure connector-specific sync options",
         "nonEditableUrlFieldTooltip": "सेट करने के बाद वेबसाइट URL नहीं बदला जा सकता।",
         "nonEditableLockedFieldTooltip": "सेट करने के बाद यह मान नहीं बदला जा सकता।",
-        "localFsDesktopOnlyBanner": "लोकल फ़ाइलसिस्टम सेटिंग्स केवल PipesHub डेस्कटॉप ऐप में बदली जा सकती हैं। यह व्यू केवल पढ़ने के लिए है।",
-        "localFsDesktopOnlySaveTooltip": "इन सेटिंग्स को बदलने के लिए PipesHub डेस्कटॉप ऐप खोलें।",
+        "localFsDesktopOnlyBanner": "लोकल फ़ाइलसिस्टम सेटिंग्स केवल OddJeeves डेस्कटॉप ऐप में बदली जा सकती हैं। यह व्यू केवल पढ़ने के लिए है।",
+        "localFsDesktopOnlySaveTooltip": "इन सेटिंग्स को बदलने के लिए OddJeeves डेस्कटॉप ऐप खोलें।",
         "importDate": "Import start date",
         "importDateDescription": "Choose the date from which messages are imported",
         "importAllTime": "Import All Time Data",
@@ -2377,11 +2377,11 @@
         }
       },
       "localFsDesktop": {
-        "offlineToast": "सिंक करने के लिए उस मशीन पर PipesHub डेस्कटॉप ऐप खोलें जिसका यह फ़ोल्डर है।",
-        "offlineNamedToast": "इस फ़ोल्डर का डिवाइस {{deviceName}} कनेक्ट नहीं है। सिंक करने के लिए उस डिवाइस पर PipesHub डेस्कटॉप ऐप खोलें।",
-        "unclaimedToast": "यह कनेक्टर अभी तक किसी डेस्कटॉप पर सेट अप नहीं किया गया है। उस मशीन पर PipesHub डेस्कटॉप ऐप खोलें जिसका यह फ़ोल्डर है और वहाँ एक बार सिंक चालू करें।",
-        "ownedByOtherDeviceToast": "यह कनेक्टर {{deviceName}} का है। उस डिवाइस पर PipesHub डेस्कटॉप ऐप से सिंक चालू करें।",
-        "ownedByOtherDeviceUnknownToast": "यह कनेक्टर किसी दूसरे डिवाइस का है। उस डिवाइस पर PipesHub डेस्कटॉप ऐप से सिंक चालू करें।",
+        "offlineToast": "सिंक करने के लिए उस मशीन पर OddJeeves डेस्कटॉप ऐप खोलें जिसका यह फ़ोल्डर है।",
+        "offlineNamedToast": "इस फ़ोल्डर का डिवाइस {{deviceName}} कनेक्ट नहीं है। सिंक करने के लिए उस डिवाइस पर OddJeeves डेस्कटॉप ऐप खोलें।",
+        "unclaimedToast": "यह कनेक्टर अभी तक किसी डेस्कटॉप पर सेट अप नहीं किया गया है। उस मशीन पर OddJeeves डेस्कटॉप ऐप खोलें जिसका यह फ़ोल्डर है और वहाँ एक बार सिंक चालू करें।",
+        "ownedByOtherDeviceToast": "यह कनेक्टर {{deviceName}} का है। उस डिवाइस पर OddJeeves डेस्कटॉप ऐप से सिंक चालू करें।",
+        "ownedByOtherDeviceUnknownToast": "यह कनेक्टर किसी दूसरे डिवाइस का है। उस डिवाइस पर OddJeeves डेस्कटॉप ऐप से सिंक चालू करें।",
         "deviceIdentityError": "इस डिवाइस की पहचान नहीं हो सकी: {{error}}"
       },
       "schemaForm": {
@@ -2393,7 +2393,7 @@
       },
       "personal": {
         "desktopRequiredTitle": "डेस्कटॉप ऐप आवश्यक है",
-        "desktopRequiredDescription": "लोकल फ़ाइलसिस्टम कनेक्टर केवल PipesHub डेस्कटॉप ऐप में उपलब्ध है। कृपया इस कनेक्टर को सेट अप करने के लिए डेस्कटॉप ऐप का उपयोग करें।"
+        "desktopRequiredDescription": "लोकल फ़ाइलसिस्टम कनेक्टर केवल OddJeeves डेस्कटॉप ऐप में उपलब्ध है। कृपया इस कनेक्टर को सेट अप करने के लिए डेस्कटॉप ऐप का उपयोग करें।"
       },
       "syncStatus": {
         "paused": "Sync Paused",
@@ -2601,7 +2601,7 @@
         "authMode": "प्रमाणीकरण मोड",
         "headerName": "हेडर नाम",
         "authorizationUrl": "प्रमाणीकरण URL",
-        "dcrHint": "खाली छोड़ें — यदि सर्वर समर्थन करता है तो PipesHub स्वचालित रूप से डायनामिक क्लाइंट पंजीकरण का पता लगाएगा और उसका उपयोग करेगा",
+        "dcrHint": "खाली छोड़ें — यदि सर्वर समर्थन करता है तो OddJeeves स्वचालित रूप से डायनामिक क्लाइंट पंजीकरण का पता लगाएगा और उसका उपयोग करेगा",
         "tokenUrl": "टोकन URL",
         "scopes": "स्कोप्स",
         "scopesPlaceholder": "एक स्कोप जोड़ें",
@@ -2626,14 +2626,14 @@
         "saved": "OAuth ऐप सहेजा गया",
         "saveError": "OAuth ऐप सहेजने में विफल",
         "title": "OAuth ऐप कॉन्फ़िगर करें",
-        "description": "PipesHub स्वचालित रूप से पता लगाता है कि यह सर्वर डायनामिक क्लाइंट पंजीकरण का समर्थन करता है या नहीं। क्लाइंट प्रमाण-पत्र केवल तभी आवश्यक हैं जब यह समर्थित न हो।",
+        "description": "OddJeeves स्वचालित रूप से पता लगाता है कि यह सर्वर डायनामिक क्लाइंट पंजीकरण का समर्थन करता है या नहीं। क्लाइंट प्रमाण-पत्र केवल तभी आवश्यक हैं जब यह समर्थित न हो।",
         "alreadyConfigured": "इस सर्वर के लिए एक OAuth ऐप पहले से ही कॉन्फ़िगर है।",
         "clientId": "क्लाइंट ID",
         "clientIdPlaceholder": "क्लाइंट ID दर्ज करें",
         "clientSecret": "क्लाइंट सीक्रेट",
         "clientSecretPlaceholder": "क्लाइंट सीक्रेट दर्ज करें",
         "dcrProbing": "जाँच की जा रही है कि क्या यह सर्वर स्वचालित रूप से पंजीकरण कर सकता है…",
-        "dcrSupportedHint": "यह सर्वर स्वचालित पंजीकरण का समर्थन करता है। PipesHub स्वयं को पंजीकृत करेगा और किसी क्लाइंट प्रमाण-पत्र की आवश्यकता नहीं है।",
+        "dcrSupportedHint": "यह सर्वर स्वचालित पंजीकरण का समर्थन करता है। OddJeeves स्वयं को पंजीकृत करेगा और किसी क्लाइंट प्रमाण-पत्र की आवश्यकता नहीं है।",
         "dcrUnsupportedHint": "इस सर्वर के लिए मैन्युअल रूप से पंजीकृत OAuth ऐप आवश्यक है। नीचे दिए गए कॉलबैक URL के साथ एक बनाएं, फिर उसकी क्लाइंट ID और सीक्रेट दर्ज करें।",
         "dcrUnknownHint": "स्वचालित पंजीकरण समर्थन की पुष्टि नहीं हो सकी। यदि समर्थित नहीं है, तो नीचे दिए गए कॉलबैक URL के साथ एक OAuth ऐप पंजीकृत करें और उसकी क्लाइंट ID व सीक्रेट दर्ज करें।",
         "callbackUrlLabel": "कॉलबैक URL",
@@ -2645,7 +2645,7 @@
         "completingTitle": "साइन-इन पूरा हो रहा है…",
         "processingHint": "कृपया प्रतीक्षा करें जब तक हम आपका खाता कनेक्ट कर रहे हैं।",
         "successTitle": "सफलतापूर्वक कनेक्ट हुआ",
-        "successBody": "आप इस विंडो को बंद करके PipesHub पर लौट सकते हैं।",
+        "successBody": "आप इस विंडो को बंद करके OddJeeves पर लौट सकते हैं।",
         "failedTitle": "कनेक्शन विफल",
         "retryHint": "कुछ गड़बड़ हो गई। कृपया इस विंडो को बंद करें और फिर से प्रयास करें।",
         "providerError": "प्रदाता ने एक त्रुटि लौटाई: {{error}}",
@@ -2915,7 +2915,7 @@
         "title": "Roles & Permissions",
         "role": "Role",
         "groups": "Groups",
-        "roleDescription": "Your role on Pipeshub app",
+        "roleDescription": "Your role on OddJeeves app",
         "groupsDescription": "User groups you belong to",
         "noGroups": "No user groups found"
       },
@@ -2993,7 +2993,7 @@
       },
       "demoData": {
         "title": "डेमो डेटा",
-        "description": "Acme Corp एक काल्पनिक कंपनी है जिसे इसलिए लोड किया गया है ताकि आप PipesHub आज़मा सकें। इससे केवल वही बदलता है जो आप देखते हैं; कुछ भी हटाया नहीं जाता।",
+        "description": "Acme Corp एक काल्पनिक कंपनी है जिसे इसलिए लोड किया गया है ताकि आप OddJeeves आज़मा सकें। इससे केवल वही बदलता है जो आप देखते हैं; कुछ भी हटाया नहीं जाता।",
         "label": "मेरे उत्तरों, खोज और रिकॉर्ड में Acme Corp डेमो डेटा दिखाएँ",
         "followingDefault": "डिफ़ॉल्ट का पालन: तब तक दिखता है जब तक आपके संगठन का अपना डेटा न हो, उसके बाद छिप जाता है।",
         "yourChoice": "आपकी अपनी पसंद।",
@@ -3262,7 +3262,7 @@
       "subtitle": "अपनी स्क्रिप्ट और इंटीग्रेशन के लिए लंबी अवधि के टोकन बनाएँ, जैसे MCP सर्वर के लिए। यहाँ आपके टोकन केवल आपको दिखते हैं।",
       "newToken": "नया टोकन",
       "emptyTitle": "कोई व्यक्तिगत एक्सेस टोकन नहीं",
-      "emptyDescription": "PipesHub MCP सर्वर या अपनी स्क्रिप्ट कनेक्ट करने के लिए एक टोकन बनाएँ।",
+      "emptyDescription": "OddJeeves MCP सर्वर या अपनी स्क्रिप्ट कनेक्ट करने के लिए एक टोकन बनाएँ।",
       "errorGeneric": "व्यक्तिगत एक्सेस टोकन लोड नहीं हो सके",
       "retry": "फिर से कोशिश करें",
       "columnName": "नाम",
@@ -3481,7 +3481,7 @@
       "errorGeneric": "सेवा खाते लोड नहीं हो सके।",
       "retry": "पुनः प्रयास करें",
       "emptyTitle": "अभी तक कोई सेवा खाता नहीं",
-      "emptyDescription": "सेवा खाता वह तरीका है जिससे कोई स्क्रिप्ट किसी सहकर्मी के रूप में साइन इन किए बिना PipesHub से पढ़ती है। यह केवल वही देखता है जो आप इसे देते हैं, और लोगों के जाने पर भी काम करता रहता है।",
+      "emptyDescription": "सेवा खाता वह तरीका है जिससे कोई स्क्रिप्ट किसी सहकर्मी के रूप में साइन इन किए बिना OddJeeves से पढ़ती है। यह केवल वही देखता है जो आप इसे देते हैं, और लोगों के जाने पर भी काम करता रहता है।",
       "columnName": "नाम",
       "columnDescription": "यह किसलिए है",
       "columnStatus": "स्थिति",
@@ -4052,12 +4052,12 @@
   },
   "auth": {
     "titleSection": {
-      "defaultTitle": "Pipeshub में आपका स्वागत है",
+      "defaultTitle": "OddJeeves में आपका स्वागत है",
       "defaultSubtitle": "आपके संगठन का ज्ञान, अंततः खोजयोग्य और जुड़ा हुआ।"
     },
     "signUp": {
       "title": "शुरू करें",
-      "subtitle": "Pipeshub में आपका स्वागत है -- चलिए शुरू करते हैं!",
+      "subtitle": "OddJeeves में आपका स्वागत है -- चलिए शुरू करते हैं!",
       "firstNameLabel": "पहला नाम*",
       "lastNameLabel": "अंतिम नाम*",
       "orgNameLabel": "संगठन का नाम*",
@@ -4100,10 +4100,10 @@
         "fullNameRequired": "पूरा नाम आवश्यक है।"
       },
       "confirmDialog": {
-        "title": "PipesHub अनुमतियाँ कैसे असाइन करता है",
-        "description": "PipesHub आपकी पहचान प्लेटफ़ॉर्म और सभी कनेक्टेड ऐप्स में करने के लिए आपके ईमेल का उपयोग करता है।",
+        "title": "OddJeeves अनुमतियाँ कैसे असाइन करता है",
+        "description": "OddJeeves आपकी पहचान प्लेटफ़ॉर्म और सभी कनेक्टेड ऐप्स में करने के लिए आपके ईमेल का उपयोग करता है।",
         "permissionsTitle": "अनुमतियाँ आपके नेटिव ऐप्स को दर्शाती हैं",
-        "permissionsBody": "PipesHub में आपकी पहुंच वही है जो प्रत्येक कनेक्टेड ऐप में है — न कम, न ज़्यादा। यदि Google Drive में कोई दस्तावेज़ प्रतिबंधित है, तो यहाँ भी रहेगा।",
+        "permissionsBody": "OddJeeves में आपकी पहुंच वही है जो प्रत्येक कनेक्टेड ऐप में है — न कम, न ज़्यादा। यदि Google Drive में कोई दस्तावेज़ प्रतिबंधित है, तो यहाँ भी रहेगा।",
         "emailNotePre": "सुनिश्चित करें कि जिस ईमेल से आपने पंजीकरण किया —",
         "emailNotePost": "— वही आपके संगठन के ऐप्स में उपयोग की जाती है, ताकि आपकी अनुमतियाँ सही तरीके से पहचानी जा सकें।",
         "cancelButton": "रद्द करें",
@@ -4123,7 +4123,7 @@
       "orgEmailVerifyFailedTitle": "सत्यापन विफल",
       "orgEmailVerifyFailedDescription": "लिंक अमान्य या समयाप्त हो सकता है। कृपया पुनः साइन अप करें।",
       "loadFailedTitle": "साइन-इन लोड नहीं हो सका",
-      "loadFailedDescription": "PipesHub साइन-इन विकल्प लोड करने के लिए सर्वर से कनेक्ट नहीं कर सका। अपना कनेक्शन या सर्वर पता जाँचें और फिर से प्रयास करें।",
+      "loadFailedDescription": "OddJeeves साइन-इन विकल्प लोड करने के लिए सर्वर से कनेक्ट नहीं कर सका। अपना कनेक्शन या सर्वर पता जाँचें और फिर से प्रयास करें।",
       "retry": "फिर से प्रयास करें"
     },
     "common": {
@@ -4160,15 +4160,15 @@
       "tooManyIncorrectCredentials": "आपने बहुत बार ग़लत क्रेडेंशियल दर्ज किए हैं"
     },
     "desktopHandoff": {
-      "title": "साइन-इन PipesHub को भेज दिया गया",
-      "description": "आप यह टैब बंद करके PipesHub ऐप पर वापस जा सकते हैं।",
-      "openApp": "PipesHub खोलें"
+      "title": "साइन-इन OddJeeves को भेज दिया गया",
+      "description": "आप यह टैब बंद करके OddJeeves ऐप पर वापस जा सकते हैं।",
+      "openApp": "OddJeeves खोलें"
     }
   },
   "healthGate": {
     "title": "सर्वर से कनेक्ट नहीं हो पा रहा",
     "description": "सर्वर अभी उपलब्ध नहीं है। यह शुरू हो रहा हो सकता है या रखरखाव चल रहा हो सकता है। हम पुनः कनेक्ट करने का प्रयास कर रहे हैं।",
-    "contactAdmin": "यदि यह समस्या बनी रहती है, तो कृपया अपने PipesHub व्यवस्थापक से संपर्क करें।"
+    "contactAdmin": "यदि यह समस्या बनी रहती है, तो कृपया अपने OddJeeves व्यवस्थापक से संपर्क करें।"
   },
   "askUserQuestion": {
     "questionsHeadingSingular": "प्रश्न :",
@@ -4250,7 +4250,7 @@
       "restoreFailedTitle": "'{{name}}' वापस नहीं लाया जा सका",
       "noneRestored_one": "{{count}} आइटम वापस नहीं लाया जा सका",
       "noneRestored_other": "{{count}} आइटम में से कोई भी वापस नहीं लाया जा सका",
-      "reindexPending": "वापस लाया गया, लेकिन कुछ फ़ाइलें अभी खोज में नहीं दिखेंगी क्योंकि उन्हें इंडेक्सिंग के लिए कतार में नहीं डाला जा सका। PipesHub लगभग एक घंटे में उन्हें खुद फिर से कतार में डाल देता है। जल्दी करने के लिए, हर फ़ाइल का मेनू खोलें और {{action}} चुनें।",
+      "reindexPending": "वापस लाया गया, लेकिन कुछ फ़ाइलें अभी खोज में नहीं दिखेंगी क्योंकि उन्हें इंडेक्सिंग के लिए कतार में नहीं डाला जा सका। OddJeeves लगभग एक घंटे में उन्हें खुद फिर से कतार में डाल देता है। जल्दी करने के लिए, हर फ़ाइल का मेनू खोलें और {{action}} चुनें।",
       "searchableAfterIndexing": "वापस लाए गए आइटम अपनी पुरानी जगह पर हैं, और इंडेक्सिंग पूरी होते ही फिर से खोज में दिखेंगे।",
       "renamed": "'{{from}}' को '{{to}}' नाम से वापस लाया गया, क्योंकि वहाँ किसी दूसरे आइटम का यही नाम है।",
       "partiallyRestored": "{{total}} में से {{restored}} आइटम वापस लाए गए",
@@ -4349,7 +4349,7 @@
     },
     "team": "टीम",
     "teamsNoRoles": "टीमों की कोई भूमिकाएँ नहीं होतीं",
-    "invite": "Pipeshub में आमंत्रित करें"
+    "invite": "OddJeeves में आमंत्रित करें"
   },
   "demoData": {
     "badge": {
@@ -4358,7 +4358,7 @@
     },
     "removalNotice": {
       "title": "Acme Corp डेमो डेटा अब भी आपके वर्कस्पेस में है",
-      "description": "आपकी कंपनी का अपना डेटा अब PipesHub में है। डेमो डिफ़ॉल्ट रूप से उत्तरों से छिपा रहता है, लेकिन कोई भी इसे वापस चालू कर सकता है, और इसके नमूना खाते अब भी साइन इन कर सकते हैं। इसे सभी के लिए बंद करें, या स्थायी रूप से हटाएँ।",
+      "description": "आपकी कंपनी का अपना डेटा अब OddJeeves में है। डेमो डिफ़ॉल्ट रूप से उत्तरों से छिपा रहता है, लेकिन कोई भी इसे वापस चालू कर सकता है, और इसके नमूना खाते अब भी साइन इन कर सकते हैं। इसे सभी के लिए बंद करें, या स्थायी रूप से हटाएँ।",
       "remove": "स्थायी रूप से हटाएँ",
       "keep": "अभी रखें",
       "turnOff": "सभी के लिए बंद करें"

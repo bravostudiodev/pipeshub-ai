@@ -3,17 +3,12 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { Flex, Text } from '@radix-ui/themes';
+import { PipesHubIcon } from './pipes-hub-icon';
 
 // Lightweight fallback rendered when the Lottie chunk hasn't loaded yet
 // or when it fails to load (e.g. navigation interrupts the download).
 function LogoFallback(props: { style?: React.CSSProperties }) {
-  return (
-    <img
-      src="/ob.svg"
-      alt=""
-      style={{ width: 48, height: 48, ...props.style }}
-    />
-  );
+  return <PipesHubIcon size={48} style={props.style} />;
 }
 
 // @lottiefiles/dotlottie-react accesses `document` at module init — must be
@@ -94,16 +89,7 @@ export function LottieLoader({
   );
 
   const visual = variant === 'loader' || variant === 'thinking' ? (
-    <img
-      src="/ob.svg"
-      alt=""
-      style={{
-        width: size,
-        height: size,
-        objectFit: 'contain',
-        ...style,
-      }}
-    />
+    <PipesHubIcon size={size} style={style} />
   ) : lottie;
 
   if (!showLabel) return visual;

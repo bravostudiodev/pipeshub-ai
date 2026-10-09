@@ -86,7 +86,7 @@ function renderView() {
 const firstPartyConsent = {
   requiresConsent: true,
   consentData: {
-    app: { name: 'PipesHub agent', isDynamic: false },
+    app: { name: 'OddJeeves agent', isDynamic: false },
     scopes: [{ name: 'user:read', description: 'Read users', category: 'User' }],
     user: { email: 'u@e.com', name: 'Test' },
   },
@@ -130,7 +130,7 @@ describe('OAuthDeviceView', () => {
     post.mockResolvedValue({ data: firstPartyConsent });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('PipesHub agent')).toBeTruthy();
+      expect(screen.getByText('OddJeeves agent')).toBeTruthy();
     });
     expect(screen.getByText(PHISHING_WARNING)).toBeTruthy();
     expect(screen.queryByText(UNREVIEWED_APP)).toBeNull();
