@@ -43,59 +43,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # -----------------------------------------------------------------------------
-# Stage 1: Node.js Backend Build
-# -----------------------------------------------------------------------------
-FROM node:20-slim AS nodejs-backend
-WORKDIR /app/backend
-
-COPY backend/nodejs/apps/package*.json ./
-COPY backend/nodejs/apps/tsconfig.json ./
-
-# Install dependencies with architecture handling (npm ci: lockfile-speed + reproducible)
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    set -e; \
-    ARCH=$(uname -m); \
-    echo "Building for architecture: $ARCH"; \
-    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then \
-        echo "Detected ARM architecture"; \
-        npm ci --ignore-scripts && \
-        npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true && \
-        npm install sharp --save || true; \
-    else \
-        echo "Detected x86 architecture"; \
-        npm ci; \
-    fi
-
-COPY backend/nodejs/apps/src ./src
-RUN npm run build && \
-    # Prune dev dependencies after build
-    npm prune --production && \
-    # Clean npm cache
-    npm cache clean --force
-
-# -----------------------------------------------------------------------------
-# Stage 2: Frontend Build (Next.js in `frontend/`)
-# -----------------------------------------------------------------------------
-# Static export so the Node.js API can serve files from `backend/dist/public`.
-FROM node:20-slim AS frontend-build
-WORKDIR /app/frontend
-
-COPY frontend/package*.json ./
-
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm config set legacy-peer-deps true && \
-    npm ci
-
-COPY frontend/ ./
-
-# Force static export for container builds by setting the env flag that
-# `frontend-new/next.config.mjs` already uses to enable `output: 'export'`.
-RUN ELECTRON_STATIC=1 npm run build && \
-    mkdir -p /out && \
-    cp -a out/. /out/
-
-# -----------------------------------------------------------------------------
-# Stage 3: Final Runtime Image
+# Runtime image. Node.js and frontend application artifacts are prepared by the
+# pipeline App build stage and copied from the build context below.
 # -----------------------------------------------------------------------------
 FROM runtime-base AS runtime
 WORKDIR /app
@@ -143,14 +92,14 @@ COPY --chown=1000:1000 --from=python-deps /root/nltk_data /root/nltk_data
 # Copy Playwright browser binaries
 COPY --chown=1000:1000 --from=python-deps /root/.cache/ms-playwright /root/.cache/ms-playwright
 
-# Copy Node.js backend (already pruned)
-COPY --from=nodejs-backend /app/backend/dist ./backend/dist
-COPY --from=nodejs-backend /app/backend/src/modules/mail ./backend/src/modules/mail
-COPY --from=nodejs-backend /app/backend/src/modules/api-docs/pipeshub-openapi.yaml ./backend/src/modules/api-docs/pipeshub-openapi.yaml
-COPY --from=nodejs-backend /app/backend/node_modules ./backend/dist/node_modules
+# Copy Node.js backend artifacts (already compiled and pruned by App build)
+COPY backend/nodejs/apps/dist ./backend/dist
+COPY backend/nodejs/apps/src/modules/mail ./backend/src/modules/mail
+COPY backend/nodejs/apps/src/modules/api-docs/pipeshub-openapi.yaml ./backend/src/modules/api-docs/pipeshub-openapi.yaml
+COPY backend/nodejs/apps/node_modules ./backend/dist/node_modules
 
-# Copy frontend build (normalized to /out by the selected frontend stage)
-COPY --from=frontend-build /out ./backend/dist/public
+# Copy static frontend export produced by App build
+COPY frontend/out ./backend/dist/public
 
 # Copy Python application code
 COPY backend/python/app/ /app/python/app/

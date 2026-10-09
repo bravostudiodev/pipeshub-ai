@@ -93,8 +93,18 @@ export function LottieLoader({
     </LottieErrorBoundary>
   );
 
-  const visual = variant === 'loader' ? (
-    <img src="/ob.svg" alt="" style={{ width: size, height: size, objectFit: 'contain', ...style }} />
+  const visual = variant === 'loader' || variant === 'thinking' ? (
+    <img
+      src="/ob.svg"
+      alt=""
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'contain',
+        animation: autoplay ? 'spin 1.4s linear infinite' : undefined,
+        ...style,
+      }}
+    />
   ) : lottie;
 
   if (!showLabel) return visual;

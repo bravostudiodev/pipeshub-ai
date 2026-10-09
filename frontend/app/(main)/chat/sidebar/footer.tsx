@@ -78,7 +78,7 @@ export function ChatSidebarFooter() {
           style={{
             flex: 1,
             textAlign: 'left',
-            color: 'var(--emerald-12)',
+            color: 'var(--accent-12)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
