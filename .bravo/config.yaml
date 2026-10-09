@@ -32,7 +32,7 @@ pipeline:
       imageBuild:
         name: platform/pipeshubai
         tags:
-          - oddyssey1.0.0.1-7 #TODO
+          - oddyssey1.0.0.1-8 #TODO
         securityScan:
           failSeverity: CRITICAL
           issueAllowlist:

@@ -196,7 +196,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
                   <DropdownMenu.Item onSelect={() => void connect()}>
                     {t(`${i18nPrefix}.reconnect`, { defaultValue: 'Reconnect' })}
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item className="chat-connection-disconnect-item" color="red" onSelect={() => void disconnect()}>
+                  <DropdownMenu.Item className="chat-connection-disconnect-item" onSelect={() => void disconnect()}>
                     {t(`${i18nPrefix}.disconnect`, { defaultValue: 'Disconnect' })}
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
@@ -425,7 +425,7 @@ export function ConfluenceConnectionCard() {
               </Tooltip>
               <DropdownMenu.Content align="start" sideOffset={4}>
                 <DropdownMenu.Item onSelect={connect}>Reconnect</DropdownMenu.Item>
-                <DropdownMenu.Item className="chat-connection-disconnect-item" color="red" onSelect={() => void disconnect()}>Disconnect</DropdownMenu.Item>
+                <DropdownMenu.Item className="chat-connection-disconnect-item" onSelect={() => void disconnect()}>Disconnect</DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
           )}
