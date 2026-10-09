@@ -61,6 +61,18 @@
 html.light .oddjeeves-logo-dark { display: none; }
 html.light .oddjeeves-logo-light { display: block; }
 
+/* Keep the destructive connection action legible when highlighted in light mode. */
+.chat-connection-disconnect-item[data-highlighted] {
+  background-color: #212121 !important;
+  color: #fff !important;
+}
+
+/* Portaled chat search palettes can sit outside the app's themed subtree. */
+.chat-search-input:where(:focus-within) {
+  border-color: var(--brand-9) !important;
+  box-shadow: 0 0 0 1px var(--brand-9) !important;
+}
+
 /* Light Mode */
 :root, .light, .light-theme {
   --app-chat-canvas: #f0f1f2;

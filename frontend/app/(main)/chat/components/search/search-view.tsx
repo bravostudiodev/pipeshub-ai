@@ -268,6 +268,7 @@ export function ChatSearch({ open, onClose }: ChatSearchProps) {
           <form onSubmit={handleSearchSubmit}>
             <Box style={{ padding: 'var(--space-3) var(--space-3) 0' }}>
               <TextField.Root
+                className="chat-search-input"
                 ref={inputRef}
                 size="3"
                 placeholder={t('nav.searchChats') + '...'}
