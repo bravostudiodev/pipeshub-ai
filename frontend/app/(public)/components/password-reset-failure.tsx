@@ -26,8 +26,8 @@ export default function PasswordResetFailure({
     <Box style={{ width: '100%', maxWidth: '440px' }}>
       <Box style={{ marginBottom: '24px' }}>
         <Image
-          src="/login-page-assets/pipeshub/white-square.svg"
-          alt="Pipeshub"
+          src="/ob.svg"
+          alt=""
           width={48}
           height={48}
         />

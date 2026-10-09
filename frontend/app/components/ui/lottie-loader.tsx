@@ -9,7 +9,7 @@ import { Flex, Text } from '@radix-ui/themes';
 function LogoFallback(props: { style?: React.CSSProperties }) {
   return (
     <img
-      src="/logo/pipes-hub.svg"
+      src="/ob.svg"
       alt=""
       style={{ width: 48, height: 48, ...props.style }}
     />
@@ -93,11 +93,15 @@ export function LottieLoader({
     </LottieErrorBoundary>
   );
 
-  if (!showLabel) return lottie;
+  const visual = variant === 'loader' ? (
+    <img src="/ob.svg" alt="" style={{ width: size, height: size, objectFit: 'contain', ...style }} />
+  ) : lottie;
+
+  if (!showLabel) return visual;
 
   return (
     <Flex direction="column" align="center" gap="2">
-      {lottie}
+      {visual}
       <Text size="2" weight="medium" style={{ color: 'var(--slate-11)' }}>
         {label}
       </Text>

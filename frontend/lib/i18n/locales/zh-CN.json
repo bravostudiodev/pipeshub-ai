@@ -279,7 +279,7 @@
     "nav": {
       "prev": "上一步",
       "next": "下一步",
-      "enterPipeshub": "进入 Pipeshub",
+      "enterPipeshub": "继续",
       "finishing": "正在完成…",
       "saveLlmFirst": "请先保存 AI 模型步骤以继续"
     },

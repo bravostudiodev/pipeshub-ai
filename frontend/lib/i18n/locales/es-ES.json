@@ -206,7 +206,7 @@
     "nav": {
       "prev": "Anterior",
       "next": "Siguiente",
-      "enterPipeshub": "Entrar a Pipeshub",
+      "enterPipeshub": "Continuar",
       "finishing": "Finalizando…",
       "saveLlmFirst": "Guarda el paso de modelo de IA primero para continuar"
     },

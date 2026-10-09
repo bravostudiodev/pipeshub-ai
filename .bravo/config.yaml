@@ -1,4 +1,3 @@
-version: v2alpha4
 pipeline:
   stages:
     "Image build":
@@ -6,7 +5,7 @@ pipeline:
       imageBuild:
         name: platform/pipeshubai
         tags:
-          - oddyssey1.0.0.1-1 #TODO
+          - oddyssey1.0.0.1-2 #TODO
         securityScan:
           failSeverity: CRITICAL
           issueAllowlist:

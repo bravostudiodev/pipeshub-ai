@@ -121,8 +121,8 @@ function retryAfterSeconds(error: AxiosError): number | undefined {
 
 export function busyMessage(retryAfter?: number): string {
   return retryAfter
-    ? `PipesHub is busy right now. Please try again in ${retryAfter} second${retryAfter === 1 ? '' : 's'}.`
-    : 'PipesHub is busy right now. Please try again in a few seconds.';
+    ? `The service is busy right now. Please try again in ${retryAfter} second${retryAfter === 1 ? '' : 's'}.`
+    : 'The service is busy right now. Please try again in a few seconds.';
 }
 
 function isAxiosRequestCancelled(error: AxiosError): boolean {

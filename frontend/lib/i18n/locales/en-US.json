@@ -279,7 +279,7 @@
     "nav": {
       "prev": "Prev",
       "next": "Next",
-      "enterPipeshub": "Enter Pipeshub",
+      "enterPipeshub": "Continue",
       "finishing": "Finishing…",
       "saveLlmFirst": "Save the AI Model step first to continue"
     },

@@ -439,7 +439,7 @@ const DEFAULT_UPLOAD_IDLE_TIMEOUT_MS = 60_000;
 
 /** Shown per file in the upload tracker when the server goes quiet mid-stream. */
 export const UPLOAD_STALLED_MESSAGE =
-  'PipesHub stopped responding before this upload finished. Please upload these files again.';
+  'The service stopped responding before this upload finished. Please upload these files again.';
 
 /**
  * POST a multipart upload and consume its Server-Sent Events response. The KB

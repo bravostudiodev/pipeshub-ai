@@ -72,10 +72,10 @@ export default function SuperhumanGuidePage() {
       </Flex>
 
       <Card size="3" mt="4">
-        <Heading size="4" mb="2">Add your token in PipesHub</Heading>
+        <Heading size="4" mb="2">Add your token</Heading>
         <Text as="p" color="gray" mb="3">
           Return to chat, choose Connect for Superhuman Docs, and paste the token into the personal token field.
-          PipesHub uses it for your connection only.
+          The token is used only for your personal connection.
         </Text>
         <Flex gap="3" align="center" wrap="wrap">
           <Button asChild>

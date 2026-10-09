@@ -263,7 +263,7 @@ export function ChangePasswordDialog({
                 disabled={!isFormValid}
                 loading={isLoading}
                 loadingLabel={t('action.saving')}
-                style={{ background: isSaveDisabled ? 'var(--gray-6)' : 'var(--emerald-9)' }}
+                style={{ background: isSaveDisabled ? 'var(--gray-6)' : 'var(--accent-9)' }}
               >
                 {t('action.save')}
               </LoadingButton>

@@ -128,9 +128,9 @@ export default function AuthHero({ splitLayout }: AuthHeroProps) {
             gap: '14px',
           }}
         >
-          {/* Pipeshub logo mark */}
+          {/* Company logo mark */}
           <Image
-            src="/login-page-assets/pipeshub/white-square.svg"
+            src="/ob.svg"
             alt=""
             width={33}
             height={33}
@@ -197,7 +197,7 @@ export default function AuthHero({ splitLayout }: AuthHeroProps) {
               backgroundColor: 'rgba(31, 31, 31, 0.8)',
               backdropFilter: 'blur(4px)',
               WebkitBackdropFilter: 'blur(4px)',
-              border: '0.82px solid #0fff5d',
+              border: '0.82px solid var(--accent-9)',
               boxShadow:
                 '0px 20px 26px -7px rgba(0,0,0,0.9), 0px 7px 13px -3px rgba(0,0,0,0.04), 0px 1px 1px 0px rgba(0,0,0,0.02), 0px 0px 0px 1px rgba(255,255,255,0.14)',
               flexShrink: 0,
@@ -208,7 +208,7 @@ export default function AuthHero({ splitLayout }: AuthHeroProps) {
         ))}
       </Flex>
 
-      {/* ── Pipeshub wordmark — bottom right ─────────────────────── */}
+      {/* ── Company mark — bottom right ─────────────────────────── */}
       <Box
         style={{
           position: 'absolute',
@@ -218,10 +218,10 @@ export default function AuthHero({ splitLayout }: AuthHeroProps) {
         }}
       >
         <Image
-          src="/login-page-assets/pipeshub/white-horizontal.svg"
-          alt="Pipeshub"
-          width={170}
-          height={45}
+          src="/ob.svg"
+          alt=""
+          width={40}
+          height={40}
           style={{ opacity: 0.95 }}
         />
       </Box>

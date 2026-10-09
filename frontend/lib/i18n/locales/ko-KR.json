@@ -279,7 +279,7 @@
     "nav": {
       "prev": "이전",
       "next": "다음",
-      "enterPipeshub": "Pipeshub 시작하기",
+      "enterPipeshub": "계속",
       "finishing": "완료 중…",
       "saveLlmFirst": "계속하려면 먼저 AI 모델 단계를 저장하세요"
     },

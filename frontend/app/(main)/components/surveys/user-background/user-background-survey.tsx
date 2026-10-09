@@ -119,7 +119,7 @@ export function UserBackgroundSurvey() {
             align="center"
             style={{ color: 'var(--gray-9)', marginBottom: '12px', display: 'block' }}
           >
-            This will help us personalise your Pipeshub experience
+            This will help us personalise your experience
           </Text>
         </Box>
 

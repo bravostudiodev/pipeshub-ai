@@ -60,7 +60,7 @@ export function DocumentPreview({ fileUrl, fileName, fileBlob }: FilePreviewRend
       </Text>
       <Text size="2" color="gray" style={{ textAlign: 'center', maxWidth: '400px' }}>
         {isLegacyDoc
-          ? 'This file is in legacy Word (.doc) format. In-browser preview is not supported here; download it to open in Word, or save a copy as .docx to preview in Pipeshub.'
+          ? 'This file is in legacy Word (.doc) format. In-browser preview is not supported here; download it to open in Word, or save a copy as .docx to preview it.'
           : 'Preview not available for this document type. Please download to view.'}
       </Text>
       {downloadHref && downloadHref.trim() !== '' && (

@@ -153,7 +153,7 @@ export function ConnectorOAuthCallbackClient() {
                 maxWidth: 432,
               }}
             >
-              Securely exchanging the authorization code with PipesHub.
+              Securely completing your connection.
             </Text>
           </Flex>
         </Flex>

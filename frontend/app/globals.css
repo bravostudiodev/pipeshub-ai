@@ -50,15 +50,15 @@
 }
 
 /* ========================
-   Custom Accent Color Scale
-   Base color: #047857 (Emerald)
+   Company Accent Color Scale
+   Base color: #FD533C
    ======================== */
 
 /* Light Mode */
 :root, .light, .light-theme {
   --effects-translucent: rgba(255, 255, 255, 0.8);
   --tokens-colors-surface: rgba(139, 139, 139, 0.084);
-  --accent-surface: rgba(18, 249, 157, 0.04);
+  --accent-surface: rgba(253, 83, 60, 0.04);
   --white-to-dark: rgba(0, 0, 0, 0.074);
   --emerald-1: #f5fefb;
   --emerald-2: #edfdf8;
@@ -91,6 +91,35 @@
   --emerald-indicator: #047857;
   --emerald-track: #047857;
 
+  --brand-1: #fff9f7;
+  --brand-2: #fff0ec;
+  --brand-3: #ffe1d9;
+  --brand-4: #ffd0c5;
+  --brand-5: #ffbcae;
+  --brand-6: #ffa493;
+  --brand-7: #ff8975;
+  --brand-8: #ff705b;
+  --brand-9: #FD533C;
+  --brand-10: #e94330;
+  --brand-11: #c53224;
+  --brand-12: #5c1d18;
+  --brand-a1: rgba(253, 83, 60, 0.02);
+  --brand-a2: rgba(253, 83, 60, 0.06);
+  --brand-a3: rgba(253, 83, 60, 0.12);
+  --brand-a4: rgba(253, 83, 60, 0.18);
+  --brand-a5: rgba(253, 83, 60, 0.25);
+  --brand-a6: rgba(253, 83, 60, 0.34);
+  --brand-a7: rgba(253, 83, 60, 0.44);
+  --brand-a8: rgba(253, 83, 60, 0.58);
+  --brand-a9: rgba(253, 83, 60, 1);
+  --brand-a10: rgba(233, 67, 48, 1);
+  --brand-a11: rgba(197, 50, 36, 1);
+  --brand-a12: rgba(92, 29, 24, 1);
+  --brand-contrast: #24100d;
+  --brand-surface: rgba(255, 240, 236, 0.8);
+  --brand-indicator: #FD533C;
+  --brand-track: #FD533C;
+
   --page-background: #dcdcdc;
   --file-icon-fill: #ffffff;
 }
@@ -101,7 +130,7 @@
 :root[class~="dark"] {
   --effects-translucent: rgba(29, 29, 33, 0.70);
   --tokens-colors-surface: rgba(0, 0, 0, 0.25);
-  --accent-surface: rgba(18, 249, 157, 0.04);
+  --accent-surface: rgba(253, 83, 60, 0.06);
   --white-to-dark: rgba(0, 0, 0, 0.25);
   --emerald-1: #0d1512;
   --emerald-2: #0f1f1a;
@@ -135,42 +164,71 @@
   --emerald-indicator: #3dd9a0;
   --emerald-track: #3dd9a0;
 
+  --brand-1: #211210;
+  --brand-2: #2d1714;
+  --brand-3: #431b16;
+  --brand-4: #592018;
+  --brand-5: #70261b;
+  --brand-6: #8a2d20;
+  --brand-7: #a93628;
+  --brand-8: #d44532;
+  --brand-9: #FD533C;
+  --brand-10: #ff705b;
+  --brand-11: #ff8975;
+  --brand-12: #ffe1d9;
+  --brand-a1: rgba(253, 83, 60, 0.02);
+  --brand-a2: rgba(253, 83, 60, 0.06);
+  --brand-a3: rgba(253, 83, 60, 0.12);
+  --brand-a4: rgba(253, 83, 60, 0.18);
+  --brand-a5: rgba(253, 83, 60, 0.25);
+  --brand-a6: rgba(253, 83, 60, 0.34);
+  --brand-a7: rgba(253, 83, 60, 0.44);
+  --brand-a8: rgba(253, 83, 60, 0.58);
+  --brand-a9: rgba(253, 83, 60, 1);
+  --brand-a10: rgba(255, 112, 91, 1);
+  --brand-a11: rgba(255, 137, 117, 1);
+  --brand-a12: rgba(255, 225, 217, 1);
+  --brand-contrast: #24100d;
+  --brand-surface: rgba(67, 27, 22, 0.5);
+  --brand-indicator: #FD533C;
+  --brand-track: #FD533C;
+
   --page-background: #111113;
   --file-icon-fill: #212225;
 }
 
-/* Map custom emerald to accent variables */
+/* Map the company accent palette to Radix accent variables. */
 .radix-themes[data-accent-color="emerald"] {
-  --accent-1: var(--emerald-1);
-  --accent-2: var(--emerald-2);
-  --accent-3: var(--emerald-3);
-  --accent-4: var(--emerald-4);
-  --accent-5: var(--emerald-5);
-  --accent-6: var(--emerald-6);
-  --accent-7: var(--emerald-7);
-  --accent-8: var(--emerald-8);
-  --accent-9: var(--emerald-9);
-  --accent-10: var(--emerald-10);
-  --accent-11: var(--emerald-11);
-  --accent-12: var(--emerald-12);
+  --accent-1: var(--brand-1);
+  --accent-2: var(--brand-2);
+  --accent-3: var(--brand-3);
+  --accent-4: var(--brand-4);
+  --accent-5: var(--brand-5);
+  --accent-6: var(--brand-6);
+  --accent-7: var(--brand-7);
+  --accent-8: var(--brand-8);
+  --accent-9: var(--brand-9);
+  --accent-10: var(--brand-10);
+  --accent-11: var(--brand-11);
+  --accent-12: var(--brand-12);
 
-  --accent-a1: var(--emerald-a1);
-  --accent-a2: var(--emerald-a2);
-  --accent-a3: var(--emerald-a3);
-  --accent-a4: var(--emerald-a4);
-  --accent-a5: var(--emerald-a5);
-  --accent-a6: var(--emerald-a6);
-  --accent-a7: var(--emerald-a7);
-  --accent-a8: var(--emerald-a8);
-  --accent-a9: var(--emerald-a9);
-  --accent-a10: var(--emerald-a10);
-  --accent-a11: var(--emerald-a11);
-  --accent-a12: var(--emerald-a12);
+  --accent-a1: var(--brand-a1);
+  --accent-a2: var(--brand-a2);
+  --accent-a3: var(--brand-a3);
+  --accent-a4: var(--brand-a4);
+  --accent-a5: var(--brand-a5);
+  --accent-a6: var(--brand-a6);
+  --accent-a7: var(--brand-a7);
+  --accent-a8: var(--brand-a8);
+  --accent-a9: var(--brand-a9);
+  --accent-a10: var(--brand-a10);
+  --accent-a11: var(--brand-a11);
+  --accent-a12: var(--brand-a12);
 
-  --accent-contrast: var(--emerald-contrast);
-  --accent-surface: var(--emerald-surface);
-  --accent-indicator: var(--emerald-indicator);
-  --accent-track: var(--emerald-track);
+  --accent-contrast: var(--brand-contrast);
+  --accent-surface: var(--brand-surface);
+  --accent-indicator: var(--brand-indicator);
+  --accent-track: var(--brand-track);
 }
 
 /* ========================

@@ -165,8 +165,8 @@ function ServerUrlSetupScreen({ onComplete }: { onComplete: () => void }) {
         {/* Logo / header */}
         <Flex direction="column" align="center" gap="3" style={{ marginBottom: 'var(--space-6)' }}>
           <img
-            src="/logo/pipes-hub.svg"
-            alt="PipesHub"
+            src="/ob.svg"
+            alt=""
             width={56}
             height={56}
           />
