@@ -26,7 +26,7 @@ const logger = Logger.getInstance({ service: 'Backend Error' });
  * never names the service that is down.
  */
 export const SERVICE_UNAVAILABLE_MESSAGE =
-  'PipesHub is having trouble reaching one of its services. Try again in a minute; if it continues, ask your admin to check the services page.';
+  'OddJeeves is having trouble reaching one of its services. Try again in a minute; if it continues, ask your admin to check the services page.';
 
 /**
  * FastAPI validation errors (422) send `detail` as an array of
@@ -98,8 +98,8 @@ const retryHint = (retry: { retryAfter: string } | undefined): string => {
 };
 
 const TRANSIENT_FALLBACK: Record<429 | 503 | 504, string> = {
-  429: 'PipesHub is handling a lot of requests right now.',
-  503: 'This part of PipesHub is briefly unavailable.',
+  429: 'OddJeeves is handling a lot of requests right now.',
+  503: 'This part of OddJeeves is briefly unavailable.',
   504: 'This took longer than expected to respond.',
 };
 

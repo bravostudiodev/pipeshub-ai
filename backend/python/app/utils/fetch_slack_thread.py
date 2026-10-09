@@ -557,8 +557,16 @@ def create_fetch_slack_thread_tool(
                 config_service=config_service,
                 user_id=user_id,
             )
-        except Exception as e:
-            logger.exception("fetch_slack_thread_tool failed")
-            return {"ok": False, "error": f"Failed to fetch Slack thread: {e}"}
+        except Exception:
+            logger.exception(
+                "Slack thread expansion failed: org_id=%s user_id=%s record_id=%s",
+                org_id,
+                user_id,
+                record_id,
+            )
+            return {
+                "ok": False,
+                "error": "Failed to fetch Slack thread. Check server logs for request details.",
+            }
 
     return fetch_slack_thread_tool

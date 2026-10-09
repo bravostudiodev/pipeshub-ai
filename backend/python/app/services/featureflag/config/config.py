@@ -8,6 +8,9 @@ class CONFIG:
     # and whether MCP is shown anywhere in the UI.
     # Defaults to disabled; admins must opt in from Labs.
     ENABLE_MCP = "ENABLE_MCP"
+    # Temporarily records redacted MCP discovery and invocation metadata for diagnosis.
+    # Disabled by default; records expire after the MCP trace retention window.
+    ENABLE_MCP_RETRIEVAL_TRACE = "ENABLE_MCP_RETRIEVAL_TRACE"
     # Controls whether agents can load/use toolset actions (connector
     # integrations) and whether Actions is shown anywhere in the UI.
     # Defaults to enabled — unlike ENABLE_MCP, this is pre-existing

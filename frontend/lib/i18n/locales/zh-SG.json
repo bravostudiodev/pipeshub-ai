@@ -58,7 +58,7 @@
       "restoreFailedTitle": "无法恢复“{{name}}”",
       "noneRestored_one": "{{count}} 个项目均无法恢复",
       "noneRestored_other": "{{count}} 个项目均无法恢复",
-      "reindexPending": "已恢复，但部分文件无法加入索引队列，暂时还搜索不到。PipesHub 会在大约一小时内自动重新将其加入队列。如需更快，请打开每个文件的菜单并选择“{{action}}”。",
+      "reindexPending": "已恢复，但部分文件无法加入索引队列，暂时还搜索不到。OddJeeves 会在大约一小时内自动重新将其加入队列。如需更快，请打开每个文件的菜单并选择“{{action}}”。",
       "searchableAfterIndexing": "恢复的项目已回到原来的位置，索引完成后会重新出现在搜索结果中。",
       "renamed": "“{{from}}”已恢复为“{{to}}”，因为该位置已有同名项目。",
       "partiallyRestored": "已恢复 {{restored}}/{{total}} 个项目",
@@ -279,14 +279,14 @@
     "nav": {
       "prev": "上一步",
       "next": "下一步",
-      "enterPipeshub": "进入 Pipeshub",
+      "enterPipeshub": "继续",
       "finishing": "正在完成…",
       "saveLlmFirst": "请先保存 AI 模型步骤以继续"
     },
     "save": "保存",
     "saving": "正在保存…",
     "footer": {
-      "copyright": "© 2026 Pipeshub LLC",
+      "copyright": "© 2026 OddJeeves",
       "privacyPolicy": "隐私政策",
       "website": "网站",
       "visitDocs": "访问",
@@ -500,9 +500,9 @@
   },
   "electron": {
     "serverUrlSetup": {
-      "title": "连接到 PipesHub 服务器",
-      "subtitleFirstRun": "输入您的 PipesHub 服务器 URL 以开始使用。",
-      "subtitleExisting": "确认或更新您的 PipesHub 服务器 URL。",
+      "title": "连接到 OddJeeves 服务器",
+      "subtitleFirstRun": "输入您的 OddJeeves 服务器 URL 以开始使用。",
+      "subtitleExisting": "确认或更新您的 OddJeeves 服务器 URL。",
       "label": "服务器 URL",
       "submit": "连接",
       "changeServer": "更改服务器",
@@ -794,7 +794,7 @@
     "deleteAgent": "删除智能体",
     "deleteAgentConfirm": "删除此智能体？",
     "deleteAgentDescription": "名为",
-    "deleteAgentWarning": "的智能体将从 Pipeshub 中永久删除。使用它的聊天可能无法正常工作。",
+    "deleteAgentWarning": "的智能体将从 OddJeeves 中永久删除。使用它的聊天可能无法正常工作。",
     "agentListRowMenuAria": "智能体选项",
     "failedToDeleteAgent": "无法删除智能体",
     "rename": "重命名",
@@ -810,7 +810,7 @@
     "failedToDelete": "删除聊天失败",
     "deleteChatConfirm": "确定要删除吗？",
     "deleteChatDescription": "标题为",
-    "deleteChatWarning": "的聊天将从 Pipeshub 中永久删除。所有拥有共享访问权限的用户都将失去访问权限。",
+    "deleteChatWarning": "的聊天将从 OddJeeves 中永久删除。所有拥有共享访问权限的用户都将失去访问权限。",
     "archiveChatConfirm": "确定要归档吗？",
     "archiveChatDescription": "标题为",
     "archiveChatWarning": "的聊天将被归档。",
@@ -1534,7 +1534,7 @@
       "searchPlaceholder": "搜索…",
       "newApplication": "新建 OAuth 应用",
       "emptyTitle": "暂无 OAuth 2.0 应用",
-      "emptyDescription": "创建一个 OAuth 2.0 应用，让第三方集成通过 Pipeshub 访问您的组织。",
+      "emptyDescription": "创建一个 OAuth 2.0 应用，让第三方集成通过 OddJeeves 访问您的组织。",
       "loading": "正在加载应用…",
       "errorGeneric": "无法加载 OAuth 应用",
       "retry": "重试",
@@ -1670,7 +1670,7 @@
         "errorOptionalUrlInvalid": "可选 URL 如已填写，必须是有效的 http(s) 地址。",
         "grantRequiredTitle": "需要授权类型",
         "grantRequiredDescription": "必须至少保留一种已选择的授权类型。",
-        "clientCredentialsWarning": "客户端凭据令牌始终以创建此应用的用户身份访问 Pipeshub，而不是以调用令牌端点的任何人的身份。在您授予的权限范围（scope）内，令牌可以访问该用户能访问的一切，并继承其角色，因此由管理员创建的应用将拥有管理员权限。如果该账户被删除，令牌也会失效。如果此应用同时支持授权码流程，用户仍可通过该方式为自己授权。"
+        "clientCredentialsWarning": "客户端凭据令牌始终以创建此应用的用户身份访问 OddJeeves，而不是以调用令牌端点的任何人的身份。在您授予的权限范围（scope）内，令牌可以访问该用户能访问的一切，并继承其角色，因此由管理员创建的应用将拥有管理员权限。如果该账户被删除，令牌也会失效。如果此应用同时支持授权码流程，用户仍可通过该方式为自己授权。"
       }
     },
     "personalAccessTokens": {
@@ -1678,7 +1678,7 @@
       "subtitle": "为您自己的脚本和集成（例如 MCP 服务器）创建长期有效的令牌。只有您能在此看到自己的令牌。",
       "newToken": "新建令牌",
       "emptyTitle": "暂无个人访问令牌",
-      "emptyDescription": "创建令牌以连接 PipesHub MCP 服务器或您自己的脚本。",
+      "emptyDescription": "创建令牌以连接 OddJeeves MCP 服务器或您自己的脚本。",
       "errorGeneric": "加载个人访问令牌失败",
       "retry": "重试",
       "columnName": "名称",
@@ -1764,8 +1764,8 @@
       "configUpdateModel": "更新模型",
       "configFillRequiredTooltip": "填写所有必填字段",
       "configSaveErrorFallback": "保存模型配置失败",
-      "configSaveOutboundError": "PipesHub 无法从容器内部访问此模型提供方。云端提供方需要出站网络连接 — 请参阅 deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity。",
-      "configSaveTimeoutError": "验证模型时请求超时。云端提供方需要 PipesHub 容器具备出站网络连接 — 请参阅 deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity。",
+      "configSaveOutboundError": "OddJeeves 无法从容器内部访问此模型提供方。云端提供方需要出站网络连接 — 请参阅 deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity。",
+      "configSaveTimeoutError": "验证模型时请求超时。云端提供方需要 OddJeeves 容器具备出站网络连接 — 请参阅 deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity。",
       "configNoConfigRequired": "此提供商无需配置。",
       "configDefaultModelNotice": "系统将默认使用“{{modelName}}”。",
       "configSectionModelConfiguration": "模型配置",
@@ -2077,7 +2077,7 @@
       "selectPrompt": "选择一个已归档的聊天进行预览",
       "restore": "恢复",
       "permanentlyDelete": "永久删除",
-      "deleteConfirmMessage": "此聊天将从 Pipeshub 中永久删除。所有共享访问权限都将丢失。",
+      "deleteConfirmMessage": "此聊天将从 OddJeeves 中永久删除。所有共享访问权限都将丢失。",
       "restoreSuccess": "聊天已恢复",
       "restoreError": "恢复聊天失败",
       "deleteSuccess": "删除成功",
@@ -2120,7 +2120,7 @@
       "postalCodePlaceholder": "例如：94107",
       "dataCollection": "数据收集设置",
       "enableDataCollection": "启用",
-      "dataCollectionDescription": "PipesHub 出于多种业务目的收集和处理个人信息。",
+      "dataCollectionDescription": "OddJeeves 出于多种业务目的收集和处理个人信息。",
       "dataCollectionReason1": "为我们的产品提供客户服务和支持",
       "dataCollectionReason2": "发送营销信息",
       "dataCollectionReason3": "管理您对电子报或其他更新的订阅",
@@ -2300,7 +2300,7 @@
       },
       "successDialog": {
         "title": "实例已配置完成，可以开始同步！",
-        "description": "您现在就可以开始将您的 {{name}} 数据与 Pipeshub 同步，",
+        "description": "您现在就可以开始将您的 {{name}} 数据与 OddJeeves 同步，",
         "descriptionSuffix": "也可以稍后在设置中进行。",
         "later": "稍后再说",
         "startSync": "立即开始同步"
@@ -2411,8 +2411,8 @@
         "additionalSettingsDescription": "配置连接器专属的同步选项",
         "nonEditableUrlFieldTooltip": "网站 URL 设置后无法更改。",
         "nonEditableLockedFieldTooltip": "此值设置后无法更改。",
-        "localFsDesktopOnlyBanner": "本地文件系统设置只能在 PipesHub 桌面应用中更改。此视图为只读。",
-        "localFsDesktopOnlySaveTooltip": "请打开 PipesHub 桌面应用以更改这些设置。",
+        "localFsDesktopOnlyBanner": "本地文件系统设置只能在 OddJeeves 桌面应用中更改。此视图为只读。",
+        "localFsDesktopOnlySaveTooltip": "请打开 OddJeeves 桌面应用以更改这些设置。",
         "importDate": "导入起始日期",
         "importDateDescription": "选择从哪个日期开始导入消息",
         "importAllTime": "导入全部历史数据",
@@ -2519,11 +2519,11 @@
         }
       },
       "localFsDesktop": {
-        "offlineToast": "请在拥有此文件夹的电脑上打开 PipesHub 桌面应用以进行同步。",
-        "offlineNamedToast": "拥有此文件夹的设备 {{deviceName}} 未连接。请在该设备上打开 PipesHub 桌面应用以进行同步。",
-        "unclaimedToast": "此连接器尚未在桌面端设置。请在拥有此文件夹的电脑上打开 PipesHub 桌面应用，并在其中启用一次同步。",
-        "ownedByOtherDeviceToast": "此连接器属于 {{deviceName}}。请在该设备上的 PipesHub 桌面应用中启用同步。",
-        "ownedByOtherDeviceUnknownToast": "此连接器属于另一台设备。请在该设备上的 PipesHub 桌面应用中启用同步。",
+        "offlineToast": "请在拥有此文件夹的电脑上打开 OddJeeves 桌面应用以进行同步。",
+        "offlineNamedToast": "拥有此文件夹的设备 {{deviceName}} 未连接。请在该设备上打开 OddJeeves 桌面应用以进行同步。",
+        "unclaimedToast": "此连接器尚未在桌面端设置。请在拥有此文件夹的电脑上打开 OddJeeves 桌面应用，并在其中启用一次同步。",
+        "ownedByOtherDeviceToast": "此连接器属于 {{deviceName}}。请在该设备上的 OddJeeves 桌面应用中启用同步。",
+        "ownedByOtherDeviceUnknownToast": "此连接器属于另一台设备。请在该设备上的 OddJeeves 桌面应用中启用同步。",
         "deviceIdentityError": "无法识别此设备：{{error}}"
       },
       "schemaForm": {
@@ -2535,7 +2535,7 @@
       },
       "personal": {
         "desktopRequiredTitle": "需要桌面应用",
-        "desktopRequiredDescription": "本地文件系统连接器仅在 PipesHub 桌面应用中可用。请使用桌面应用设置此连接器。"
+        "desktopRequiredDescription": "本地文件系统连接器仅在 OddJeeves 桌面应用中可用。请使用桌面应用设置此连接器。"
       },
       "syncStatus": {
         "paused": "同步已暂停",
@@ -2743,7 +2743,7 @@
         "authMode": "认证模式",
         "headerName": "标头名称",
         "authorizationUrl": "授权 URL",
-        "dcrHint": "留空即可 — 当服务器支持时，PipesHub 会自动检测并使用动态客户端注册",
+        "dcrHint": "留空即可 — 当服务器支持时，OddJeeves 会自动检测并使用动态客户端注册",
         "tokenUrl": "Token URL",
         "scopes": "权限范围",
         "scopesPlaceholder": "添加权限范围",
@@ -2768,14 +2768,14 @@
         "saved": "OAuth 应用已保存",
         "saveError": "保存 OAuth 应用失败",
         "title": "配置 OAuth 应用",
-        "description": "PipesHub 会自动检测此服务器是否支持动态客户端注册。仅在不支持时才需要客户端凭证。",
+        "description": "OddJeeves 会自动检测此服务器是否支持动态客户端注册。仅在不支持时才需要客户端凭证。",
         "alreadyConfigured": "此服务器已配置了 OAuth 应用。",
         "clientId": "客户端 ID",
         "clientIdPlaceholder": "输入客户端 ID",
         "clientSecret": "客户端密钥",
         "clientSecretPlaceholder": "输入客户端密钥",
         "dcrProbing": "正在检查此服务器是否支持自动注册…",
-        "dcrSupportedHint": "此服务器支持自动注册。PipesHub 会自行注册，无需客户端凭证。",
+        "dcrSupportedHint": "此服务器支持自动注册。OddJeeves 会自行注册，无需客户端凭证。",
         "dcrUnsupportedHint": "此服务器需要手动注册的 OAuth 应用。请使用下方的回调 URL 创建一个，然后输入其客户端 ID 和密钥。",
         "dcrUnknownHint": "无法确认是否支持自动注册。如果不支持，请使用下方的回调 URL 注册一个 OAuth 应用，并输入其客户端 ID 和密钥。",
         "callbackUrlLabel": "回调 URL",
@@ -2787,7 +2787,7 @@
         "completingTitle": "正在完成登录…",
         "processingHint": "请稍候，我们正在完成账户连接。",
         "successTitle": "连接成功",
-        "successBody": "您可以关闭此窗口并返回 PipesHub。",
+        "successBody": "您可以关闭此窗口并返回 OddJeeves。",
         "failedTitle": "连接失败",
         "retryHint": "出了点问题。请关闭此窗口并重试。",
         "providerError": "提供商返回了错误：{{error}}",
@@ -3206,7 +3206,7 @@
         "title": "角色与权限",
         "role": "角色",
         "groups": "用户组",
-        "roleDescription": "您在 Pipeshub 应用中的角色",
+        "roleDescription": "您在 OddJeeves 应用中的角色",
         "groupsDescription": "您所属的用户组",
         "noGroups": "未找到用户组"
       },
@@ -3284,7 +3284,7 @@
       },
       "demoData": {
         "title": "演示数据",
-        "description": "Acme Corp 是为方便您体验 PipesHub 而加载的一家虚构公司。这只会改变您看到的内容，不会删除任何数据。",
+        "description": "Acme Corp 是为方便您体验 OddJeeves 而加载的一家虚构公司。这只会改变您看到的内容，不会删除任何数据。",
         "label": "在我的回答、搜索和记录中显示 Acme Corp 演示数据",
         "followingDefault": "遵循默认设置：在您的组织拥有自己的数据之前一直显示，之后自动隐藏。",
         "yourChoice": "您自己的选择。",
@@ -3555,7 +3555,7 @@
       "errorGeneric": "无法加载服务账号。",
       "retry": "重试",
       "emptyTitle": "尚无服务账号",
-      "emptyDescription": "服务账号让脚本无需以同事身份登录即可从 PipesHub 读取数据。它只能看到您授予的范围，并且在人员离职后仍能继续工作。",
+      "emptyDescription": "服务账号让脚本无需以同事身份登录即可从 OddJeeves 读取数据。它只能看到您授予的范围，并且在人员离职后仍能继续工作。",
       "columnName": "名称",
       "columnDescription": "用途",
       "columnStatus": "状态",
@@ -4124,12 +4124,12 @@
   },
   "auth": {
     "titleSection": {
-      "defaultTitle": "欢迎使用 Pipeshub",
+      "defaultTitle": "欢迎使用 OddJeeves",
       "defaultSubtitle": "让您组织的知识终于变得可搜索、可连接。"
     },
     "signUp": {
       "title": "开始使用",
-      "subtitle": "欢迎使用 Pipeshub——让我们开始吧！",
+      "subtitle": "欢迎使用 OddJeeves——让我们开始吧！",
       "firstNameLabel": "名字*",
       "lastNameLabel": "姓氏*",
       "orgNameLabel": "组织名称*",
@@ -4172,10 +4172,10 @@
         "fullNameRequired": "全名为必填项。"
       },
       "confirmDialog": {
-        "title": "PipesHub 如何分配权限",
-        "description": "PipesHub 使用您的电子邮件在整个平台及所有已连接的应用中识别您的身份。",
+        "title": "OddJeeves 如何分配权限",
+        "description": "OddJeeves 使用您的电子邮件在整个平台及所有已连接的应用中识别您的身份。",
         "permissionsTitle": "权限与您的原生应用保持一致",
-        "permissionsBody": "您在 PipesHub 中的访问权限与在每个已连接应用中的权限完全相同——不多也不少。如果某文档在 Google Drive 中受到限制，在这里同样受到限制。",
+        "permissionsBody": "您在 OddJeeves 中的访问权限与在每个已连接应用中的权限完全相同——不多也不少。如果某文档在 Google Drive 中受到限制，在这里同样受到限制。",
         "emailNotePre": "请确保您注册时使用的电子邮件——",
         "emailNotePost": "——与您组织的应用中使用的电子邮件相同，以便正确识别您的权限。",
         "cancelButton": "取消",
@@ -4195,7 +4195,7 @@
       "orgEmailVerifyFailedTitle": "验证失败",
       "orgEmailVerifyFailedDescription": "链接可能无效或已过期。请重新注册。",
       "loadFailedTitle": "无法加载登录",
-      "loadFailedDescription": "PipesHub 无法连接服务器以加载登录选项。请检查网络连接或服务器地址，然后重试。",
+      "loadFailedDescription": "OddJeeves 无法连接服务器以加载登录选项。请检查网络连接或服务器地址，然后重试。",
       "retry": "重试"
     },
     "common": {
@@ -4232,15 +4232,15 @@
       "tooManyIncorrectCredentials": "您输入错误凭据的次数过多"
     },
     "desktopHandoff": {
-      "title": "登录已发送到 PipesHub",
-      "description": "您可以关闭此标签页并返回 PipesHub 应用。",
-      "openApp": "打开 PipesHub"
+      "title": "登录已发送到 OddJeeves",
+      "description": "您可以关闭此标签页并返回 OddJeeves 应用。",
+      "openApp": "打开 OddJeeves"
     }
   },
   "healthGate": {
     "title": "无法连接到服务器",
     "description": "服务器当前无法访问。它可能正在启动或正在进行维护。我们正在尝试重新连接。",
-    "contactAdmin": "如果此问题持续存在，请联系您的 PipesHub 管理员。"
+    "contactAdmin": "如果此问题持续存在，请联系您的 OddJeeves 管理员。"
   },
   "askUserQuestion": {
     "questionsHeadingSingular": "问题：",
@@ -4335,7 +4335,7 @@
     },
     "team": "团队",
     "teamsNoRoles": "团队没有角色",
-    "invite": "邀请加入 Pipeshub"
+    "invite": "邀请加入 OddJeeves"
   },
   "demoData": {
     "badge": {
@@ -4344,7 +4344,7 @@
     },
     "removalNotice": {
       "title": "Acme Corp 演示数据仍在您的工作区中",
-      "description": "贵公司自己的数据现已在 PipesHub 中。演示数据默认不出现在回答里，但任何人都可以重新开启，其示例账号也仍可登录。请为所有人关闭，或永久移除。",
+      "description": "贵公司自己的数据现已在 OddJeeves 中。演示数据默认不出现在回答里，但任何人都可以重新开启，其示例账号也仍可登录。请为所有人关闭，或永久移除。",
       "remove": "永久移除",
       "keep": "暂时保留",
       "turnOff": "为所有人关闭"

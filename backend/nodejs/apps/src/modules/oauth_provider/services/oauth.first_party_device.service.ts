@@ -19,7 +19,7 @@ import { FIRST_PARTY_DEVICE_CLIENT_ID } from '../constants/constants'
 const CLIENT_SECRET_BYTES = 32
 
 /**
- * Ensures the official "PipesHub agent" OAuth app exists so coding agents
+ * Ensures the official "OddJeeves agent" OAuth app exists so coding agents
  * can start RFC 8628 device login without DCR and without an admin creating
  * an OAuth app. One public client_id per instance; many agents share it.
  * Tokens still carry the person who clicked Allow.
@@ -47,6 +47,12 @@ export class FirstPartyDeviceAppService {
       clientId: FIRST_PARTY_DEVICE_CLIENT_ID,
     })
     if (existing) {
+      // This client is managed by the service, so migrate its visible label
+      // for existing installations without changing its client ID or grants.
+      if (existing.name === 'PipesHub agent') {
+        existing.name = 'OddJeeves agent'
+        await existing.save()
+      }
       return existing.clientId
     }
 
@@ -92,7 +98,7 @@ export class FirstPartyDeviceAppService {
       // Public client: device poll uses token_endpoint_auth_method none.
       // Schema still requires a stored secret; it is never used to authenticate.
       clientSecretEncrypted: this.encryptionService.encrypt(clientSecret),
-      name: 'PipesHub agent',
+      name: 'OddJeeves agent',
       description:
         'Official coding-agent device login for this instance. Public client; ' +
         'device_code and refresh_token only. Not a third-party app and not ' +

@@ -329,21 +329,29 @@ class ConfigurationService:
         except Exception as e:
             self._log_safe("❌ Failed to clear cache: %s" % str(e), level="error")
 
-    async def set_config(self, key: str, value: str | int | float | bool | dict | list) -> bool:
+    async def set_config(
+        self, key: str, value: str | int | float | bool | dict | list, *, ttl: int | None = None,
+    ) -> bool:
         """Set configuration value with optional encryption"""
         try:
             self.logger.info("📝 set_config called for key: %s (store type: %s)", key, type(self.store).__name__)
 
             # Store in KV store
             try:
-                success = await self.store.create_key(key, value, overwrite=True)
+                if ttl is None:
+                    success = await self.store.create_key(key, value, overwrite=True)
+                else:
+                    success = await self.store.create_key(key, value, overwrite=True, ttl=ttl)
             except Exception as store_error:
                 self.logger.error("❌ Failed to create key in store: %s", str(store_error))
                 success = False
 
             if success:
-                # Update cache with value
-                self.cache[key] = value
+                # TTL values must not outlive their backend key in this process cache.
+                if ttl is None:
+                    self.cache[key] = value
+                else:
+                    self.cache.pop(key, None)
                 self.logger.info("✅ Successfully set config for key: %s, now publishing cache invalidation", key)
 
                 # Publish cache invalidation for other processes (Redis only)

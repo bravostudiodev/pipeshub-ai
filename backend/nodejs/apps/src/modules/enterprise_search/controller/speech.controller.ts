@@ -62,7 +62,7 @@ function buildForwardHeaders(
  * never names the service that is down.
  */
 const SERVICE_UNAVAILABLE_MESSAGE =
-  'PipesHub is having trouble reaching one of its services. Try again in a minute; if it continues, ask your admin to check the services page.';
+  'OddJeeves is having trouble reaching one of its services. Try again in a minute; if it continues, ask your admin to check the services page.';
 
 // The status the speech service chose, kept rather than flattened to one code.
 const CLIENT_ERRORS = {

@@ -13,7 +13,7 @@ import { jsonResponse, logError } from '../utils/error.middleware.utils';
  * technical-looking text can still trust the words.
  */
 const INFRASTRUCTURE_FAILURE_MESSAGE =
-  "Something went wrong on PipesHub's side. Please try again; if it keeps happening, ask your admin for help.";
+  "Something went wrong on OddJeeves' side. Please try again; if it keeps happening, ask your admin for help.";
 
 export class ErrorMiddleware {
   private static logger = Logger.getInstance();

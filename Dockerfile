@@ -1,94 +1,28 @@
 # syntax=docker/dockerfile:1
 # Slow layers (APT, Rust, Python deps, ML models, runtime stack) live in Dockerfile.base.
-# Override with local tags if registry images are missing:
-#   docker build --build-arg PYTHON_DEPS_IMAGE=myreg/python-deps --build-arg RUNTIME_BASE_IMAGE=myreg/runtime .
+# The pipeline uses the company-published bases. Override these for local builds:
+#   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps --build-arg RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime .
 # Slim app image (no pre-baked BGE; ~1.3 GB smaller — model downloads on first use):
 #   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps-slim -t pipeshubai/pipeshub-ai:slim .
-ARG PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps
-ARG RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime
+ARG PYTHON_DEPS_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:python-deps
+ARG RUNTIME_BASE_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:runtime
 
 FROM ${PYTHON_DEPS_IMAGE} AS python-deps
-# The base image bakes in dependencies as of its publish time. Reconcile with the
-# current pyproject.toml so packages added since the base was published (e.g. new
-# connector SDKs like opensearch-py) end up in the app image. uv skips
-# already-satisfied packages, so this is a fast no-op when the base is current and
-# installs only the delta otherwise. The base carries uv + the build toolchain
-# (it is built FROM build-base in Dockerfile.base), so native wheels can still
-# compile here when a new dependency needs it.
-WORKDIR /app/python
-COPY backend/python/pyproject.toml ./
-RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install --system -e . && \
-    crawl4ai-setup && \
-    playwright install chromium
+ARG BUNDLE_BGE_EMBEDDING=0
+# This base is built from the current backend/python/pyproject.toml and already
+# contains Python dependencies, Crawl4AI, Chromium, and model assets. Rebuild and
+# publish it when Python dependencies or bundled models change.
+RUN if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
+        rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5; \
+    fi && \
+    rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3
 
 
 FROM ${RUNTIME_BASE_IMAGE} AS runtime-base
 
-# Presentation previews are converted to PDF at request time. The published
-# runtime base historically included Writer and Calc only, leaving the soffice
-# wrapper present but unable to load PPT/PPTX files.
-# Install CJK fallback fonts until they are available in the published runtime
-# base image. LibreOffice uses these when documents reference unavailable fonts.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-impress-nogui fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # -----------------------------------------------------------------------------
-# Stage 1: Node.js Backend Build
-# -----------------------------------------------------------------------------
-FROM node:20-slim AS nodejs-backend
-WORKDIR /app/backend
-
-COPY backend/nodejs/apps/package*.json ./
-COPY backend/nodejs/apps/tsconfig.json ./
-
-# Install dependencies with architecture handling (npm ci: lockfile-speed + reproducible)
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    set -e; \
-    ARCH=$(uname -m); \
-    echo "Building for architecture: $ARCH"; \
-    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then \
-        echo "Detected ARM architecture"; \
-        npm ci --ignore-scripts && \
-        npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true && \
-        npm install sharp --save || true; \
-    else \
-        echo "Detected x86 architecture"; \
-        npm ci; \
-    fi
-
-COPY backend/nodejs/apps/src ./src
-RUN npm run build && \
-    # Prune dev dependencies after build
-    npm prune --production && \
-    # Clean npm cache
-    npm cache clean --force
-
-# -----------------------------------------------------------------------------
-# Stage 2: Frontend Build (Next.js in `frontend/`)
-# -----------------------------------------------------------------------------
-# Static export so the Node.js API can serve files from `backend/dist/public`.
-FROM node:20-slim AS frontend-build
-WORKDIR /app/frontend
-
-COPY frontend/package*.json ./
-
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
-    npm config set legacy-peer-deps true && \
-    npm ci
-
-COPY frontend/ ./
-
-# Force static export for container builds by setting the env flag that
-# `frontend-new/next.config.mjs` already uses to enable `output: 'export'`.
-RUN ELECTRON_STATIC=1 npm run build && \
-    mkdir -p /out && \
-    cp -a out/. /out/
-
-# -----------------------------------------------------------------------------
-# Stage 3: Final Runtime Image
+# Runtime image. Node.js and frontend application artifacts are prepared by the
+# pipeline App build stage and copied from the build context below.
 # -----------------------------------------------------------------------------
 FROM runtime-base AS runtime
 WORKDIR /app
@@ -136,14 +70,14 @@ COPY --chown=1000:1000 --from=python-deps /root/nltk_data /root/nltk_data
 # Copy Playwright browser binaries
 COPY --chown=1000:1000 --from=python-deps /root/.cache/ms-playwright /root/.cache/ms-playwright
 
-# Copy Node.js backend (already pruned)
-COPY --from=nodejs-backend /app/backend/dist ./backend/dist
-COPY --from=nodejs-backend /app/backend/src/modules/mail ./backend/src/modules/mail
-COPY --from=nodejs-backend /app/backend/src/modules/api-docs/pipeshub-openapi.yaml ./backend/src/modules/api-docs/pipeshub-openapi.yaml
-COPY --from=nodejs-backend /app/backend/node_modules ./backend/dist/node_modules
+# Copy Node.js backend artifacts (already compiled and pruned by App build)
+COPY backend/nodejs/apps/dist ./backend/dist
+COPY backend/nodejs/apps/src/modules/mail ./backend/src/modules/mail
+COPY backend/nodejs/apps/src/modules/api-docs/pipeshub-openapi.yaml ./backend/src/modules/api-docs/pipeshub-openapi.yaml
+COPY backend/nodejs/apps/node_modules ./backend/dist/node_modules
 
-# Copy frontend build (normalized to /out by the selected frontend stage)
-COPY --from=frontend-build /out ./backend/dist/public
+# Copy static frontend export produced by App build
+COPY frontend/out ./backend/dist/public
 
 # Copy Python application code
 COPY backend/python/app/ /app/python/app/

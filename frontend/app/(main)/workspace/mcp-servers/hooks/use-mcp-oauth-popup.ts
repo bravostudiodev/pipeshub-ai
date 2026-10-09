@@ -144,6 +144,10 @@ export function useMcpOAuthPopup({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
+      // Every integration card has a listener on window. Accept only the popup
+      // opened by this hook instance; otherwise a successful Miro/Gmail callback
+      // makes unrelated cards verify their own credentials and show false errors.
+      if (event.source !== popupRef.current) return;
       const type = (event.data as { type?: string } | null)?.type;
 
       if (isMcpOAuthSuccessMessageType(type)) {
@@ -172,25 +176,30 @@ export function useMcpOAuthPopup({
       popupRef.current = null;
       setStatus('authenticating');
 
+      // Open synchronously within the click gesture so browsers do not block the
+      // OAuth window while the authorization URL request is in flight.
+      const popup = openCenteredOAuthWindow('about:blank', `mcp-oauth-${instanceId}`);
+      if (!popup || popup.closed) {
+        setStatus('idle');
+        onFailedRef.current?.();
+        return;
+      }
+      popupRef.current = popup;
+
       try {
         const fetchAuthUrl =
           getAuthorizationUrlRef.current ??
           ((id: string) => McpServersApi.getOAuthAuthorizationUrl(id, window.location.origin));
         const { authorizationUrl } = await fetchAuthUrl(instanceId);
         if (!authorizationUrl) {
+          popup.close();
+          popupRef.current = null;
           setStatus('failed');
           onFailedRef.current?.();
           return;
         }
 
-        const popup = openCenteredOAuthWindow(authorizationUrl, `mcp-oauth-${instanceId}`);
-        if (!popup || popup.closed) {
-          setStatus('idle');
-          onFailedRef.current?.();
-          return;
-        }
-
-        popupRef.current = popup;
+        popup.location.replace(authorizationUrl);
         popup.focus();
 
         let pollCount = 0;
@@ -208,6 +217,7 @@ export function useMcpOAuthPopup({
         }, OAUTH_POPUP_POLL_MS);
       } catch {
         clearPoll();
+        if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
         popupRef.current = null;
         setStatus('failed');
         onFailedRef.current?.();

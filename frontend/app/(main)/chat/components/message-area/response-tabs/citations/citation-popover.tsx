@@ -105,7 +105,7 @@ function CitationPopoverContentInner({
               variant="solid"
               tabIndex={-1}
               onClick={handlePreview}
-              style={{ cursor: 'pointer', backgroundColor: 'var(--emerald-9)' }}
+              style={{ cursor: 'pointer', backgroundColor: 'var(--accent-9)' }}
             >
               Preview
             </Button>

@@ -1257,7 +1257,7 @@ function UsersPageContent() {
         title={t('workspace.users.actions.removeUserTitle')}
         message={t('workspace.users.actions.removeUserMessage', {
           email: removeTarget?.email || removeTarget?.name || '',
-          workspace: 'Pipeshub',
+          workspace: 'Company',
         })}
         confirmLabel={t('workspace.users.actions.removeButton')}
         cancelLabel={t('workspace.users.actions.cancelButton')}

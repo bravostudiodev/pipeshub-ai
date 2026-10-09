@@ -448,7 +448,7 @@ export function SearchableCheckboxDropdown({
                         ? 'none'
                         : '1px solid var(--slate-a7)',
                       backgroundColor: isChecked
-                        ? 'var(--emerald-9)'
+                        ? 'var(--accent-9)'
                         : 'transparent',
                       display: 'flex',
                       alignItems: 'center',

@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import Image from 'next/image';
 import { Box, Flex, Text, Button } from '@radix-ui/themes';
+import { PipesHubIcon } from '@/app/components/ui';
 import {
   PASSWORD_RESET_FAILURE_VARIANT,
   PASSWORD_RESET_FAILURE_MESSAGE_KEYS,
@@ -25,12 +25,7 @@ export default function PasswordResetFailure({
   return (
     <Box style={{ width: '100%', maxWidth: '440px' }}>
       <Box style={{ marginBottom: '24px' }}>
-        <Image
-          src="/login-page-assets/pipeshub/white-square.svg"
-          alt="Pipeshub"
-          width={48}
-          height={48}
-        />
+        <PipesHubIcon size={48} />
       </Box>
 
       <Flex

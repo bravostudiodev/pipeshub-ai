@@ -565,6 +565,16 @@ async def _fetch_nearby_messages_impl(
         team_id=team_id,
     )
     if api_error:
+        logger.warning(
+            "Slack nearby message request failed: connector_id=%s channel_id=%s "
+            "direction=%s anchor_utc=%s limit=%s error=%s",
+            effective_connector_id,
+            channel,
+            direction,
+            timestamp,
+            effective_limit,
+            api_error,
+        )
         return FetchSlackNearbyMessagesError(error=api_error)
 
     return FetchSlackNearbyMessagesSuccess(
@@ -630,10 +640,17 @@ def create_fetch_slack_nearby_messages_tool(
                 org_id=org_id,
                 user_id=user_id,
             )
-        except Exception as e:
-            logger.exception("fetch_slack_nearby_messages_tool failed")
+        except Exception:
+            logger.exception(
+                "Slack nearby message tool raised: connector_id=%s channel_id=%s "
+                "direction=%s anchor_utc=%s",
+                connector_id,
+                channel_id,
+                direction,
+                timestamp,
+            )
             return FetchSlackNearbyMessagesError(
-                error=f"Failed to fetch nearby Slack messages: {e}",
+                error="Failed to fetch nearby Slack messages. Check server logs for request details.",
             )
 
     return fetch_slack_nearby_messages_tool

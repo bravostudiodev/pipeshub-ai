@@ -13,9 +13,11 @@ admin-shared credentials are masked); the underlying `ConfigurationService` stor
 values at rest exactly like the toolsets/connectors credential paths.
 """
 import asyncio
+import hashlib
 import logging
 import uuid
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -38,8 +40,19 @@ from app.agents.mcp import service as mcp_service
 from app.agents.mcp import token_refresh as mcp_token_refresh
 from app.agents.mcp.client import MCPConnectionError
 from app.agents.mcp.discovery import discover_tools
-from app.agents.mcp.models import DiscoveredOAuthMetadata, MCPAuthMode, MCPServerInstanceConfig, MCPTransport
+from app.agents.mcp.models import (
+    DiscoveredOAuthMetadata,
+    MCPAuthMode,
+    MCPServerInstanceConfig,
+    MCPTransport,
+)
 from app.agents.mcp.registry import MCPRegistry
+from app.agents.mcp.retrieval_trace import (
+    TRACE_MAX_COMPARE_RUNS,
+    TRACE_MAX_RESULTS,
+    TRACE_ROOT,
+    trace_enabled,
+)
 from app.api.middlewares.auth import require_scopes
 from app.api.middlewares.caller_role import fetch_caller_role
 from app.config.configuration_service import ConfigurationService
@@ -1305,6 +1318,291 @@ async def get_my_mcp_servers(
         *[_build_mcp_instance_entry(i, user_id, config_service, include_tools) for i in instances]
     )
     return {"instances": list(entries)}
+
+
+def _is_official_slack_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Slack-hosted MCP endpoint, never the legacy bot-token template."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.slack.com"
+        and parsed.path.rstrip("/") == "/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_official_notion_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match Notion's organization MCP instance, never a connector or API-token setup."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.notion.com"
+        and parsed.path.rstrip("/") == "/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+        and instance.get("typeId") == "notion"
+    )
+
+
+def _is_miro_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the org's custom Miro instance by its admin-set name and per-user OAuth mode."""
+    return (
+        str(instance.get("name", "")).strip().casefold() == "miro"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+        and not instance.get("useAdminAuth", False)
+    )
+
+
+def _is_atlassian_rovo_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the designated official Atlassian Rovo instance using its catalog type."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.atlassian.com"
+        and parsed.path.rstrip("/") == "/v1/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") in {"atlassian_rovo", "atlassian-rovo"}
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_gmail_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Gmail MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "gmailmcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "gmail"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_google_drive_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Google Drive MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "drivemcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "google_drive"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_superhuman_docs_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the organization's Superhuman Docs MCP server configured for user tokens."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "docs.superhuman.com"
+        and parsed.path.rstrip("/") == "/apis/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.API_TOKEN.value
+        and not instance.get("useAdminAuth", False)
+    )
+
+
+async def _get_designated_mcp_connection(
+    request: Request,
+    matcher: Callable[[dict[str, Any]], bool],
+) -> dict[str, Any]:
+    config_service = _get_config_service(request)
+    user_context = _get_user_context(request)
+    instances = await resolve_mcp_instances_with_inheritance(config_service)
+    matches = [instance for instance in instances if matcher(instance)]
+
+    if len(matches) != 1:
+        if len(matches) > 1:
+            logger.error("Multiple designated MCP instances are configured for org %s", user_context["org_id"])
+        return {"configured": False, "isConnected": False}
+
+    instance = matches[0]
+    auth = await _resolve_effective_user_auth(instance, user_context["user_id"], config_service)
+    has_credentials = bool(auth is not None and auth.get("isAuthenticated"))
+    return {
+        "configured": True,
+        "instanceId": instance["_id"],
+        # Connection UI reports the caller's saved authorization state. Tool discovery
+        # is separate and must not turn a completed OAuth flow into a connection error.
+        "isConnected": has_credentials,
+        "hasCredentials": has_credentials,
+    }
+
+
+@router.get("/slack-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_slack_connection(request: Request) -> dict[str, Any]:
+    """Return only Slack MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_official_slack_mcp_instance)
+
+
+@router.get("/notion-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_notion_connection(request: Request) -> dict[str, Any]:
+    """Return only Notion MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_official_notion_mcp_instance)
+
+
+@router.get("/miro-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_miro_connection(request: Request) -> dict[str, Any]:
+    """Return only Miro availability and the authenticated user's own OAuth state."""
+    return await _get_designated_mcp_connection(request, _is_miro_mcp_instance)
+
+
+@router.get("/atlassian-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_atlassian_connection(request: Request) -> dict[str, Any]:
+    """Return only Atlassian Rovo availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_atlassian_rovo_mcp_instance)
+
+
+@router.get("/gmail-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_gmail_connection(request: Request) -> dict[str, Any]:
+    """Return only Gmail MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_gmail_mcp_instance)
+
+
+@router.get("/google-drive-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_google_drive_connection(request: Request) -> dict[str, Any]:
+    """Return only Google Drive MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_google_drive_mcp_instance)
+
+
+@router.get("/superhuman-docs-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_superhuman_docs_connection(request: Request) -> dict[str, Any]:
+    """Return the caller's personal-token state for the organization Docs instance."""
+    return await _get_designated_mcp_connection(request, _is_superhuman_docs_mcp_instance)
+
+
+@router.get("/retrieval-traces", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_mcp_retrieval_traces(
+    request: Request,
+    trace_id: Optional[str] = Query(default=None, alias="traceId", max_length=100),
+    run_id: Optional[str] = Query(default=None, alias="runId", max_length=100),
+    trace_ids: Optional[str] = Query(default=None, alias="traceIds", max_length=1000),
+    run_ids: Optional[str] = Query(default=None, alias="runIds", max_length=1000),
+) -> dict[str, Any]:
+    """Admin-only list or comparison lookup using the organization trace index."""
+    selectors = [trace_id, run_id, trace_ids, run_ids]
+    if sum(bool(value) for value in selectors) > 1:
+        raise HTTPException(status_code=400, detail="Provide at most one trace or run selector.")
+    selected_traces = set((trace_ids or trace_id or "").split(",")) if trace_ids or trace_id else set()
+    selected_runs = set((run_ids or run_id or "").split(",")) if run_ids or run_id else set()
+    selected = selected_traces or selected_runs
+    if len(selected) > TRACE_MAX_COMPARE_RUNS or any(not item or len(item) > 100 for item in selected):
+        raise HTTPException(status_code=400, detail=f"Trace comparison accepts up to {TRACE_MAX_COMPARE_RUNS} valid IDs.")
+    config_service = _get_config_service(request)
+    caller = _get_user_context(request)
+    if not await _check_user_is_admin(caller["user_id"], request, config_service):
+        raise HTTPException(status_code=403, detail="Administrator access is required.")
+    if not await trace_enabled(config_service):
+        raise HTTPException(status_code=404, detail="MCP retrieval tracing is disabled.")
+
+    now = datetime.now(timezone.utc)
+    org_root = f"{TRACE_ROOT}/{caller['org_id']}"
+
+    async def read_index(key: str) -> dict[str, Any] | None:
+        index = await config_service.get_config(key, default=None, use_cache=False)
+        if not isinstance(index, dict):
+            return None
+        try:
+            expiry = datetime.fromisoformat(str(index.get("expiresAt", "")))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            return None
+        return index if expiry > now else None
+
+    try:
+        indexes: list[dict[str, Any]] = []
+        if not selected:
+            # The only org-wide listing is of the compact, TTL-bounded run index.
+            index_keys = await config_service.list_keys_in_directory(f"{org_root}/index/by-run/")
+            for key in index_keys:
+                index = await read_index(key)
+                if index:
+                    indexes.append(index)
+            indexes.sort(key=lambda item: str(item.get("startedAt", "")), reverse=True)
+            return {"runs": indexes[:TRACE_MAX_RESULTS], "truncated": len(indexes) > TRACE_MAX_RESULTS}
+
+        for selected_id in sorted(selected):
+            key_hash = hashlib.sha256(selected_id.encode("utf-8")).hexdigest()
+            if selected_runs:
+                index_key = f"{org_root}/index/by-run/{key_hash}"
+            else:
+                index_key = f"{org_root}/index/by-trace/{key_hash}"
+            index = await read_index(index_key)
+            if not index:
+                continue
+            expected_id = index.get("runId") if selected_runs else index.get("traceId")
+            if expected_id != selected_id:
+                continue
+            indexes.append(index)
+
+        comparisons: list[dict[str, Any]] = []
+        total_events = 0
+        truncated = False
+        for index in indexes:
+            trace = str(index["traceId"])
+            event_keys = await config_service.list_keys_in_directory(f"{org_root}/events/{trace}/")
+            events: list[dict[str, Any]] = []
+            for key in event_keys:
+                if total_events >= TRACE_MAX_RESULTS:
+                    truncated = True
+                    break
+                event = await config_service.get_config(key, default=None, use_cache=False)
+                if not isinstance(event, dict) or event.get("traceId") != trace:
+                    continue
+                try:
+                    expiry = datetime.fromisoformat(str(event.get("expiresAt", "")))
+                    if expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    continue
+                if expiry <= now:
+                    continue
+                events.append(event)
+                total_events += 1
+            events.sort(key=lambda item: str(item.get("recordedAt", "")))
+            comparisons.append({**index, "events": events})
+        return {"runs": comparisons, "truncated": truncated}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("MCP trace lookup failed for org %s (%s)", caller["org_id"], type(exc).__name__)
+        raise HTTPException(status_code=503, detail="MCP trace storage is temporarily unavailable.") from exc
 
 
 @router.get(

@@ -256,6 +256,54 @@ export const getMyMcpServers = proxyMcp(
   'Get my MCP servers',
 );
 
+export const getSlackConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/slack-connection',
+  'Get Slack connection status',
+);
+
+export const getNotionConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/notion-connection',
+  'Get Notion connection status',
+);
+
+export const getMiroConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/miro-connection',
+  'Get Miro connection status',
+);
+
+export const getAtlassianConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/atlassian-connection',
+  'Get Atlassian connection status',
+);
+
+export const getGmailConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/gmail-connection',
+  'Get Gmail connection status',
+);
+
+export const getGoogleDriveConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/google-drive-connection',
+  'Get Google Drive connection status',
+);
+
+export const getSuperhumanDocsConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/superhuman-docs-connection',
+  'Get Superhuman Docs connection status',
+);
+
+export const getMcpRetrievalTraces = proxyMcp(
+  HttpMethod.GET,
+  (req) => `/retrieval-traces${queryString(req.query as Record<string, unknown>, ['traceId', 'runId', 'traceIds', 'runIds'])}`,
+  'Inspect redacted MCP retrieval traces',
+);
+
 export const getMcpInstanceTools = proxyMcp(
   HttpMethod.GET,
   (req) => `/instances/${encInstanceId(req)}/tools`,

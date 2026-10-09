@@ -250,8 +250,8 @@ export class FileProcessorService implements IFileUploadService {
       }
       case FileRejectionReason.UNSUPPORTED_TYPE:
         return extension
-          ? `PipesHub can't read .${extension} files. Convert it to a supported format such as PDF, DOCX or TXT and upload it again.`
-          : "PipesHub can't read this type of file. Convert it to a supported format such as PDF, DOCX or TXT and upload it again.";
+          ? `OddJeeves can't read .${extension} files. Convert it to a supported format such as PDF, DOCX or TXT and upload it again.`
+          : "OddJeeves can't read this type of file. Convert it to a supported format such as PDF, DOCX or TXT and upload it again.";
       default:
         return "This file couldn't be uploaded. Try uploading it again.";
     }

@@ -68,7 +68,7 @@ export const serverFailureMessage = (operation: string): string => {
   const what = /^[A-Z][a-z]/.test(operation)
     ? operation.charAt(0).toLowerCase() + operation.slice(1)
     : operation;
-  return `Something went wrong while PipesHub tried to ${what}. Please try again in a moment; if it keeps happening, ask your admin to check the services page.`;
+  return `Something went wrong while OddJeeves tried to ${what}. Please try again in a moment; if it keeps happening, ask your admin to check the services page.`;
 };
 
 /**

@@ -37,9 +37,6 @@ import { useIsMobile } from '@/lib/hooks/use-is-mobile';
 import { Flex, Box, Text, Avatar, Tooltip } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { FilePreviewInlinePanel, FilePreviewFullscreen } from '@/app/components/file-preview';
-import { ShareSidebar, ShareHeaderGroup } from '@/app/components/share';
-import type { SharedAvatarMember } from '@/app/components/share';
-import { createChatShareAdapter } from './share-adapter';
 import { ChatSearch } from './components/search';
 import { isCommandKey } from '@/lib/utils/platform';
 import { LottieLoader } from '@/app/components/ui/lottie-loader';
@@ -57,6 +54,15 @@ import { useFeatureFlagsStore, selectProjectsEnabled } from '@/lib/store/feature
 import { ProjectApi } from '@/chat/project-api';
 import type { ProjectDetail } from '@/chat/project-types';
 import { useProjectScopeHydration } from '@/chat/hooks/use-project-scope-hydration';
+import {
+  JiraConnectionCard,
+  MiroConnectionCard,
+  GmailConnectionCard,
+  GoogleDriveConnectionCard,
+  NotionConnectionCard,
+  SlackConnectionCard,
+  SuperhumanDocsConnectionCard,
+} from './components/slack-connection-card';
 
 const footerLinkStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -995,72 +1001,6 @@ function ChatContent() {
     return '';
   }, [profile]);
 
-  // Share state
-  const [isShareSidebarOpen, setIsShareSidebarOpen] = useState(false);
-  const [sharedMembers, setSharedMembers] = useState<SharedAvatarMember[]>([]);
-
-  const chatShareAdapter = useMemo(() => {
-    if (!conversationId) return null;
-    return createChatShareAdapter(
-      conversationId,
-      historyAndShareAgentId ? { agentId: historyAndShareAgentId } : undefined
-    );
-  }, [conversationId, historyAndShareAgentId]);
-
-  // Agent threads are not shareable by anyone (including the owner), so gate on
-  // historyAndShareAgentId (slot-scoped, set for both URL and restored agent threads).
-  const showConversationShare =
-    Boolean(
-      conversationId &&
-        chatShareAdapter &&
-        activeSlotIsOwner === true &&
-        !historyAndShareAgentId
-    );
-
-  useEffect(() => {
-    if (!showConversationShare && isShareSidebarOpen) {
-      setIsShareSidebarOpen(false);
-    }
-  }, [showConversationShare, isShareSidebarOpen]);
-
-  const handleShareClick = useCallback(() => {
-    if (!chatShareAdapter) return;
-    setIsShareSidebarOpen(true);
-  }, [chatShareAdapter]);
-
-  // ── Load shared members for header avatars ───────────────────────
-  // Fires whenever the active conversation changes. Uses the same
-  // getSharedMembers() path as the share sidebar so IDs stay consistent.
-  useEffect(() => {
-    if (!conversationId || !chatShareAdapter || !showConversationShare) {
-      setSharedMembers([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    chatShareAdapter.getSharedMembers().then((members) => {
-      if (cancelled) return;
-      // Exclude the owner from the avatar row (same shape as onShareSuccess)
-      setSharedMembers(
-        members
-          .filter((m) => !m.isOwner)
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            avatarUrl: m.avatarUrl || undefined,
-            type: m.type,
-          }))
-      );
-    }).catch(() => {
-      // Non-fatal — header just shows without avatars
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [conversationId, chatShareAdapter, showConversationShare]);
-
   // Hide chat input when viewing a shared conversation the user does not own.
   // `null` means "not yet known" (loading) — keep input visible to avoid flash.
   const showChatInput = activeSlotIsOwner !== false;
@@ -1197,72 +1137,33 @@ function ChatContent() {
   // ── Chat column body (shared between split-pane and full-width modes) ──────
   const chatColumnBody = (
     <>
-      {/* Top-left of the chat column (position:relative parent) so it never
-          overlaps the agent header or share buttons on the right. */}
-      <SidebarExpandButton />
-
-      {historyAndShareAgentId && (
-        <AgentChatHeader
-          agentId={historyAndShareAgentId}
-          displayName={agentContextDisplayName}
-          isMobile={isMobile}
-          hasExpandButton={!isMobile && isNavCollapsed}
-        />
-      )}
-
-      {/* Agent creator chip */}
-      {historyAndShareAgentId && agentCreatorName && (
-        <Box
-          style={{
-            position: 'absolute',
-            top: 10,
-            right: showConversationShare ? 200 : 16,
-            zIndex: 19,
-          }}
+      <Box
+        style={{
+          flexShrink: 0,
+          width: '100%',
+          boxSizing: 'border-box',
+          paddingTop: 10,
+          paddingLeft: isNavCollapsed ? 48 : 16,
+          paddingRight: 16,
+          paddingBottom: 8,
+        }}
+      >
+        <Flex
+          align="center"
+          gap="2"
+          role="region"
+          aria-label="Connected integrations"
+          style={{ flexWrap: 'wrap', width: '100%' }}
         >
-          <Tooltip content={`${t('agentBuilder.createdBy')}: ${agentCreatorName}`}>
-            <Flex
-              align="center"
-              gap="2"
-              px="2"
-              py="1"
-              style={{
-                background: 'var(--color-panel)',
-                borderRadius: 'var(--radius-2)',
-                maxWidth: isMobile ? 140 : 220,
-                cursor: 'default',
-              }}
-            >
-              <Avatar
-                size="1"
-                fallback={agentCreatorName.charAt(0).toUpperCase()}
-                src={agentCreatorAvatarUrl}
-                radius="full"
-                style={{ flexShrink: 0 }}
-              />
-              <Text
-                size="2"
-                style={{
-                  color: 'var(--gray-12)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {agentCreatorName}
-              </Text>
-            </Flex>
-          </Tooltip>
-        </Box>
-      )}
-
-      {/* Share header group — owners only */}
-      {showConversationShare && (
-        <Box style={{ position: 'absolute', top: 12, right: 16, zIndex: 20 }}>
-          <ShareHeaderGroup members={sharedMembers} onShareClick={handleShareClick} />
-        </Box>
-      )}
-
+          <SlackConnectionCard />
+          <NotionConnectionCard />
+          <MiroConnectionCard />
+          <JiraConnectionCard />
+          <GmailConnectionCard />
+          <GoogleDriveConnectionCard />
+          <SuperhumanDocsConnectionCard />
+        </Flex>
+      </Box>
       {/* Full-width pane: message list scrolls here (scrollbar on the pane edge).
           Message content + composer share chatContentColumnStyle so widths match. */}
       <Flex
@@ -1285,6 +1186,64 @@ function ChatContent() {
                 : '40px',
         }}
       >
+        {/* Header controls are anchored to the chat pane below the connection
+            strip, so they keep their own space and cannot cover its cards. */}
+        <SidebarExpandButton />
+
+        {historyAndShareAgentId && (
+          <AgentChatHeader
+            agentId={historyAndShareAgentId}
+            displayName={agentContextDisplayName}
+            isMobile={isMobile}
+            hasExpandButton={!isMobile && isNavCollapsed}
+          />
+        )}
+
+        {historyAndShareAgentId && agentCreatorName && (
+          <Box
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 16,
+              zIndex: 19,
+            }}
+          >
+            <Tooltip content={`${t('agentBuilder.createdBy')}: ${agentCreatorName}`}>
+              <Flex
+                align="center"
+                gap="2"
+                px="2"
+                py="1"
+                style={{
+                  background: 'var(--color-panel)',
+                  borderRadius: 'var(--radius-2)',
+                  maxWidth: isMobile ? 140 : 220,
+                  cursor: 'default',
+                }}
+              >
+                <Avatar
+                  size="1"
+                  fallback={agentCreatorName.charAt(0).toUpperCase()}
+                  src={agentCreatorAvatarUrl}
+                  radius="full"
+                  style={{ flexShrink: 0 }}
+                />
+                <Text
+                  size="2"
+                  style={{
+                    color: 'var(--gray-12)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {agentCreatorName}
+                </Text>
+              </Flex>
+            </Tooltip>
+          </Box>
+        )}
+
         {showInitialLoading || showLoading ? (
           <Flex
             direction="column"
@@ -1422,7 +1381,7 @@ function ChatContent() {
         width: '100%',
         position: 'relative',
         overflow: 'hidden',
-        background: 'linear-gradient(to bottom, var(--olive-2), var(--olive-1))',
+        background: 'var(--app-chat-canvas)',
       }}
     >
       {/*
@@ -1557,29 +1516,6 @@ function ChatContent() {
           defaultTab="preview"
           onExitFullscreen={isMobile ? undefined : () => setPreviewMode('sidebar')}
           onClose={() => clearPreview()}
-        />
-      )}
-
-      {/* Share Sidebar */}
-      {showConversationShare && chatShareAdapter && (
-        <ShareSidebar
-          open={isShareSidebarOpen}
-          onOpenChange={setIsShareSidebarOpen}
-          adapter={chatShareAdapter}
-          onShareSuccess={() => {
-            chatShareAdapter.getSharedMembers().then((members) => {
-              setSharedMembers(
-                members
-                  .filter((m) => !m.isOwner)
-                  .map((m) => ({
-                    id: m.id,
-                    name: m.name,
-                    avatarUrl: m.avatarUrl || undefined,
-                    type: m.type,
-                  }))
-              );
-            });
-          }}
         />
       )}
 

@@ -14,6 +14,7 @@ import {
   shouldSkipElectronServerUrlSetup,
 } from '@/lib/electron';
 import { LoadingScreen } from '@/app/components/ui/auth-guard';
+import { PipesHubIcon } from '@/app/components/ui';
 
 /**
  * ServerUrlGuard — wraps the app in Electron until the user connects a server URL.
@@ -164,12 +165,7 @@ function ServerUrlSetupScreen({ onComplete }: { onComplete: () => void }) {
       >
         {/* Logo / header */}
         <Flex direction="column" align="center" gap="3" style={{ marginBottom: 'var(--space-6)' }}>
-          <img
-            src="/logo/pipes-hub.svg"
-            alt="PipesHub"
-            width={56}
-            height={56}
-          />
+          <PipesHubIcon size={56} />
           <Heading size="5" align="center">
             {t('electron.serverUrlSetup.title')}
           </Heading>

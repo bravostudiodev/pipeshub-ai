@@ -8,6 +8,7 @@ limiting is the exception: it arrives as a real HTTP 429 with a Retry-After, whi
 is why the transport status and header are carried on the envelope too.
 """
 
+import logging
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -38,6 +39,7 @@ _SLACK_ERROR_STATUS: dict[str, int] = {
 }
 
 _MAX_HTTP_STATUS = 599
+logger = logging.getLogger(__name__)
 
 
 def _transport_status(response: Any) -> Optional[int]:  # noqa: ANN401 - SlackResponse or None
@@ -61,13 +63,23 @@ def slack_stream_error(
     code = getattr(response, "error", None) if response else None
     status = _SLACK_ERROR_STATUS.get(code.strip()) if isinstance(code, str) else None
     retry_after = sanitize_retry_after(getattr(response, "retry_after", None) if response else None)
+    transport_status = _transport_status(response)
+    logger.warning(
+        "Slack record stream source failure: connector=%s slack_error=%s "
+        "http_status=%s mapped_status=%s retry_after=%s",
+        connector,
+        code,
+        transport_status,
+        status or transport_status or HttpStatusCode.INTERNAL_SERVER_ERROR.value,
+        retry_after,
+    )
     if status is None:
         # Slack rate-limits with a real HTTP 429, and a proxy in front of it can
         # fail before any Slack code exists, so the transport status is the last
         # piece of evidence. Without one, an unrecognised code is no evidence the
         # item is gone: a generic 500 beats claiming a deletion that may not have
         # happened.
-        transport = _transport_status(response)
+        transport = transport_status
         if transport is None:
             return map_source_status(None, connector=connector)
         return map_source_status(transport, connector=connector, retry_after=retry_after)

@@ -121,6 +121,17 @@ vi.mock('../components/search', () => ({
   ChatSearch: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Search chats" /> : null),
 }));
 
+vi.mock('../components/slack-connection-card', () => ({
+  SlackConnectionCard: () => <button type="button">Connect</button>,
+  NotionConnectionCard: () => <button type="button">Connect</button>,
+  MiroConnectionCard: () => <button type="button">Connect</button>,
+  JiraConnectionCard: () => <button type="button">Connect</button>,
+  ConfluenceConnectionCard: () => <button type="button">Connect</button>,
+  GmailConnectionCard: () => <button type="button">Connect</button>,
+  GoogleDriveConnectionCard: () => <button type="button">Connect</button>,
+  SuperhumanDocsConnectionCard: () => <button type="button">Connect</button>,
+}));
+
 vi.mock('@/app/components/ui/lottie-loader', () => ({
   LottieLoader: ({ showLabel }: { showLabel?: boolean }) => (showLabel ? <div role="status">Loading</div> : null),
 }));
@@ -338,6 +349,7 @@ describe('Chat page — opening a conversation', () => {
     expect(screen.getByText('You get 25 days a year.')).toBeTruthy();
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Message composer' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(8);
   });
 
   it('restores the collections the last question was scoped to', async () => {

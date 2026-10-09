@@ -238,7 +238,7 @@ function DropZone({ type, onDrop, isEmpty, compact = false }: DropZoneProps) {
           data-testid={`upload-add-${type}-compact`}
           style={{
             cursor: 'pointer',
-            backgroundColor: 'var(--emerald-9)',
+            backgroundColor: 'var(--accent-9)',
             color: 'white',
             whiteSpace: 'nowrap',
             flexShrink: 0,

@@ -10,6 +10,7 @@ instead of `MCPClientManager.connect()`'s per-call connect/disconnect.
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.tools.base import (
@@ -28,6 +29,7 @@ from app.agents.agent_loop.tool_adapter import (
 )
 from app.agents.mcp.client import MCPConnectionError
 from app.agents.mcp.oauth_client import MCPOAuthError
+from app.agents.mcp.retrieval_trace import invocation_fields, record_event
 from app.agents.mcp.token_refresh import MCPTokenRefreshError
 
 if TYPE_CHECKING:
@@ -36,6 +38,32 @@ if TYPE_CHECKING:
     from app.agents.mcp.models import MCPToolInfo
 
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_CREDENTIAL_KEYS = {
+    "accesstoken", "refreshtoken", "apitoken", "headervalue", "clientsecret",
+    "registrationaccesstoken",
+}
+
+
+def _credential_values(value: Any, key: str = "") -> list[str]:  # noqa: ANN401
+    """Collect credential strings so provider errors can be logged without secrets."""
+    if isinstance(value, dict):
+        found: list[str] = []
+        for child_key, child_value in value.items():
+            found.extend(_credential_values(child_value, str(child_key)))
+        return found
+    if isinstance(value, (list, tuple)):
+        return [secret for child in value for secret in _credential_values(child, key)]
+    if key.lower().replace("_", "") in _SENSITIVE_CREDENTIAL_KEYS and isinstance(value, str):
+        return [value] if value else []
+    return []
+
+
+def _safe_error_text(error: Any, credentials: dict[str, Any]) -> str:  # noqa: ANN401
+    text = str(error)
+    for secret in _credential_values(credentials):
+        text = text.replace(secret, "[REDACTED]")
+    return text[:1200]
 
 __all__ = ["MCPToolAdapter"]
 
@@ -241,11 +269,69 @@ class MCPToolAdapter(Tool):
                     )
 
     async def execute(self, **kwargs: Any) -> ToolOutput:  # noqa: ANN401
+        started = time.perf_counter()
         try:
             raw_result = await self._session_manager.call(self._server, self._tool_info.name, kwargs)
         except (MCPConnectionError, MCPTokenRefreshError, MCPOAuthError) as exc:
+            await record_event(
+                getattr(self._session_manager, "_context", None),
+                "invocation",
+                invocation_fields(self._server, self._tool_info.name, kwargs, started, error=exc),
+            )
+            logger.warning(
+                "MCP tool call failed: instance_id=%s server=%s tool=%s duration_ms=%d "
+                "error_type=%s error=%s",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                round((time.perf_counter() - started) * 1000),
+                type(exc).__name__,
+                _safe_error_text(exc, self._server.auth),
+            )
             return ToolOutput(success=False, error=str(exc))
         except Exception as exc:
-            logger.exception("MCP tool %s raised unexpectedly", self.name)
+            await record_event(
+                getattr(self._session_manager, "_context", None),
+                "invocation",
+                invocation_fields(self._server, self._tool_info.name, kwargs, started, error=exc),
+            )
+            logger.error(
+                "MCP tool call raised unexpectedly: instance_id=%s server=%s tool=%s "
+                "duration_ms=%d error_type=%s error=%s",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                round((time.perf_counter() - started) * 1000),
+                type(exc).__name__,
+                _safe_error_text(exc, self._server.auth),
+            )
             return ToolOutput(success=False, error=str(exc))
-        return _to_tool_output(_mcp_result_to_tuple(raw_result))
+        succeeded, result_data = _mcp_result_to_tuple(raw_result)
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await record_event(
+            getattr(self._session_manager, "_context", None),
+            "invocation",
+            invocation_fields(
+                self._server, self._tool_info.name, kwargs, started,
+                result=raw_result, tool_succeeded=succeeded,
+            ),
+        )
+        if not succeeded:
+            logger.warning(
+                "MCP server returned tool error: instance_id=%s server=%s tool=%s "
+                "duration_ms=%d error=%s",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                elapsed_ms,
+                _safe_error_text(result_data, self._server.auth),
+            )
+        else:
+            logger.debug(
+                "MCP tool call completed: instance_id=%s server=%s tool=%s duration_ms=%d",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                elapsed_ms,
+            )
+        return _to_tool_output((succeeded, result_data))

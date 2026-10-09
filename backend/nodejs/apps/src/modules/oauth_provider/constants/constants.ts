@@ -26,7 +26,7 @@ export const PAT_TOKEN_PREFIX = 'phpat_'
 export const PAT_APP_CLIENT_ID_PREFIX = 'pat-system:'
 
 /**
- * clientId of the instance-wide first-party device app ("PipesHub agent").
+ * clientId of the instance-wide first-party device app ("OddJeeves agent").
  * Public client, device_code + refresh_token only. Advertised as
  * `pipeshub_device_client_id` on OIDC discovery so agents can start the
  * TV-code flow without DCR or an admin-created OAuth app. Hidden from

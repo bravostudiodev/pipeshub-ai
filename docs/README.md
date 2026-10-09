@@ -1,5 +1,11 @@
 ## Documentation
 
+For this independent fork's employee connection flows, per-user source
+authorization, and MCP retrieval diagnostics, start with
+[`fork-customizations.md`](fork-customizations.md). Contributor and agent
+instructions are in [`../AGENTS.md`](../AGENTS.md) and
+[`../CLAUDE.md`](../CLAUDE.md).
+
 For comprehensive guidance and resources, refer to our documentation:
 
 - **GitHub Repository**: [PipesHub Documentation](https://github.com/pipeshub-ai/documentation)

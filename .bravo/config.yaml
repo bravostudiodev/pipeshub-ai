@@ -1,0 +1,67 @@
+pipeline:
+  stages:
+    "App build":
+      appBuild:
+        image:
+          name: platform/node
+          tag: "20"
+        exec:
+          script: |
+            set -e
+
+            cd backend/nodejs/apps
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+              npm ci --ignore-scripts
+              npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
+              npm install sharp --save || true
+            else
+              npm ci
+            fi
+            npm run build
+            npm prune --production
+
+            cd ../../../frontend
+            npm config set legacy-peer-deps true
+            npm ci
+            ELECTRON_STATIC=1 npm run build
+        cache:
+          - ~/.npm
+    "Image build":
+      branch: "!main"
+      imageBuild:
+        name: platform/pipeshubai
+        tags:
+          - oddyssey1.0.0.1-8 #TODO
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+            - CVE-2026-90711
+            - CVE-2026-8838
+            - CVE-2026-106445
+            - CVE-2026-106446
+        context: .
+        push: true #TODO
+    "Image build and push":
+      branch: "main"
+      imageBuild:
+        name: platform/pipeshubai
+        tags:
+          - oddyssey1.0.0.1
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+            - CVE-2026-90711
+            - CVE-2026-8838
+            - CVE-2026-106445
+            - CVE-2026-106446
+        context: .
+        push: true

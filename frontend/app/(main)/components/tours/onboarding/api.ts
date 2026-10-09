@@ -21,7 +21,7 @@ const STEP1_STATE: TourState = {
   currentStep: 'step1',
   completionPercentage: 0,
   title: "You're Almost There!",
-  subtitle: 'Finish the following actions to know what Pipeshub can do',
+  subtitle: 'Finish these steps to get started.',
   stepsOrder: ['step1', 'step2', 'step3'],
   stepsDetails: {
     step1: { title: 'Connect your first app', relativeLink: '/workspace/connectors' },
@@ -35,7 +35,7 @@ const STEP2_STATE: TourState = {
   currentStep: 'step2',
   completionPercentage: 33,
   title: "You're Almost There!",
-  subtitle: 'Finish the following actions to know what Pipeshub can do',
+  subtitle: 'Finish these steps to get started.',
   stepsOrder: ['step2', 'step3'],
   stepsDetails: {
     step2: { title: 'Create a collection', relativeLink: '/knowledge-base' },
