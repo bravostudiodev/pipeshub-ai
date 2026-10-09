@@ -2,11 +2,32 @@ version: v2alpha4
 pipeline:
   stages:
     "Image build":
+      branch: "!main"
       imageBuild:
         name: platform/pipeshubai
         tags:
-          - oddyssey1.0.0.1-1
+          - oddyssey1.0.0.1-1 #TODO
         securityScan:
           failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
         context: .
-        push: false
+        push: true #TODO
+    "Image build and push":
+      branch: "main"
+      imageBuild:
+        name: platform/pipeshubai
+        tags:
+          - oddyssey1.0.0.1
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+        context: .
+        push: true

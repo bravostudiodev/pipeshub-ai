@@ -288,7 +288,7 @@ dependencies = [
     "neo4j>=5.0.0",
     "python-dotenv==1.2.2",
     "pyyaml>=6.0",
-    "redshift_connector==2.1.8",
+    "redshift_connector==2.1.14",
     "regex>=2024.11.6",
     # PDF generation libs for the coding sandbox. Pure-Python, no native deps.
     # Pre-shipping these means offline sandbox hosts don't have to hit PyPI
