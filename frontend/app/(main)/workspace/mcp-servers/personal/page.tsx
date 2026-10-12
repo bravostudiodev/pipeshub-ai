@@ -79,22 +79,15 @@ export default function PersonalMcpServersPage() {
   );
 
   const handleReauthenticate = useCallback(
-    async (instance: McpMyServerEntry) => {
+    (instance: McpMyServerEntry) => {
       if (instance.authMode === 'oauth') {
         setBusyInstanceId(instance._id);
-        try {
-          await McpServersApi.reauthenticate(instance._id);
-          await startOAuthPopup(instance._id);
-        } catch (error) {
-          setBusyInstanceId(null);
-          const detail = isProcessedError(error) ? error.message : undefined;
-          toast.error(t('workspace.mcpServers.toasts.authenticateError'), detail ? { description: detail } : undefined);
-        }
+        void startOAuthPopup(instance._id);
         return;
       }
       store.openAuthDialog(instance);
     },
-    [store, startOAuthPopup, t]
+    [store, startOAuthPopup]
   );
 
   const handleRemoveCredentials = useCallback(

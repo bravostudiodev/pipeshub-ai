@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Box, Button, DropdownMenu, Flex, IconButton, Text, TextField, Tooltip } from '@radix-ui/themes';
+import { Button, DropdownMenu, Flex, IconButton, Text, TextField, Tooltip } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
 import { isProcessedError } from '@/lib/api';
@@ -72,7 +72,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
     },
     onFailed: () => {
       setWorking(false);
-      setError(t(`${i18nPrefix}.connectError`, { defaultValue: `${name} could not be connected. Please try again.` }));
+      setError(connection.isConnected
+        ? t(`${i18nPrefix}.reconnectError`, { defaultValue: `${name} reconnect didn't finish. Your previous connection was kept.` })
+        : t(`${i18nPrefix}.connectError`, { defaultValue: `${name} wasn't connected. Try again.` }));
     },
   });
 
@@ -96,6 +98,14 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
     }
     setWorking(true);
     await startOAuthPopup(connection.instanceId);
+  };
+
+  const startOver = () => {
+    if (!connection.instanceId || provider === 'superhuman') return;
+    setError(null);
+    setWorking(true);
+    // The shared hook closes the previous popup and requests a fresh OAuth state.
+    void startOAuthPopup(connection.instanceId);
   };
 
   const savePersonalToken = async () => {
@@ -160,12 +170,31 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
               <Flex align="center" gap="1" aria-label={t(`${i18nPrefix}.connected`, { defaultValue: 'Connected' })}>
                 <MaterialIcon name="check_circle" size={14} color="var(--jade-9)" />
                 <Text size="1" color="gray">{t(`${i18nPrefix}.connected`, { defaultValue: 'Connected' })}</Text>
+                {oauthStatus === 'authenticating' && (
+                  <Button size="1" variant="ghost" onClick={startOver}>
+                    {t(`${i18nPrefix}.startOver`, { defaultValue: 'Start over' })}
+                  </Button>
+                )}
+                {oauthStatus === 'failed' && provider !== 'superhuman' && (
+                  <Button size="1" variant="ghost" onClick={() => void connect()}>
+                    {t(`${i18nPrefix}.tryAgain`, { defaultValue: 'Try again' })}
+                  </Button>
+                )}
               </Flex>
             ) : (
               <>
-                <Button size="1" variant="soft" onClick={() => void connect()} disabled={working}>
-                  {working || (provider !== 'superhuman' && oauthStatus === 'authenticating')
-                    ? t(`${i18nPrefix}.connecting`, { defaultValue: 'Connecting…' })
+                <Button
+                  size="1"
+                  variant="soft"
+                  onClick={oauthStatus === 'authenticating' ? startOver : () => void connect()}
+                  disabled={working && oauthStatus !== 'authenticating'}
+                >
+                  {oauthStatus === 'authenticating'
+                    ? t(`${i18nPrefix}.startOver`, { defaultValue: 'Start over' })
+                    : working
+                      ? t(`${i18nPrefix}.connecting`, { defaultValue: 'Connecting…' })
+                    : oauthStatus === 'failed'
+                      ? t(`${i18nPrefix}.tryAgain`, { defaultValue: 'Try again' })
                     : connection.hasCredentials
                     ? t(`${i18nPrefix}.reconnect`, { defaultValue: 'Reconnect' })
                       : t(`${i18nPrefix}.connect`, { defaultValue: 'Connect' })}
@@ -224,6 +253,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
               </Button>
             </Flex>
           )}
+          {error && (
+            <Text size="1" color="red" role="alert" style={{ maxWidth: 300 }}>{error}</Text>
+          )}
         </Flex>
       ) : (
         <Tooltip content={error ?? t(`${i18nPrefix}.unavailable`, { defaultValue: `${name} is not available yet. Ask your administrator for help.` })}>
@@ -240,11 +272,6 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             <MaterialIcon name="info" size={14} />
           </Flex>
         </Tooltip>
-      )}
-      {error && connection.configured && (
-        <Box role="alert" style={{ position: 'absolute', top: 42, left: 16, zIndex: 30 }}>
-          <Text size="1" color="red">{error}</Text>
-        </Box>
       )}
     </Flex>
   );

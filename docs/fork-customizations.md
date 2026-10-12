@@ -82,6 +82,13 @@ behavior, and keep redaction tests for new argument shapes.
 
 ## Additional implementation notes
 
+On the login screen, Google is the initially selected tab when the organization
+offers Google among multiple sign-in methods. Otherwise, the first available
+method remains the default; users can still switch tabs.
+
+The workspace sidebar shows the **People** section (Users and Teams) only to
+administrators. This is navigation visibility, not an API authorization rule.
+
 - Keep MCP transport/client behavior provider-neutral. Do not add Slack-specific
   prompt instructions or phrase-based tool selection to address stale answers.
 - OAuth callbacks, token refresh, and tool invocation should use existing MCP
@@ -102,6 +109,21 @@ that card and opens the window synchronously from the click action before
 loading the authorization URL. This prevents one successful provider flow from
 being mistaken for success or failure by every other card listening on the
 page, and avoids browser popup blockers.
+
+Provider-hosted OAuth pages can fail without redirecting back to the app. While
+an OAuth MCP authorization is pending, every chat connection card offers
+**Start over**. This closes the current popup and requests a new authorization
+URL and state for the same signed-in user. Closing a provider popup without a
+successful callback is treated as a failed attempt. The card then shows
+**Try again** and a short error inside the card. If a previous connection
+exists, its **Connected** status remains visible alongside **Try again**;
+the failed attempt does not remove its credentials. A provider error page that
+stays open cannot be inspected by the app, so **Start over** remains available
+until the popup closes, returns an error callback, or times out. Reauthorizing
+an MCP instance from chat, workspace MCP pages,
+or an agent credential dialog preserves the current credential until the new
+callback succeeds. In these UI flows, only an explicit Disconnect removes the
+existing credential.
 
 Slack connector ingestion also has fork-specific recovery diagnostics. Sync
 logs include channel, checkpoint age, effective time window, pagination, and

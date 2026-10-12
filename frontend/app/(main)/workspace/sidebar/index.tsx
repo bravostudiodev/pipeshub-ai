@@ -149,7 +149,7 @@ export default function WorkspaceSidebar() {
 
   const visibleOverviewItems = OVERVIEW_ITEMS.filter(isNavItemVisible);
   const visibleWorkspaceItems = WORKSPACE_ITEMS.filter(isNavItemVisible);
-  const visiblePeopleItems = PEOPLE_SUB_ITEMS;
+  const visiblePeopleItems = isAdmin === true ? PEOPLE_SUB_ITEMS : [];
   const visiblePersonalItems = PERSONAL_ITEMS.filter(isNavItemVisible);
 
   return (
@@ -175,7 +175,7 @@ export default function WorkspaceSidebar() {
             />
           ))}
 
-          {/* People collapsible — visible to all, sub-items filtered by role */}
+          {/* People navigation is shown to workspace administrators. */}
           {visiblePeopleItems.length > 0 && (
             <CollapsibleSection
               icon="groups"
