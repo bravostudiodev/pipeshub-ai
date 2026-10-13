@@ -89,6 +89,11 @@ method remains the default; users can still switch tabs.
 The workspace sidebar shows the **People** section (Users and Teams) only to
 administrators. This is navigation visibility, not an API authorization rule.
 
+The main chat sidebar also shows **Collections**, **All Records**, **All
+Artifacts**, and **My agents** only to administrators. Regular members keep
+New Chat, Search Chats, Inbox, and their conversation history. This hides
+navigation and does not change route or API permissions.
+
 - Keep MCP transport/client behavior provider-neutral. Do not add Slack-specific
   prompt instructions or phrase-based tool selection to address stale answers.
 - OAuth callbacks, token refresh, and tool invocation should use existing MCP

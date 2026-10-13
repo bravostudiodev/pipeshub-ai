@@ -21,6 +21,7 @@ import { AgentsSidebar } from './agents-sidebar';
 import { AgentScopedChatSidebar } from './agent-scoped-chat-sidebar';
 import { ProjectConversationsSidebar } from './project-conversations-sidebar';
 import { useSidebarConversations } from './use-sidebar-conversations';
+import { useUserStore, selectIsAdmin } from '@/lib/store/user-store';
 
 /**
  * Chat sidebar — uses SidebarBase shell with header, footer, and custom content.
@@ -33,6 +34,8 @@ import { useSidebarConversations } from './use-sidebar-conversations';
 function ChatSidebarInner() {
   debugLog.tick('[sidebar] [ChatSidebar]');
 
+  const isAdmin = useUserStore(selectIsAdmin);
+
   const isMoreChatsPanelOpen = useChatStore((s) => s.isMoreChatsPanelOpen);
   const moreChatsSectionType = useChatStore((s) => s.moreChatsSectionType);
   const isAgentsSidebarOpen = useChatStore((s) => s.isAgentsSidebarOpen);
@@ -44,7 +47,7 @@ function ChatSidebarInner() {
   const closeMobileSidebar = useMobileSidebarStore((s) => s.close);
   const isMobile = useIsMobile();
 
-  const secondaryPanel = isAgentsSidebarOpen ? (
+  const secondaryPanel = isAdmin === true && isAgentsSidebarOpen ? (
     <AgentsSidebar onBack={closeAgentsSidebar} />
   ) : isMoreChatsPanelOpen && moreChatsSectionType ? (
     <MoreChatsSidebar
@@ -59,7 +62,7 @@ function ChatSidebarInner() {
       footer={<ChatSidebarFooter />}
       secondaryPanel={secondaryPanel}
       onDismissSecondaryPanel={
-        isAgentsSidebarOpen
+        isAdmin === true && isAgentsSidebarOpen
           ? closeAgentsSidebar
           : isMoreChatsPanelOpen
             ? closeMoreChatsPanel
@@ -71,7 +74,7 @@ function ChatSidebarInner() {
     >
       <Flex direction="column" gap="3">
         <StaticNavSection />
-        <MyAgentsSection />
+        {isAdmin === true && <MyAgentsSection />}
         <ChatSections onOpenMoreChats={toggleMoreChatsPanel} />
       </Flex>
     </SidebarBase>
