@@ -13574,6 +13574,7 @@ components:
             Available flags:
             - ENABLE_BETA_CONNECTORS: Allow usage of beta connector integrations that may be unstable
             - ENABLE_MCP: Allow agents to use MCP servers and show MCP server management in the UI
+            - ENABLE_PUBLIC_WEB_ACCESS: Allow public web search and public URL downloads (default: true)
             - ENABLE_ACTIONS: Allow agents to use toolset actions and show Actions management in the UI
             - ENABLE_VECTOR_STORE_REBUILD: Allow admins to clean up and reindex the vector store
             - ENABLE_SKILLS: Allow users to create, import and manage Skills (SKILL.md packages) and let agents load them (default: true)
@@ -41503,6 +41504,7 @@ paths:
         **Available Feature Flags:**
         - ENABLE_BETA_CONNECTORS: Enable beta connector integrations (default: false)
         - ENABLE_MCP: Enable MCP servers (default: false)
+        - ENABLE_PUBLIC_WEB_ACCESS: Allow public web search and public URL downloads (default: true)
         - ENABLE_MCP_RETRIEVAL_TRACE: Enable redacted MCP retrieval trace recording (default: false; records expire after seven days)
         - ENABLE_ACTIONS: Enable toolset actions (default: true)
         - ENABLE_VECTOR_STORE_REBUILD: Enable vector store cleanup/reindex from Connectors (default: false)

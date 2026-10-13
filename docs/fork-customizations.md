@@ -158,3 +158,42 @@ Slack chat card into an ingestion flow.
 When changing these boundaries, inspect the current call path and tests first.
 The integration names and configuration mechanisms can evolve; the invariant
 is per-user source authorization and organization-scoped administration.
+
+## Outbound HTTP proxy and request logging
+
+Workspace administrators can turn off **Public web search and URL fetching** in
+Workspace → Labs. The `ENABLE_PUBLIC_WEB_ACCESS` platform flag applies to all
+users and agents. When off, the backend omits web search and Fetch URL from new
+agent runs and refuses calls from already-created tools. It also blocks public
+URL downloads used by remote images and Skills imports; uploaded Skills and
+in-cluster service requests continue to work. The setting is read live from
+platform settings, so turning it off does not require a restart. If the settings
+store cannot be read, public web access is denied. MCP tool calls, OAuth, and
+model requests are separate paths and are not controlled by this switch.
+
+Python services read one setting, `OUTBOUND_PROXY_URL` (`backend/env.template`), and
+route public HTTP(S) through it; `OUTBOUND_PROXY_BYPASS` names exact internal hostnames that stay
+direct. Loopback, private IPs, Kubernetes service names and `*.svc` / `*.cluster.local` stay
+direct. Service endpoint variables do not add bypasses. `app/utils/outbound_proxy.py`
+(`select_route`) is the routing decision.
+`app/utils/outbound_http.py` is installed first in every service (`outbound_bootstrap`), exports
+the standard proxy variables, and instruments httpx, aiohttp, requests, curl_cffi and urllib.
+Each instrumented request logs one
+`outbound_http {json}` line: destination host and port, method, `via` (`proxy`/`direct`), route
+reason, an optional request label, outcome and
+the trace request id. Paths, queries, headers, cookies and bodies are never logged. SSRF refusals log
+`outcome=denied`; a client that connects directly to a destination the policy proxies logs
+`route_reason=proxy_not_applied` at warning level.
+
+URL fetching keeps its DNS-pinning guarantees: each hop is resolved and checked locally, and the
+proxy is handed the validated IP, never the hostname. Proxied untrusted fetches therefore use only
+the `requests` strategy (curl cannot bind a proxied destination) and need working local DNS.
+A proxy that refuses the IP-based tunnel (for example a Squid hostname allowlist) makes the fetch fail
+closed; there is no direct fallback. Policy refusals are logged as `proxy_denied`, while proxy
+connection failures are reported as transport errors.
+
+The Node API uses the same setting and rules (`src/libs/utils/outbound-proxy.ts`,
+`outbound-http.ts`, installed in `src/index.ts`): a routing dispatcher for global `fetch`, an
+`http`/`https.request` hook for clients using the standard Node HTTP stack, and the same
+`outbound_http` log fields. Clients that supply their own transport may bypass the hook;
+deployment network policy must block direct public connections.

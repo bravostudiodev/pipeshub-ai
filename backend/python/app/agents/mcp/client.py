@@ -20,6 +20,7 @@ from fastmcp.client.transports import (
 from mcp.shared._httpx_utils import create_mcp_http_client
 
 from app.agents.mcp.models import MCPServerConfig, MCPTransport
+from app.utils.outbound_http import tag_client
 from app.utils.url_redaction import redact_url
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class _LastHttpResponse:
         **kwargs: Any,
     ) -> httpx.AsyncClient:
         client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth)
+        tag_client(client, "mcp")
         client.event_hooks["response"].append(self._on_response)
         return client
 

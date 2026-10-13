@@ -23,6 +23,7 @@ import { AgentBuilderPaletteSkeletonList } from './agent-builder-palette-skeleto
 import { AgentBuilderWebSearchSection } from './sidebar-web-search-section';
 import { toggleKeyedBoolean } from '../sidebar-expand-utils';
 import type { AgentWebSearchAttachment } from '../types';
+import { useFeatureFlagsStore, selectPublicWebAccessEnabled } from '@/lib/store/feature-flags-store';
 
 /** Toolset type row (e.g. Slack): expanded by default so instance rows are listed. */
 const DEFAULT_TOOLSET_TYPE_EXPANDED = true;
@@ -197,6 +198,7 @@ export function AgentBuilderToolsetsSection(props: {
   } = props;
 
   const { t } = useTranslation();
+  const publicWebAccessEnabled = useFeatureFlagsStore(selectPublicWebAccessEnabled);
   const [searchInput, setSearchInput] = useState('');
   const [expandedApps, setExpandedApps] = useState<Record<string, boolean>>({});
   const [userConfigToolset, setUserConfigToolset] = useState<BuilderSidebarToolset | null>(null);
@@ -370,11 +372,13 @@ export function AgentBuilderToolsetsSection(props: {
         </TextField.Root>
       </Box>
 
-      <AgentBuilderWebSearchSection
-        attached={webSearchAttached}
-        onNotify={onNotify}
-        structureLocked={structureLocked}
-      />
+      {publicWebAccessEnabled && (
+        <AgentBuilderWebSearchSection
+          attached={webSearchAttached}
+          onNotify={onNotify}
+          structureLocked={structureLocked}
+        />
+      )}
 
       {loading ? (
         <AgentBuilderPaletteSkeletonList count={6} />

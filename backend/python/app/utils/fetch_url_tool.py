@@ -139,6 +139,9 @@ def create_fetch_url_tool(
         Example:
             fetch_url(url="https://docs.python.org/3/tutorial/classes.html")
         """
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            return json.dumps({"ok": False, "error": "Public web access is disabled by the workspace administrator."})
         _URL_FALLBACK_HINT = (
             " If other relevant URLs are available and the current context is not "
             "sufficient to answer the query, fetch those URLs next."

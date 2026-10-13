@@ -253,6 +253,9 @@ def create_web_search_tool(
         Example:
             web_search(query="current AI model benchmarks 2026")
         """
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            return json.dumps({"ok": False, "error": "Public web access is disabled by the workspace administrator."})
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:

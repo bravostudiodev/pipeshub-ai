@@ -101,6 +101,13 @@ export const PLATFORM_FEATURE_FLAGS: PlatformFeatureFlagDef[] = [
     defaultEnabled: false,
   },
   {
+    key: 'ENABLE_PUBLIC_WEB_ACCESS',
+    label: 'Public web search and URL fetching',
+    description:
+      'Allow OddJeeves to search the public web and open public URLs. Turn off to disable these capabilities across the workspace.',
+    defaultEnabled: true,
+  },
+  {
     key: 'ENABLE_ACTIONS',
     label: 'Enable Actions',
     description:

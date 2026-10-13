@@ -1,5 +1,4 @@
-import { config } from "dotenv";
-config(); // Load environment variables first
+import "../../../outbound-bootstrap"; // must stay first: loads .env, installs the outbound proxy hooks
 
 import { json, urlencoded, Request, Response } from "express";
 import { connect, dropLegacyThreadBotIndex } from "./utils/db";

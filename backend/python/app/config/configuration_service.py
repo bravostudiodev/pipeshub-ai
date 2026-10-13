@@ -50,6 +50,8 @@ class ConfigurationService:
         self.logger.debug("📦 Initialized LRU cache with max size 1000")
 
         self.store = key_value_store
+        from app.services.featureflag.platform_settings import register_public_web_config_service
+        register_public_web_config_service(self)
 
         # Event loop the watch thread runs on (any backend).
         self._pubsub_loop: asyncio.AbstractEventLoop | None = None

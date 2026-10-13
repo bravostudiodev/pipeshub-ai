@@ -90,6 +90,9 @@ export const selectMcpRetrievalTraceEnabled = (s: FeatureFlagsStore) =>
   s.flags?.ENABLE_MCP_RETRIEVAL_TRACE === true;
 /** Actions defaults to enabled, so an unloaded/absent flag must NOT read as disabled (unlike MCP). */
 export const selectActionsEnabled = (s: FeatureFlagsStore) => s.flags?.ENABLE_ACTIONS !== false;
+/** Public web tools default to enabled; admins can turn them off in Labs. */
+export const selectPublicWebAccessEnabled = (s: FeatureFlagsStore) =>
+  s.flags?.ENABLE_PUBLIC_WEB_ACCESS !== false;
 /** Vector store rebuild defaults to disabled; admins opt in from Labs. */
 export const selectVectorStoreRebuildEnabled = (s: FeatureFlagsStore) =>
   s.flags?.ENABLE_VECTOR_STORE_REBUILD === true;

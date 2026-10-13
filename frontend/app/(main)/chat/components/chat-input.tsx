@@ -38,6 +38,7 @@ import {
   getModelDefaultReasoningEffort,
 } from '@/chat/store';
 import { useIsMobile } from '@/lib/hooks/use-is-mobile';
+import { useFeatureFlagsStore, selectPublicWebAccessEnabled } from '@/lib/store/feature-flags-store';
 import { useCommandStore } from '@/lib/store/command-store';
 import { toast } from '@/lib/store/toast-store';
 import { attachmentErrorMessage } from '@/chat/utils/attachment-error';
@@ -278,6 +279,13 @@ export function ChatInput({
 
   // Read all chat settings directly from the shared store
   const settings = useChatStore((s) => s.settings);
+  const publicWebAccessEnabled = useFeatureFlagsStore(selectPublicWebAccessEnabled);
+  const setQueryMode = useChatStore((s) => s.setQueryMode);
+  useEffect(() => {
+    if (!publicWebAccessEnabled && settings.queryMode === 'web-search') {
+      setQueryMode('chat');
+    }
+  }, [publicWebAccessEnabled, settings.queryMode, setQueryMode]);
   const setMode = useChatStore((s) => s.setMode);
   const setAgentStrategy = useChatStore((s) => s.setAgentStrategy);
   const setFilters = useChatStore((s) => s.setFilters);
