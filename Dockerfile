@@ -122,7 +122,7 @@ start_nodejs() {
     log "Waiting for Node.js health check..."
     local MAX_RETRIES=30
     local RETRY_COUNT=0
-    local HEALTH_CHECK_URL="http://localhost:${NODEJS_PORT}/api/v1/health"
+    local HEALTH_CHECK_URL="http://localhost:${NODEJS_PORT}/api/v1/health/live"
     
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         if curl -s -f "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
