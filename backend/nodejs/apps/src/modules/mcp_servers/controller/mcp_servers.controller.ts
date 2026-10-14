@@ -292,6 +292,12 @@ export const getGoogleDriveConnection = proxyMcp(
   'Get Google Drive connection status',
 );
 
+export const getGoogleCalendarConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/google-calendar-connection',
+  'Get Google Calendar connection status',
+);
+
 export const getSuperhumanDocsConnection = proxyMcp(
   HttpMethod.GET,
   () => '/superhuman-docs-connection',

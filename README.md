@@ -15,9 +15,10 @@ routing.
 ## Employee connections
 
 The `/chat` page provides user-specific connections for Slack, Notion, Miro,
-Jira, Gmail, Google Drive, and Superhuman Docs. OAuth-backed MCP services use
-each employee's own authorization. Superhuman Docs uses a personal, read-only
-API token and includes an in-app setup guide.
+Jira, Gmail, Google Drive, Google Calendar, and Superhuman Docs. OAuth-backed
+MCP services use each employee's own authorization. Google Calendar uses
+Google's documented read-only scopes. Superhuman Docs uses a personal,
+read-only API token and includes an in-app setup guide.
 
 Confluence Data Center Personal remains an administrator-managed connector:
 admins control sync settings while each employee supplies their own credentials.

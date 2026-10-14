@@ -144,6 +144,7 @@ export type MiroConnectionStatus = SlackConnectionStatus;
 export type AtlassianConnectionStatus = SlackConnectionStatus;
 export type GmailConnectionStatus = SlackConnectionStatus;
 export type GoogleDriveConnectionStatus = SlackConnectionStatus;
+export type GoogleCalendarConnectionStatus = SlackConnectionStatus;
 export type SuperhumanDocsConnectionStatus = SlackConnectionStatus;
 
 export interface McpTraceRunIndex {

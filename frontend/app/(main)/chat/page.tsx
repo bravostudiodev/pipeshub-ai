@@ -59,6 +59,7 @@ import {
   MiroConnectionCard,
   GmailConnectionCard,
   GoogleDriveConnectionCard,
+  GoogleCalendarConnectionCard,
   NotionConnectionCard,
   SlackConnectionCard,
   SuperhumanDocsConnectionCard,
@@ -1161,6 +1162,7 @@ function ChatContent() {
           <JiraConnectionCard />
           <GmailConnectionCard />
           <GoogleDriveConnectionCard />
+          <GoogleCalendarConnectionCard />
           <SuperhumanDocsConnectionCard />
         </Flex>
       </Box>

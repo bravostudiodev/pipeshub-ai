@@ -32,6 +32,7 @@ The current chat cards cover:
 | Jira | Live Atlassian Rovo MCP and per-user OAuth | Uses the designated Atlassian Rovo instance. The card is labeled Jira for employees. |
 | Gmail | Live Google MCP and per-user OAuth | Uses the organization-configured Gmail MCP instance. |
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
+| Google Calendar | Live Google MCP and per-user OAuth | Uses the organization-configured Calendar MCP instance with Google's documented read-only OAuth scopes. The service is currently in Google's Developer Preview. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
 
 The MCP cards are implemented in
@@ -49,6 +50,9 @@ The Superhuman Docs employee guide is under
 `frontend/public/guides/superhuman-docs/`. The app is statically exported in
 production, so guide images should be referenced as static public assets and
 should not depend on Next's image optimization server.
+
+For the administrator steps to configure Google Calendar or add another
+provider connection, see [MCP connection setup](mcp-connection-setup.md).
 
 The existing **Confluence Data Center Personal** connector remains available
 through connector administration, with organization-managed URL, sync filters,
@@ -204,3 +208,56 @@ The Node API uses the same setting and rules (`src/libs/utils/outbound-proxy.ts`
 `http`/`https.request` hook for clients using the standard Node HTTP stack, and the same
 `outbound_http` log fields. Clients that supply their own transport may bypass the hook;
 deployment network policy must block direct public connections.
+
+## Embedding model selection
+
+Dense embedding requests use the provider configuration saved in Workspace → AI
+Models. The configured provider client uses its configured endpoint, model, and
+credentials directly, through the outbound HTTP routing hooks. If no embedding
+provider is configured, PipesHub falls back to its local embedding server at
+`EMBEDDING_SERVER_URL` (default `http://localhost:8002`). A deployment that does
+not run that local server must configure an embedding provider in the app. The
+chart profile does not inject a second adapter that overrides that selection.
+The baked FastEmbed BM25 cache is separate; it serves the sparse/entity-index
+path, not dense embeddings.
+
+## Usage telemetry and Hugging Face
+
+PipesHub's built-in metrics and product-event collection is separate from the
+outbound request log. If no saved configuration exists, the Node telemetry
+service creates one with collection enabled, a five-minute interval, and the
+default collector URL `https://metrics-collector.intellysense.com/collect-metrics`.
+The Python services read the same saved configuration and push their metrics
+and buffered events to that collector. The app's admin setting is in Workspace
+→ General. Turning collection off flushes the current metrics and buffered
+events once before saving the opt-out; later periodic pushes stop.
+
+The metrics include route templates, method, status and duration; installation
+and process identifiers; organization IDs and email domains; user and
+organization counts; authentication methods; connector/activity dimensions;
+and configured data-service types. Named events include login/signup, search,
+chat/agent runs, answer generation, connector addition, PAT creation, and MCP
+connection/tool use. Some event properties include full email addresses, user
+IDs, and organization IDs. Chat/search events record modes and counts, not the
+query text. MCP events record tool names/client name and version, not tool
+arguments.
+
+Opik tracing is a separate optional path. It is active only when the agent
+tracing setting is enabled and `OPIK_API_KEY` or `OPIK_URL_OVERRIDE` is
+configured. When active, traces can include LLM messages and outputs, tool
+arguments, and tool results. Leave those variables unset and tracing disabled
+unless that data is intentionally being sent to an Opik endpoint.
+
+FastEmbed's request to
+`huggingface.co/api/models/Qdrant/bm25/revision/main` is a model metadata lookup,
+not a telemetry event. Hugging Face libraries have a separate opt-out;
+`HF_HUB_DISABLE_TELEMETRY=1` disables their usage telemetry. The fork does not
+currently set this variable. The deployment image includes the BM25 model, so
+keep `FASTEMBED_CACHE_PATH` pointed at the baked cache to avoid runtime model
+lookups/downloads.
+
+The observed `mobile.events.data.microsoft.com` request is not referenced by
+first-party code or the checked dependency manifests, so this repository scan
+does not identify which process or dependency initiates it. Do not add it to an
+egress allowlist on the basis of the hostname alone; identify the process before
+authorizing it.

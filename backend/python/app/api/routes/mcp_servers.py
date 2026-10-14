@@ -1419,6 +1419,24 @@ def _is_google_drive_mcp_instance(instance: dict[str, Any]) -> bool:
     )
 
 
+def _is_google_calendar_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Google Calendar MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "calendarmcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "google_calendar"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
 def _is_superhuman_docs_mcp_instance(instance: dict[str, Any]) -> bool:
     """Match the organization's Superhuman Docs MCP server configured for user tokens."""
     url = instance.get("url")
@@ -1498,6 +1516,12 @@ async def get_gmail_connection(request: Request) -> dict[str, Any]:
 async def get_google_drive_connection(request: Request) -> dict[str, Any]:
     """Return only Google Drive MCP availability and the caller's own connection state."""
     return await _get_designated_mcp_connection(request, _is_google_drive_mcp_instance)
+
+
+@router.get("/google-calendar-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_google_calendar_connection(request: Request) -> dict[str, Any]:
+    """Return only Google Calendar MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_google_calendar_mcp_instance)
 
 
 @router.get("/superhuman-docs-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])

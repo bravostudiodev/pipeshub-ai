@@ -16203,6 +16203,41 @@ paths:
         '403':
           description: Caller is not permitted to use this API
 
+  /mcp-servers/google-calendar-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Google Calendar MCP connection status
+      description: |
+        Returns whether the organization's designated Google Calendar MCP instance
+        is configured and whether the authenticated user has their own saved
+        OAuth credentials. The instance must use Google's official Calendar MCP
+        endpoint, Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGoogleCalendarMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Google Calendar connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
   /mcp-servers/superhuman-docs-connection:
     get:
       tags:

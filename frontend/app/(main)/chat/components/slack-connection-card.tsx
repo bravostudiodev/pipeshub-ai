@@ -12,7 +12,7 @@ import type { SlackConnectionStatus } from '@/app/(main)/workspace/mcp-servers/t
 import { useMcpOAuthPopup } from '@/app/(main)/workspace/mcp-servers/hooks/use-mcp-oauth-popup';
 
 const initialStatus: SlackConnectionStatus = { configured: false, isConnected: false };
-type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'superhuman';
+type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'superhuman';
 
 function McpConnectionCard({ provider }: { provider: Provider }) {
   const { t } = useTranslation();
@@ -28,7 +28,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
           ? 'Gmail'
           : provider === 'google-drive'
             ? 'Google Drive'
-            : 'Superhuman Docs / Coda';
+            : provider === 'google-calendar'
+              ? 'Google Calendar'
+              : 'Superhuman Docs / Coda';
   const i18nPrefix = `chat.${provider}Connection`;
   const statusRequest = provider === 'slack'
     ? McpServersApi.getSlackConnection
@@ -42,7 +44,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
           ? McpServersApi.getGmailConnection
           : provider === 'google-drive'
             ? McpServersApi.getGoogleDriveConnection
-            : McpServersApi.getSuperhumanDocsConnection;
+            : provider === 'google-calendar'
+              ? McpServersApi.getGoogleCalendarConnection
+              : McpServersApi.getSuperhumanDocsConnection;
   const [connection, setConnection] = useState<SlackConnectionStatus>(initialStatus);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -160,7 +164,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
         >
           <Flex align="center" gap="2">
             <img
-              src={`/icons/connectors/${provider === 'superhuman' ? 'superhuman' : provider === 'google-drive' ? 'drive' : provider === 'atlassian' ? 'atlassian' : provider}.svg`}
+              src={`/icons/connectors/${provider === 'superhuman' ? 'superhuman' : provider === 'google-drive' ? 'drive' : provider === 'google-calendar' ? 'calendar' : provider === 'atlassian' ? 'atlassian' : provider}.svg`}
               width={20}
               height={20}
               alt=""
@@ -262,7 +266,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
           <Flex align="center" gap="2" px="2" py="1" style={{ color: 'var(--slate-9)' }}>
             {provider === 'superhuman'
               ? <MaterialIcon name="description" size={20} color="var(--slate-9)" />
-              : <img src={`/icons/connectors/${provider === 'google-drive' ? 'drive' : provider === 'atlassian' ? 'atlassian' : provider}.svg`} width={20} height={20} alt="" />}
+              : <img src={`/icons/connectors/${provider === 'google-drive' ? 'drive' : provider === 'google-calendar' ? 'calendar' : provider === 'atlassian' ? 'atlassian' : provider}.svg`} width={20} height={20} alt="" />}
             <Text size="2">{name}</Text>
             <Text size="1" color="gray">
               {error
@@ -299,6 +303,10 @@ export function GmailConnectionCard() {
 
 export function GoogleDriveConnectionCard() {
   return <McpConnectionCard provider="google-drive" />;
+}
+
+export function GoogleCalendarConnectionCard() {
+  return <McpConnectionCard provider="google-calendar" />;
 }
 
 export function SuperhumanDocsConnectionCard() {
