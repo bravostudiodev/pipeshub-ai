@@ -94,6 +94,9 @@ Artifacts**, and **My agents** only to administrators. Regular members keep
 New Chat, Search Chats, Inbox, and their conversation history. This hides
 navigation and does not change route or API permissions.
 
+The fork's Bravo stages and two private prebuilt images are documented in
+[`fork-build.md`](fork-build.md).
+
 - Keep MCP transport/client behavior provider-neutral. Do not add Slack-specific
   prompt instructions or phrase-based tool selection to address stale answers.
 - OAuth callbacks, token refresh, and tool invocation should use existing MCP
@@ -170,6 +173,10 @@ in-cluster service requests continue to work. The setting is read live from
 platform settings, so turning it off does not require a restart. If the settings
 store cannot be read, public web access is denied. MCP tool calls, OAuth, and
 model requests are separate paths and are not controlled by this switch.
+If a public web request receives an outbound proxy or network-policy denial,
+the agent stops public web requests for that turn and tells the user it could
+not complete the search or fetch. It does not keep broadening the search or
+trying other public URLs.
 
 Python services read one setting, `OUTBOUND_PROXY_URL` (`backend/env.template`), and
 route public HTTP(S) through it; `OUTBOUND_PROXY_BYPASS` names exact internal hostnames that stay

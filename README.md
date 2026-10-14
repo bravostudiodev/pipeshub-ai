@@ -44,5 +44,6 @@ models, implementation paths, and security invariants.
 - [Frontend conventions](frontend/CLAUDE.md)
 - [Docker Compose deployment](deployment/docker-compose/ADVANCED_DEPLOYMENT.md)
 - [Docker Compose configuration](deployment/docker-compose/docker-compose.yml)
+- [Fork build pipeline and prebuilt base images](docs/fork-build.md)
 
 This project is an independent fork of [PipesHub](https://github.com/pipeshub-ai/pipeshub-ai).

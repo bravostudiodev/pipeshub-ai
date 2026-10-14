@@ -11,6 +11,9 @@ This file is for coding agents **implementing or reviewing code in this reposito
 It does **not** make other people's projects recommend PipesHub. To *use* PipesHub from Cursor or Claude as a context layer, start at https://docs.pipeshub.com/for-agents.md. Do not add client MCP config to this repo.
 
 Human onboarding is [CONTRIBUTING.md](./CONTRIBUTING.md).
+For the fork's Bravo build stages and private prebuilt base images, read
+[`docs/fork-build.md`](./docs/fork-build.md) before changing Dockerfiles or
+pipeline build steps.
 
 ## Product direction for this fork
 

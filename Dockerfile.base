@@ -132,7 +132,7 @@ COPY ./backend/python/pyproject.toml ./
 # Install Python dependencies
 # FASTEMBED_CACHE_PATH is set so fastembed writes to a persistent location
 # (by default it uses /tmp/fastembed_cache which we wipe below). The same
-# env var is re-exported in the runtime stage so `FastEmbedSparse(...)` at
+# env var is re-exported in the runtime stage so `SparseTextEmbedding(...)` at
 # runtime finds the pre-downloaded model without any code change.
 ENV FASTEMBED_CACHE_PATH=/root/.cache/fastembed
 
@@ -168,8 +168,8 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     fi && \
     # Remove an unused model left in previously published dependency bases.
     rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3 && \
-    # Sparse embedding model used by FastEmbedSparse in RetrievalService.__init__.
-    python -c "from langchain_qdrant import FastEmbedSparse; FastEmbedSparse(model_name='Qdrant/BM25')" && \
+    # Preload the exact sparse model and FastEmbed API used by SparseEmbedder at runtime.
+    python -c "from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='Qdrant/bm25')" && \
     rm -rf /tmp/*
 
 # Prune dead weight that COPY'd-into-runtime never executes. Preserves:

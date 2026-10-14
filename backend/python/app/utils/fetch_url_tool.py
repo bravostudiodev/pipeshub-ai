@@ -141,7 +141,15 @@ def create_fetch_url_tool(
         """
         from app.services.featureflag.platform_settings import is_public_web_access_enabled
         if not await is_public_web_access_enabled():
-            return json.dumps({"ok": False, "error": "Public web access is disabled by the workspace administrator."})
+            return json.dumps({
+                "ok": False,
+                "terminal": True,
+                "error": (
+                    "Public web access is disabled by the workspace administrator. "
+                    "Do not retry this fetch or use another public web tool. "
+                    "Tell the user public URL access is disabled."
+                ),
+            })
         _URL_FALLBACK_HINT = (
             " If other relevant URLs are available and the current context is not "
             "sufficient to answer the query, fetch those URLs next."
@@ -178,6 +186,16 @@ def create_fetch_url_tool(
                 response = await asyncio.to_thread(fetch_url, url, verbose=True)
             except FetchError as e:
                 logger.warning("Fetch URL rejected or failed for %s: %s", url, e)
+                if "outbound proxy refused" in str(e).lower():
+                    return json.dumps({
+                        "ok": False,
+                        "terminal": True,
+                        "error": (
+                            "Public URL access is blocked by the network policy. "
+                            "Do not retry this URL or try another public URL this turn. "
+                            "Tell the user the requested page could not be fetched."
+                        ),
+                    })
                 return json.dumps({
                     "ok": False,
                     "error": str(e) + _URL_FALLBACK_HINT,
