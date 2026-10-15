@@ -3811,6 +3811,13 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
 
                     agent_mcp_servers = configured_mcp_servers
 
+                logger.info(
+                    "MCP attach: enabled=%s tools_filter=%s attached=%d (conversation=%s)",
+                    mcp_enabled,
+                    "none" if chat_query.tools is None else len(chat_query.tools),
+                    len(agent_mcp_servers),
+                    chat_query.conversationId,
+                )
                 timer.mark("mcp_cfg")
 
                 agent_knowledge = agent.get("knowledge", [])
@@ -4082,7 +4089,7 @@ async def get_assistant_agent(
                 instances=mcp_instances,
             )
         except Exception as e:
-            logger.error(f"Error fetching authenticated MCP servers: {e}", exc_info=True)
+            logger.error(f"Error fetching authenticated MCP servers for user {user_id}: {e}", exc_info=True)
             authenticated_mcp_servers_list = []
     else:
         authenticated_mcp_servers_list = []

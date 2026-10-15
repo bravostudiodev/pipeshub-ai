@@ -5,8 +5,8 @@
 # already started as that user (the Helm chart sets runAsUser), it just execs.
 set -eu
 
-APP_UID=1000
-APP_GID=1000
+APP_UID=10101
+APP_GID=10101
 
 if [ "$(id -u)" != "0" ]; then
     exec "$@"
