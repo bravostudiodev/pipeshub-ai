@@ -44,9 +44,9 @@ pipeline:
               - CVE-2026-106445
               - CVE-2026-106446
           context: .
-          push: false
+          push: true #TODO
         tags:
-          - 0.9.1.oddyssey1
+          - 0.9.1.oddyssey1-1 #TODO
     "Image build and push":
       branch: "main"
       imageBuild:

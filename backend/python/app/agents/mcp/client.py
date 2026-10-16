@@ -2,6 +2,7 @@
 exposes a thin async interface for tool discovery.
 """
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -45,6 +46,26 @@ DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 _STDERR_TAIL_MAX_CHARS = 4000
 
 
+_ERROR_BODY_MAX_CHARS = 1000
+
+
+def _describe_request(request: httpx.Request) -> str:
+    """Method/tool name and argument *keys* only — argument values are user content."""
+    detail = "method=?"
+    try:
+        payload = json.loads(request.content)
+        if isinstance(payload, dict):
+            params = payload.get("params") or {}
+            args = params.get("arguments") if isinstance(params, dict) else None
+            detail = f"rpc={payload.get('method')} tool={params.get('name') if isinstance(params, dict) else None}"
+            if isinstance(args, dict):
+                detail += f" arg_keys={sorted(args)}"
+    except Exception:
+        pass
+    sent_session = "mcp-session-id" in request.headers
+    return f"{detail} session_header_sent={sent_session} protocol={request.headers.get('mcp-protocol-version')}"
+
+
 class MCPConnectionError(Exception):
     """Raised when an MCP server cannot be reached or its transport config is invalid."""
 
@@ -65,10 +86,20 @@ class _LastHttpResponse:
     def __init__(self) -> None:
         self.status_code: Optional[int] = None
         self.url: Optional[str] = None
+        self.error_body: Optional[str] = None
+        self.error_request: Optional[str] = None
 
     async def _on_response(self, response: httpx.Response) -> None:
         self.status_code = response.status_code
         self.url = redact_url(str(response.request.url))
+        if response.status_code < 400:
+            return
+        # The SDK raises a bare HTTPStatusError, so the provider's explanation is otherwise lost.
+        try:
+            self.error_body = (await response.aread()).decode("utf-8", "replace")[:_ERROR_BODY_MAX_CHARS]
+        except Exception:
+            self.error_body = None
+        self.error_request = _describe_request(response.request)
 
     def httpx_client_factory(
         self,
@@ -214,6 +245,7 @@ class MCPClientManager:
         self.headers = headers or {}
         self._session_client: Optional[Client] = None
         self._session_stderr_path: Optional[Path] = None
+        self._session_recorder: Optional[_LastHttpResponse] = None
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator[Client]:
@@ -302,6 +334,7 @@ class MCPClientManager:
             raise MCPConnectionError(message) from e
         self._session_client = client
         self._session_stderr_path = stderr_path
+        self._session_recorder = response_recorder
         return client
 
     async def call_tool_in_session(self, tool_name: str, arguments: dict[str, Any]) -> Any:
@@ -316,6 +349,14 @@ class MCPClientManager:
                 self._session_client.call_tool(tool_name, arguments), timeout=DEFAULT_CALL_TIMEOUT_SECONDS,
             )
         except Exception as e:
+            recorder = self._session_recorder
+            logger.warning(
+                "MCP session call failed: instance=%s server=%s tool=%s arg_keys=%s error_type=%s error=%s "
+                "last_http=%s %s body=%s request=%s",
+                self.config.id, self.config.name, tool_name, sorted(arguments or {}), type(e).__name__,
+                str(e)[:300], recorder.status_code if recorder else None, recorder.url if recorder else None,
+                recorder.error_body if recorder else None, recorder.error_request if recorder else None,
+            )
             stderr_tail = _read_stderr_tail(self._session_stderr_path)
             if not stderr_tail:
                 raise

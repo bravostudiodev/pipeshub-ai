@@ -47,6 +47,10 @@ def _looks_like_expired_token(exc: Exception) -> bool:
     return any(marker in message for marker in _EXPIRY_MARKERS)
 
 
+def _looks_like_dead_session(exc: Exception) -> bool:
+    return isinstance(exc, RuntimeError) and "not connected" in str(exc).lower()
+
+
 class MCPSessionManager:
     """Cached on `context.tool_state` — construct freely per call site
     (`MCPToolProvider.load_into`, `stream_bridge.py`'s teardown); every
@@ -67,6 +71,11 @@ class MCPSessionManager:
         try:
             return await manager.call_tool_in_session(tool_name, arguments)
         except Exception as exc:
+            if _looks_like_dead_session(exc):
+                # A failed POST closes fastmcp's client; without eviction every later call this turn gets "not connected".
+                self._log.info("MCPSessionManager: session for %s is dead, reopening once", server.instance_id)
+                manager = await self._reopen_locked(server, stale_manager=manager)
+                return await manager.call_tool_in_session(tool_name, arguments)
             auth_mode = server.instance.get("authMode")
             if auth_mode != MCPAuthMode.OAUTH.value or not _looks_like_expired_token(exc):
                 raise
@@ -136,6 +145,20 @@ class MCPSessionManager:
                 return current
             await self._refresh_and_reopen(server)
             return self._managers[server.instance_id]
+
+    async def _reopen_locked(
+        self, server: "ResolvedMCPServer", *, stale_manager: MCPClientManager,
+    ) -> MCPClientManager:
+        lock = self._locks.setdefault(server.instance_id, asyncio.Lock())
+        async with lock:
+            current = self._managers.get(server.instance_id)
+            if current is not None and current is not stale_manager:
+                return current
+            self._managers.pop(server.instance_id, None)
+            await stale_manager.aclose()
+            manager = await self._build_and_open(server)
+            self._managers[server.instance_id] = manager
+            return manager
 
     async def _refresh_and_reopen(self, server: "ResolvedMCPServer") -> None:
         old_manager = self._managers.pop(server.instance_id, None)
