@@ -357,6 +357,9 @@ class MCPClientManager:
                 str(e)[:300], recorder.status_code if recorder else None, recorder.url if recorder else None,
                 recorder.error_body if recorder else None, recorder.error_request if recorder else None,
             )
+            if isinstance(e, httpx.HTTPStatusError) and recorder and recorder.error_body:
+                # Lets the model see why the provider rejected the call and fix its arguments.
+                raise MCPConnectionError(f"{str(e).splitlines()[0]} — server response: {recorder.error_body}") from e
             stderr_tail = _read_stderr_tail(self._session_stderr_path)
             if not stderr_tail:
                 raise
