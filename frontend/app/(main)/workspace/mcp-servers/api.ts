@@ -15,6 +15,15 @@ import type {
   McpServerTemplate,
   McpSuccessResponse,
   McpToolsResponse,
+  SlackConnectionStatus,
+  NotionConnectionStatus,
+  MiroConnectionStatus,
+  AtlassianConnectionStatus,
+  GmailConnectionStatus,
+  GoogleDriveConnectionStatus,
+  GoogleCalendarConnectionStatus,
+  SuperhumanDocsConnectionStatus,
+  McpRetrievalTraceResponse,
 } from './types';
 
 const BASE_URL = '/api/v1/mcp-servers';
@@ -126,6 +135,53 @@ export const McpServersApi = {
 
   async getMyMcpServers(includeTools = true): Promise<McpMyServersResponse> {
     const { data } = await apiClient.get(`${BASE_URL}/my-mcp-servers`, { params: { includeTools } });
+    return data;
+  },
+
+  async getSlackConnection(): Promise<SlackConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/slack-connection`);
+    return data;
+  },
+
+  async getNotionConnection(): Promise<NotionConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/notion-connection`);
+    return data;
+  },
+
+  async getMiroConnection(): Promise<MiroConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/miro-connection`);
+    return data;
+  },
+
+  async getAtlassianConnection(): Promise<AtlassianConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/atlassian-connection`);
+    return data;
+  },
+
+  async getGmailConnection(): Promise<GmailConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/gmail-connection`);
+    return data;
+  },
+
+  async getGoogleDriveConnection(): Promise<GoogleDriveConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/google-drive-connection`);
+    return data;
+  },
+
+  async getGoogleCalendarConnection(): Promise<GoogleCalendarConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/google-calendar-connection`);
+    return data;
+  },
+
+  async getSuperhumanDocsConnection(): Promise<SuperhumanDocsConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/superhuman-docs-connection`);
+    return data;
+  },
+
+  async getMcpRetrievalTraces(runIds?: string[]): Promise<McpRetrievalTraceResponse> {
+    const { data } = await apiClient.get(`${BASE_URL}/retrieval-traces`, {
+      params: runIds?.length ? { runIds: runIds.join(',') } : undefined,
+    });
     return data;
   },
 

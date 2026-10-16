@@ -1,9 +1,9 @@
 {
   "name": "pipeshub-desktop",
   "version": "0.1.0",
-  "description": "PipesHub Desktop App",
+  "description": "OddJeeves Desktop App",
   "main": "compile/main.js",
-  "author": "PipesHub",
+  "author": "OddJeeves",
   "license": "UNLICENSED",
   "private": true
 }

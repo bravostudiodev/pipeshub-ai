@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Button, Flex, Text } from '@radix-ui/themes';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
-import { LottieLoader } from '@/app/components/ui/lottie-loader';
+import { PipesHubIcon } from '@/app/components/ui';
 import { ConnectorsApi } from '@/app/(main)/workspace/connectors/api';
 import { isProcessedError } from '@/lib/api';
 import {
@@ -117,7 +117,6 @@ export function ConnectorOAuthCallbackClient() {
     minHeight: '100vh',
     width: '100%',
     padding: 'var(--space-5)',
-    background: 'linear-gradient(180deg, var(--olive-2) 0%, var(--olive-1) 100%)',
   } as const;
 
   const columnStyle = {
@@ -131,9 +130,7 @@ export function ConnectorOAuthCallbackClient() {
     case 'processing':
       statusPanel = (
         <Flex direction="column" align="center" gap="5">
-          <Box style={{ width: 48, height: 48, flexShrink: 0 }}>
-            <LottieLoader variant="still" size={48} />
-          </Box>
+          <PipesHubIcon size={48} />
           <Flex direction="column" align="center" gap="1">
             <Text
               as="p"
@@ -153,7 +150,7 @@ export function ConnectorOAuthCallbackClient() {
                 maxWidth: 432,
               }}
             >
-              Securely exchanging the authorization code with PipesHub.
+              Securely completing your connection.
             </Text>
           </Flex>
         </Flex>
@@ -258,7 +255,7 @@ export function ConnectorOAuthCallbackClient() {
   }
 
   return (
-    <Flex align="center" justify="center" style={shellStyle}>
+    <Flex align="center" justify="center" className="oauth-callback-shell" style={shellStyle}>
       <Box style={columnStyle}>{statusPanel}</Box>
     </Flex>
   );

@@ -52,6 +52,12 @@ export function createHealthRouter(
   const appConfig = container.get<AppConfig>('AppConfig');
   const configService = ConfigService.getInstance();
 
+  // Process-only probe for Kubernetes and the process monitor. The root route below
+  // checks dependent Python services, which start later in the same pod.
+  router.get('/live', (_req, res) => {
+    res.status(200).json({ status: 'alive' });
+  });
+
   async function getDeploymentConfig() {
     try {
       const fresh = await configService.readDeploymentConfig();

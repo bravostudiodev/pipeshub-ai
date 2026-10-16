@@ -36,6 +36,7 @@ from urllib.parse import urlencode, urlparse
 import httpx
 
 from app.agents.mcp.models import DCRClient, DiscoveredOAuthMetadata
+from app.utils.outbound_http import outbound_category
 from app.utils.url_fetcher import FetchError as UrlFetchError
 from app.utils.url_fetcher import validate_public_http_url
 
@@ -87,7 +88,8 @@ async def assert_discovery_target_allowed(url: str) -> None:
     """
     try:
         # Admin-configured MCP servers can legitimately sit on Tailscale/CGNAT (100.64/10).
-        await asyncio.to_thread(validate_public_http_url, url, block_non_global=False)
+        with outbound_category("oauth"):  # a refusal is logged from the worker thread
+            await asyncio.to_thread(validate_public_http_url, url, block_non_global=False)
     except UrlFetchError as e:
         raise DiscoveryBlockedError(str(e)) from e
 

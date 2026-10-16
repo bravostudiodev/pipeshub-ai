@@ -1265,9 +1265,21 @@ class SlackConnector(BaseConnector):
         )
         last_data     = await self.messages_sync_point.read_sync_point(sync_key)
         last_ts: Optional[str] = last_data.get("last_sync_time") if last_data else None
+        checkpoint_ts = last_ts
+        checkpoint_age_days = None
+        if checkpoint_ts:
+            try:
+                checkpoint_age_days = round((time.time() - float(checkpoint_ts)) / 86400, 2)
+            except (TypeError, ValueError):
+                checkpoint_age_days = "invalid"
         self.logger.info(
-            f"[MsgSync] sync_point read: key={sync_key!r}, "
-            f"last_data={last_data!r}, last_ts_from_checkpoint={last_ts!r}"
+            "Slack message sync checkpoint: connector_id=%s channel_id=%s checkpoint_utc=%s "
+            "checkpoint_age_days=%s sync_window=%s",
+            self.connector_id,
+            channel_id,
+            self._slack_ts_to_utc_label(checkpoint_ts) if checkpoint_ts else None,
+            checkpoint_age_days,
+            getattr(self.sync_filters.get("sync_window"), "operator_value", "default_30_days"),
         )
 
         # On first sync (no checkpoint), apply the sync_window filter
@@ -1276,7 +1288,12 @@ class SlackConnector(BaseConnector):
             self.logger.info(f"[MsgSync] no checkpoint, sync-window oldest = {last_ts!r}")
 
         self.logger.info(
-            f"  {'Incremental from ts=' + last_ts if last_ts else 'Full sync (no window limit)'}"
+            "Slack message history request window: connector_id=%s channel_id=%s "
+            "mode=%s effective_oldest_utc=%s",
+            self.connector_id,
+            channel_id,
+            "incremental" if checkpoint_ts else "initial",
+            self._slack_ts_to_utc_label(last_ts) if last_ts else None,
         )
 
         ctx = ProcessingContext(
@@ -1295,6 +1312,8 @@ class SlackConnector(BaseConnector):
         cursor:     Optional[str] = None
         newest_ts:  Optional[str] = None   # newest across ALL pages (Slack newest-first)
         total_msgs = 0
+        page_count = 0
+        sync_failure: Optional[str] = None
         all_deferred_threads: list[DeferredThread] = []
         join_attempted = False
 
@@ -1310,6 +1329,7 @@ class SlackConnector(BaseConnector):
 
             if not resp or not resp.success:
                 error = getattr(resp, "error", "no response")
+                sync_failure = str(error)
                 if error == "not_in_channel" and not join_attempted:
                     # Bot is not a member — try joining (works for public channels)
                     self.logger.info(
@@ -1319,33 +1339,47 @@ class SlackConnector(BaseConnector):
                     join_resp = await join_ds.conversations_join(channel=channel_id)
                     if join_resp and join_resp.success:
                         self.logger.info(
-                            f"✅ Joined channel {channel_id}, retrying sync…"
+                            "Joined Slack channel and retrying history: connector_id=%s channel_id=%s",
+                            self.connector_id, channel_id,
                         )
                         join_attempted = True
+                        sync_failure = None
                         continue
                     else:
                         join_err = getattr(join_resp, "error", "unknown")
                         self.logger.warning(
-                            f"Could not join channel {channel_id} ({join_err}), skipping."
+                            "Slack channel join failed: connector_id=%s channel_id=%s error=%s",
+                            self.connector_id, channel_id, join_err,
                         )
+                        sync_failure = f"join_failed:{join_err}"
                         break
                 elif error == "channel_not_found":
                     self.logger.warning(
-                        f"Skipping channel {channel_id}: {error}"
+                        "Slack message history failed: connector_id=%s channel_id=%s error=%s page=%s",
+                        self.connector_id, channel_id, error, page_count + 1,
                     )
                     break
                 elif error == "not_in_channel":
                     # Already attempted join but still failing
                     self.logger.warning(
-                        f"Skipping channel {channel_id}: still not_in_channel after join attempt"
+                        "Slack message history failed after join attempt: connector_id=%s "
+                        "channel_id=%s error=%s page=%s",
+                        self.connector_id, channel_id, error, page_count + 1,
                     )
                     break
                 else:
                     self.logger.error(
-                        f"❌ conversations.history({channel_id}) failed: {error}"
+                        "Slack conversations.history failed: connector_id=%s channel_id=%s "
+                        "error=%s http_status=%s retry_after=%s page=%s cursor_present=%s "
+                        "effective_oldest_utc=%s",
+                        self.connector_id, channel_id, error,
+                        getattr(resp, "status_code", None), getattr(resp, "retry_after", None),
+                        page_count + 1, bool(cursor),
+                        self._slack_ts_to_utc_label(last_ts) if last_ts else None,
                     )
                     break
 
+            page_count += 1
             msgs: list[dict[str, Any]] = resp.data.get("messages", [])
             if not msgs:
                 break
@@ -1447,12 +1481,24 @@ class SlackConnector(BaseConnector):
                         exc_info=True,
                     )
 
-        # Persist checkpoint ONLY after all pages succeed
-        if newest_ts:
+        # Preserve the current checkpoint if any history page failed. Slack can
+        # return partial pages before an error; advancing here would skip that gap.
+        if newest_ts and sync_failure is None:
             await self.messages_sync_point.update_sync_point(
                 sync_key, {"last_sync_time": newest_ts}
             )
-            self.logger.info(f"📍 Checkpoint updated for {channel_id}: ts={newest_ts}")
+            self.logger.info(
+                "Slack message sync complete: connector_id=%s channel_id=%s pages=%s "
+                "messages=%s newest_message_utc=%s checkpoint_updated=true",
+                self.connector_id, channel_id, page_count, total_msgs,
+                self._slack_ts_to_utc_label(newest_ts),
+            )
+        elif sync_failure is not None:
+            self.logger.error(
+                "Slack message sync incomplete: connector_id=%s channel_id=%s pages=%s "
+                "messages=%s failure=%s checkpoint_updated=false",
+                self.connector_id, channel_id, page_count, total_msgs, sync_failure,
+            )
 
         self.logger.info(f"✅ {total_msgs} messages synced for {channel_id}")
 

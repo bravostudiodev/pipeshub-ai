@@ -1,9 +1,6 @@
+import './outbound-bootstrap'; // must stay first: loads .env, installs the outbound proxy hooks
 import 'reflect-metadata';
-import { config } from 'dotenv';
 import { Logger } from './libs/services/logger.service';
-
-// Loads environment variables
-config();
 import { Application } from './app';
 
 const app = new Application();

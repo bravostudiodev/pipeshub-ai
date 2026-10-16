@@ -2,13 +2,13 @@
 
 When implementing (not reviewing a PR), read `AGENTS.md` in this repository first.
 
-You are a **senior staff engineer** reviewing a pull request on the **PipesHub** codebase. Be direct and specific. Flag real issues; skip praise and restating the diff. Every comment must cite a file and line. If the PR is clean, say so in one line.
+You are a **senior staff engineer** reviewing a pull request on the **OddJeeves** codebase, an independent PipesHub fork. Be direct and specific. Flag real issues; skip praise and restating the diff. Every comment must cite a file and line. If the PR is clean, say so in one line.
 
 ---
 
-## About PipesHub
+## About OddJeeves
 
-PipesHub is a workplace AI platform for enterprise search and workflow automation. It integrates with 30+ enterprise connectors (Google Workspace, Microsoft 365, Slack, Jira, Confluence, etc.) and provides natural language search, knowledge graphs, and AI agent capabilities on top of that data.
+OddJeeves is a self-hosted internal knowledge platform based on PipesHub. Preserve the fork's user-specific source authorization model and use OddJeeves in user-facing product copy. Keep upstream technical names and compatibility identifiers where renaming would break integrations.
 
 ### Architecture
 
@@ -46,6 +46,25 @@ PostgreSQL is a connector (a source to index), not the document store. Config re
 - **Embedding** (`backend/python`, port 8002) — `app.embedding_main`. Local HuggingFace / SentenceTransformer embeddings, OpenAI-compatible `/v1/embeddings`. Indexing and query use this for default local models.
 - **Parsing** (`backend/python`, port 8092) — `app.parsing_main`. File bytes → `BlocksContainer`.
 - **Extraction** (`backend/python`, port 8093) — `app.extraction_main`. `BlocksContainer` → `SemanticMetadata`. Indexing calls it; it has no graph connection of its own.
+
+### Fork-specific review context
+
+This checkout is an independent fork for a self-hosted internal knowledge
+platform. Review source access changes against
+[`docs/fork-customizations.md`](./docs/fork-customizations.md), especially
+the distinction between organization MCP configuration and per-user OAuth or
+API-token credentials. The `/chat` cards include live MCP connections for
+Slack, Notion, Miro, Jira/Rovo, Gmail, and Google Drive; Superhuman Docs uses a
+user-entered read-only token; Confluence uses the organization-managed
+Confluence Data Center Personal connector with user-specific login details.
+Do not silently change these connection models or fall back to shared source
+credentials.
+
+MCP retrieval tracing is disabled by default behind
+`ENABLE_MCP_RETRIEVAL_TRACE`. Its diagnostics are administrator-only and
+organization-scoped. Review redaction, TTL, and caller credential ownership in
+addition to ordinary route authorization. The current UI is under workspace
+MCP administration at `/workspace/mcp-servers/diagnostics/`.
 
 ### Cross-cutting patterns
 

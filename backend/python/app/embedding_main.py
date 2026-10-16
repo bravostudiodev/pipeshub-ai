@@ -6,6 +6,7 @@ indexing and query services can share a single in-process model load.
 
 from __future__ import annotations
 
+import app.utils.outbound_bootstrap  # noqa: F401  (must precede client construction)
 import app.utils.runtime_threads  # noqa: E402 - must precede all ML library imports
 
 import asyncio

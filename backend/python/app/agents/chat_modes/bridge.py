@@ -65,6 +65,7 @@ from app.agents.chat_modes.policy import (
 )
 from app.agents.chat_modes.prefetch import prefetch_retrieval
 from app.config.constants.service import config_node_constants
+from app.services.featureflag.platform_settings import is_public_web_access_enabled
 from app.modules.demo_data.chat import (
     demo_exclusions_for_run,
     exclude_from_query,
@@ -389,6 +390,10 @@ async def run_chat_stream(  # noqa: PLR0913 - mirrors run_agent_loop_stream's ca
     try:
         blob_store = BlobStorage(logger=log, config_service=config_service, graph_provider=graph_provider)
         ref_mapper = CitationRefMapper()
+        public_web_enabled = (
+            policy.include_web_search
+            and await is_public_web_access_enabled(config_service)
+        )
 
         # Everything needed to build the initial state is independent, and all
         # of it sits before the first streamed byte -- run it as one wave. The
@@ -399,7 +404,7 @@ async def run_chat_stream(  # noqa: PLR0913 - mirrors run_agent_loop_stream's ca
                 fetch_user_connector_instances(
                     graph_provider, user_info["userId"], user_info["orgId"], log,
                 ),
-                _resolve_web_search_config(config_service, log) if policy.include_web_search else _none(),
+                _resolve_web_search_config(config_service, log) if public_web_enabled else _none(),
                 resolve_attachments(
                     query_info.get("attachments"), blob_store=blob_store,
                     org_id=user_info.get("orgId", ""), ref_mapper=ref_mapper, logger=log,

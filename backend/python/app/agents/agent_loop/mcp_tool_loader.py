@@ -30,14 +30,21 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from app.agent_loop_lib.tools.errors import DuplicateToolNameError, DuplicateToolPathError
+from app.agent_loop_lib.tools.errors import (
+    DuplicateToolNameError,
+    DuplicateToolPathError,
+)
 from app.agents.agent_loop.lazy_tools_wiring import MCP_PARENT
 from app.agents.agent_loop.mcp_access import MCPAccessResolver, ResolvedMCPServer
 from app.agents.agent_loop.mcp_session import MCPSessionManager
 from app.agents.agent_loop.mcp_tool_adapter import MCPToolAdapter
 from app.agents.mcp.discovery import build_namespaced_tool_name, discover_tools
 from app.agents.mcp.models import MCPToolInfo
-from app.agents.mcp.service import credentials_to_discovery_dict, instance_config_from_dict
+from app.agents.mcp.retrieval_trace import discovery_fields, record_event
+from app.agents.mcp.service import (
+    credentials_to_discovery_dict,
+    instance_config_from_dict,
+)
 
 if TYPE_CHECKING:
     from app.agent_loop_lib.tools.registry import ToolRegistry
@@ -106,7 +113,11 @@ class MCPToolProvider:
         `context.mcp_tool_load_failures` and results in `False`."""
         state_logger = context.logger or logger
 
+        discovery_started = asyncio.get_running_loop().time()
         tool_infos, failure_reason = await self._discover_or_fallback(server, timeout_seconds)
+        trace_fields = discovery_fields(server, tool_infos, failure_reason)
+        trace_fields["durationMs"] = max(0, round((asyncio.get_running_loop().time() - discovery_started) * 1000))
+        await record_event(context, "discovery", trace_fields)
         if not tool_infos:
             context.mcp_tool_load_failures.append({
                 "instanceId": server.instance_id, "name": server.name, "reason": failure_reason or "error",

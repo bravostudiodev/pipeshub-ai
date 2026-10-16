@@ -737,7 +737,7 @@ export function ShareSidebar({
                 disabled={selectedItems.length === 0 || selectedItems.some((s) => s.isInvalid)}
                 loading={isSubmitting}
                 loadingLabel={t('shareSidebar.sharing')}
-                style={selectedItems.length > 0 && !isSubmitting && !selectedItems.some((s) => s.isInvalid) ? { backgroundColor: 'var(--emerald-10)' } : undefined}
+                style={selectedItems.length > 0 && !isSubmitting && !selectedItems.some((s) => s.isInvalid) ? { backgroundColor: 'var(--accent-10)' } : undefined}
               >
                 {t('action.share')}
               </LoadingButton>

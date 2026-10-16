@@ -38,6 +38,7 @@ from app.agents.agent_loop.tool_adapter import PipesHubStructuredToolAdapter, sp
 from app.agents.agent_loop.web_tool_adapter import WebToolAdapter
 from app.agents.tools.factories.base import ToolsetAuthError
 from app.agents.tools.factories.registry import ClientFactoryRegistry
+from app.services.featureflag.platform_settings import is_public_web_access_enabled
 
 if TYPE_CHECKING:
     from langchain_core.tools import StructuredTool
@@ -367,6 +368,8 @@ class PipesHubToolLoader:
                 continue
 
         # ── Dynamic tools ─────────────────────────────────────────────────
+        if not await is_public_web_access_enabled(context.config_service):
+            context.tool_state["web_search_config"] = None
         dynamic_tools = _build_dynamic_tools(context)
         dynamic_count = 0
         for dt in dynamic_tools:

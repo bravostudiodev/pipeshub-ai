@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Box, Button, Flex, Text } from '@radix-ui/themes';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
-import { LottieLoader } from '@/app/components/ui/lottie-loader';
+import { PipesHubIcon } from '@/app/components/ui';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import { isProcessedError } from '@/lib/api';
 import {
@@ -100,7 +100,6 @@ export function McpOAuthCallbackClient() {
     minHeight: '100vh',
     width: '100%',
     padding: 'var(--space-5)',
-    background: 'linear-gradient(180deg, var(--olive-2) 0%, var(--olive-1) 100%)',
   } as const;
 
   const columnStyle = {
@@ -114,9 +113,7 @@ export function McpOAuthCallbackClient() {
     case 'processing':
       statusPanel = (
         <Flex direction="column" align="center" gap="5">
-          <Box style={{ width: 48, height: 48, flexShrink: 0 }}>
-            <LottieLoader variant="still" size={48} />
-          </Box>
+          <PipesHubIcon size={48} />
           <Flex direction="column" align="center" gap="1">
             <Text as="p" size="4" weight="medium" style={{ margin: 0, color: 'var(--gray-12)', letterSpacing: '-0.04px', lineHeight: '26px' }}>
               {t('workspace.mcpServers.oauth.completingTitle')}
@@ -193,7 +190,7 @@ export function McpOAuthCallbackClient() {
   }
 
   return (
-    <Flex align="center" justify="center" style={shellStyle}>
+    <Flex align="center" justify="center" className="oauth-callback-shell" style={shellStyle}>
       <Box key={status} style={columnStyle}>
         {statusPanel}
       </Box>

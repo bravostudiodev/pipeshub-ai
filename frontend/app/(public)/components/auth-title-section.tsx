@@ -4,12 +4,11 @@ import React from 'react';
 import { Box, Flex, Text } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { PipesHubIcon } from '@/app/components/ui';
-import { LottieLoader } from '@/app/components/ui/lottie-loader';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface AuthTitleSectionProps {
-  /** Main heading. Defaults to "Welcome to Pipeshub". */
+  /** Main heading. Defaults to "Welcome to OddJeeves". */
   title?: string;
   /** Subtitle below the heading. Defaults to the tagline. */
   subtitle?: string;
@@ -37,7 +36,7 @@ export default function AuthTitleSection({
     <Box style={{ marginBottom }}>
       {/* ── Logo mark ─────────────────────────────────────────── */}
       <Box style={{ marginBottom: 'var(--space-4)' }}>
-        <LottieLoader autoplay size={40} />
+        <PipesHubIcon size={40} />
       </Box>
 
       {/* ── Heading + subtitle ────────────────────────────────── */}

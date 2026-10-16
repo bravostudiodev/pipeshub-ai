@@ -2,6 +2,7 @@
 exposes a thin async interface for tool discovery.
 """
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -17,10 +18,11 @@ from fastmcp.client.transports import (
     StdioTransport,
     StreamableHttpTransport,
 )
-from mcp.shared._httpx_utils import create_mcp_http_client
 
 from app.agents.mcp.models import MCPServerConfig, MCPTransport
+from app.utils.outbound_http import tag_client
 from app.utils.url_redaction import redact_url
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +46,51 @@ DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 _STDERR_TAIL_MAX_CHARS = 4000
 
 
+_ERROR_BODY_MAX_CHARS = 1000
+
+
+def _describe_request(request: httpx.Request) -> str:
+    """Method/tool name and argument *keys* only — argument values are user content."""
+    detail = "method=?"
+    try:
+        payload = json.loads(request.content)
+        if isinstance(payload, dict):
+            params = payload.get("params") or {}
+            args = params.get("arguments") if isinstance(params, dict) else None
+            detail = f"rpc={payload.get('method')} tool={params.get('name') if isinstance(params, dict) else None}"
+            if isinstance(args, dict):
+                detail += f" arg_keys={sorted(args)}"
+    except Exception:
+        pass
+    sent_session = "mcp-session-id" in request.headers
+    return f"{detail} session_header_sent={sent_session} protocol={request.headers.get('mcp-protocol-version')}"
+
+
 class MCPConnectionError(Exception):
     """Raised when an MCP server cannot be reached or its transport config is invalid."""
+
+
+class MCPProviderRejectedError(MCPConnectionError):
+    """The provider answered a tool call with an HTTP error; carries what it said."""
+
+    def __init__(self, status_code: int, url: str | None, body: str | None, retry_after: str | None) -> None:
+        self.status_code = status_code
+        self.url = url
+        self.body = body
+        self.retry_after = retry_after
+        detail = f" — server response: {body}" if body else ""
+        super().__init__(f"HTTP {status_code} from {url or 'MCP server'}{detail}")
+
+
+class MCPReauthRequiredError(MCPConnectionError):
+    """The stored credential can't be refreshed; only the user reconnecting fixes it."""
+
+    def __init__(self, server_name: str, reason: str) -> None:
+        self.server_name = server_name
+        super().__init__(
+            f"{server_name} needs to be reconnected: {reason}. Ask the user to reconnect it from the chat "
+            "source cards; retrying will not help."
+        )
 
 
 class _LastHttpResponse:
@@ -64,10 +109,22 @@ class _LastHttpResponse:
     def __init__(self) -> None:
         self.status_code: Optional[int] = None
         self.url: Optional[str] = None
+        self.error_body: Optional[str] = None
+        self.error_request: Optional[str] = None
+        self.retry_after: Optional[str] = None
 
     async def _on_response(self, response: httpx.Response) -> None:
         self.status_code = response.status_code
         self.url = redact_url(str(response.request.url))
+        if response.status_code < 400:
+            return
+        # The SDK raises a bare HTTPStatusError, so the provider's explanation is otherwise lost.
+        try:
+            self.error_body = (await response.aread()).decode("utf-8", "replace")[:_ERROR_BODY_MAX_CHARS]
+        except Exception:
+            self.error_body = None
+        self.error_request = _describe_request(response.request)
+        self.retry_after = response.headers.get("Retry-After")
 
     def httpx_client_factory(
         self,
@@ -77,6 +134,7 @@ class _LastHttpResponse:
         **kwargs: Any,
     ) -> httpx.AsyncClient:
         client = create_mcp_http_client(headers=headers, timeout=timeout, auth=auth)
+        tag_client(client, "mcp")
         client.event_hooks["response"].append(self._on_response)
         return client
 
@@ -212,6 +270,7 @@ class MCPClientManager:
         self.headers = headers or {}
         self._session_client: Optional[Client] = None
         self._session_stderr_path: Optional[Path] = None
+        self._session_recorder: Optional[_LastHttpResponse] = None
 
     @asynccontextmanager
     async def connect(self) -> AsyncIterator[Client]:
@@ -300,7 +359,13 @@ class MCPClientManager:
             raise MCPConnectionError(message) from e
         self._session_client = client
         self._session_stderr_path = stderr_path
+        self._session_recorder = response_recorder
         return client
+
+    @property
+    def last_http(self) -> Optional[_LastHttpResponse]:
+        """Most recent HTTP exchange on the open session, for diagnostics; None for STDIO."""
+        return self._session_recorder
 
     async def call_tool_in_session(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Calls a tool on the session `open()` established.
@@ -311,8 +376,19 @@ class MCPClientManager:
             raise MCPConnectionError(f"MCP session for {self.config.id} ({self.config.name}) is not open")
         try:
             return await asyncio.wait_for(
-                self._session_client.call_tool(tool_name, arguments), timeout=DEFAULT_CALL_TIMEOUT_SECONDS,
+                # raise_on_error=False keeps a server-reported tool error (bad arguments) as a result with
+                # is_error set, instead of an exception indistinguishable from a transport failure.
+                self._session_client.call_tool(tool_name, arguments, raise_on_error=False),
+                timeout=DEFAULT_CALL_TIMEOUT_SECONDS,
             )
+        except httpx.HTTPStatusError as e:
+            recorder = self._session_recorder
+            raise MCPProviderRejectedError(
+                e.response.status_code,
+                recorder.url if recorder else None,
+                recorder.error_body if recorder else None,
+                recorder.retry_after if recorder else None,
+            ) from e
         except Exception as e:
             stderr_tail = _read_stderr_tail(self._session_stderr_path)
             if not stderr_tail:

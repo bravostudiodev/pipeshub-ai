@@ -34,7 +34,7 @@ import {
 
 const orgIdToSamlEmailKey: Record<string, string> = {};
 export const SAML_LOGOUT_UNSUPPORTED_MESSAGE =
-  "Signing out through your identity provider isn't supported. To sign out, use Sign out in PipesHub.";
+  "Signing out through your identity provider isn't supported. To sign out, use Sign out in OddJeeves.";
 @injectable()
 export class SamlController {
   constructor(

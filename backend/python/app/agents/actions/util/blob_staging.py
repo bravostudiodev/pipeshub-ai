@@ -30,6 +30,7 @@ from app.config.constants.service import (
     config_node_constants,
 )
 from app.utils.jwt import mint_service_token
+from app.utils.storage_download import is_inline_file
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ async def fetch_blob_bytes(
                     f"Storage download failed [{resp.status}]: {detail}"
                 )
             content_type = (resp.headers.get("Content-Type") or "").lower()
-            if "application/json" in content_type:
+            if "application/json" in content_type and not is_inline_file(resp.headers):
                 payload = await resp.json()
                 signed_url = (
                     payload.get("signedUrl")

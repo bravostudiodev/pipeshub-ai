@@ -79,6 +79,8 @@ export function useMcpOAuthPopup({
   const completionHandledRef = useRef(false);
   const verifyAbortRef = useRef(false);
   const aliveRef = useRef(true);
+  // A restart invalidates in-flight URL fetches, popup polls, and verification.
+  const attemptRef = useRef(0);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -101,6 +103,7 @@ export function useMcpOAuthPopup({
 
   const completeOAuthFlow = useCallback(async () => {
     if (completionHandledRef.current) return;
+    const attempt = attemptRef.current;
     completionHandledRef.current = true;
     clearPoll();
 
@@ -117,10 +120,10 @@ export function useMcpOAuthPopup({
     if (!aliveRef.current) return;
 
     let verified = false;
-    for (let attempt = 0; attempt < OAUTH_VERIFY_ATTEMPTS; attempt++) {
-      if (verifyAbortRef.current || !aliveRef.current) break;
+    for (let retry = 0; retry < OAUTH_VERIFY_ATTEMPTS; retry++) {
+      if (verifyAbortRef.current || !aliveRef.current || attemptRef.current !== attempt) break;
       await new Promise<void>((r) => setTimeout(r, OAUTH_VERIFY_GAP_MS));
-      if (verifyAbortRef.current || !aliveRef.current) break;
+      if (verifyAbortRef.current || !aliveRef.current || attemptRef.current !== attempt) break;
       try {
         verified = await verifyAuthenticatedRef.current();
         if (verified) break;
@@ -129,7 +132,7 @@ export function useMcpOAuthPopup({
       }
     }
 
-    if (verifyAbortRef.current || !aliveRef.current) return;
+    if (verifyAbortRef.current || !aliveRef.current || attemptRef.current !== attempt) return;
 
     if (verified) {
       setStatus('success');
@@ -144,6 +147,10 @@ export function useMcpOAuthPopup({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
+      // Every integration card has a listener on window. Accept only the popup
+      // opened by this hook instance; otherwise a successful Miro/Gmail callback
+      // makes unrelated cards verify their own credentials and show false errors.
+      if (event.source !== popupRef.current) return;
       const type = (event.data as { type?: string } | null)?.type;
 
       if (isMcpOAuthSuccessMessageType(type)) {
@@ -154,7 +161,6 @@ export function useMcpOAuthPopup({
         verifyAbortRef.current = true;
         completionHandledRef.current = false;
         clearPoll();
-        popupRef.current = null;
         setStatus('failed');
         onFailedRef.current?.();
       }
@@ -166,54 +172,75 @@ export function useMcpOAuthPopup({
 
   const startOAuthPopup = useCallback(
     async (instanceId: string) => {
+      const attempt = ++attemptRef.current;
       clearPoll();
+      const previousPopup = popupRef.current;
+      if (previousPopup && !previousPopup.closed) {
+        try { previousPopup.close(); } catch { /* ignore */ }
+      }
       completionHandledRef.current = false;
       verifyAbortRef.current = false;
       popupRef.current = null;
       setStatus('authenticating');
+
+      // Open synchronously within the click gesture so browsers do not block the
+      // OAuth window while the authorization URL request is in flight.
+      const popup = openCenteredOAuthWindow('about:blank', `mcp-oauth-${instanceId}`);
+      if (!popup || popup.closed) {
+        setStatus('failed');
+        onFailedRef.current?.();
+        return;
+      }
+      popupRef.current = popup;
 
       try {
         const fetchAuthUrl =
           getAuthorizationUrlRef.current ??
           ((id: string) => McpServersApi.getOAuthAuthorizationUrl(id, window.location.origin));
         const { authorizationUrl } = await fetchAuthUrl(instanceId);
+        if (attemptRef.current !== attempt || !aliveRef.current) return;
         if (!authorizationUrl) {
+          popup.close();
+          popupRef.current = null;
           setStatus('failed');
           onFailedRef.current?.();
           return;
         }
 
-        const popup = openCenteredOAuthWindow(authorizationUrl, `mcp-oauth-${instanceId}`);
-        if (!popup || popup.closed) {
-          setStatus('idle');
-          onFailedRef.current?.();
-          return;
-        }
-
-        popupRef.current = popup;
+        popup.location.replace(authorizationUrl);
         popup.focus();
 
         let pollCount = 0;
         pollRef.current = setInterval(() => {
+          if (attemptRef.current !== attempt) return;
           pollCount += 1;
           if (pollCount >= OAUTH_POPUP_MAX_POLLS) {
             clearPoll();
+            if (!popup.closed) popup.close();
+            popupRef.current = null;
             completionHandledRef.current = false;
-            setStatus('idle');
+            setStatus('failed');
             onFailedRef.current?.();
             return;
           }
           if (!popup.closed || completionHandledRef.current) return;
-          void completeOAuthFlow();
+          // Closing a provider page without our success callback is a cancelled
+          // attempt. A previous credential must not make a failed reconnect pass.
+          clearPoll();
+          popupRef.current = null;
+          setStatus('failed');
+          onFailedRef.current?.();
         }, OAUTH_POPUP_POLL_MS);
       } catch {
+        if (attemptRef.current !== attempt || !aliveRef.current) return;
         clearPoll();
+        if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
         popupRef.current = null;
         setStatus('failed');
         onFailedRef.current?.();
       }
     },
-    [clearPoll, completeOAuthFlow]
+    [clearPoll]
   );
 
   const reset = useCallback(() => setStatus('idle'), []);

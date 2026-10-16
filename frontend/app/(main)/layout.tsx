@@ -68,7 +68,7 @@ export default function RootLayout({
   }, [language])
 
   useEffect(() => {
-    document.title = "Pipeshub AI"
+    document.title = 'OddJeeves'
   }, [])
 
   const currentLang = mounted ? language : 'en'

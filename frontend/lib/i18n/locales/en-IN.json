@@ -199,14 +199,14 @@
     "nav": {
       "prev": "Prev",
       "next": "Next",
-      "enterPipeshub": "Enter Pipeshub",
+      "enterPipeshub": "Continue",
       "finishing": "Finishing…",
       "saveLlmFirst": "Save the AI Model step first to continue"
     },
     "save": "Save",
     "saving": "Saving…",
     "footer": {
-      "copyright": "© 2026 Pipeshub LLC",
+      "copyright": "© 2026 OddJeeves",
       "privacyPolicy": "Privacy Policy",
       "website": "Website",
       "visitDocs": "Visit",
@@ -420,9 +420,9 @@
   },
   "electron": {
     "serverUrlSetup": {
-      "title": "Connect to PipesHub Server",
-      "subtitleFirstRun": "Enter the URL of your PipesHub server to get started.",
-      "subtitleExisting": "Confirm or update your PipesHub server URL.",
+      "title": "Connect to OddJeeves Server",
+      "subtitleFirstRun": "Enter the URL of your OddJeeves server to get started.",
+      "subtitleExisting": "Confirm or update your OddJeeves server URL.",
       "label": "Server URL",
       "submit": "Connect",
       "changeServer": "Change server",
@@ -908,11 +908,11 @@
     "deleteAgent": "Delete agent",
     "deleteAgentConfirm": "Delete this agent?",
     "deleteAgentDescription": "The agent named",
-    "deleteAgentWarning": "will be permanently removed from Pipeshub. Chats that use it may no longer work as expected.",
+    "deleteAgentWarning": "will be permanently removed from OddJeeves. Chats that use it may no longer work as expected.",
     "deleteChat": "Delete",
     "deleteChatConfirm": "Are you sure?",
     "deleteChatDescription": "The chat titled",
-    "deleteChatWarning": "will be permanently removed from Pipeshub. All users with shared access will lose their access.",
+    "deleteChatWarning": "will be permanently removed from OddJeeves. All users with shared access will lose their access.",
     "editAgent": "Edit agent",
     "failedToArchive": "Failed to archive chat",
     "failedToDelete": "Failed to delete chat",
@@ -1453,11 +1453,11 @@
     },
     "oauth2": {
       "title": "OAuth 2.0",
-      "subtitle": "Manage OAuth 2.0 applications that can access your organisation via Pipeshub",
+      "subtitle": "Manage OAuth 2.0 applications that can access your organisation via OddJeeves",
       "searchPlaceholder": "Search...",
       "newApplication": "New OAuth application",
       "emptyTitle": "No OAuth 2.0 applications",
-      "emptyDescription": "Create an OAuth 2.0 app to let third-party integrations access your organisation via Pipeshub.",
+      "emptyDescription": "Create an OAuth 2.0 app to let third-party integrations access your organisation via OddJeeves.",
       "loading": "Loading applications...",
       "errorGeneric": "Failed to load OAuth applications",
       "retry": "Retry",
@@ -1582,7 +1582,7 @@
         "returnToAppsButton": "Return to OAuth 2.0 Apps",
         "showSecretAria": "Show client secret",
         "hideSecretAria": "Hide client secret",
-        "clientCredentialsWarning": "Client credentials tokens always access Pipeshub as the user who created this application — not as whoever calls the token endpoint. Within the scopes you grant it, the token can reach everything that person can reach, and it inherits their role, so an application created by an admin has admin access. It also stops working if that account is deleted. If this application also supports the authorization code flow, users can still authorize it for themselves that way.",
+        "clientCredentialsWarning": "Client credentials tokens always access OddJeeves as the user who created this application — not as whoever calls the token endpoint. Within the scopes you grant it, the token can reach everything that person can reach, and it inherits their role, so an application created by an admin has admin access. It also stops working if that account is deleted. If this application also supports the authorization code flow, users can still authorize it for themselves that way.",
         "successTitle": "Application created",
         "successDescription": "Your OAuth application was created successfully.",
         "errorCreateTitle": "Failed to create application",
@@ -1627,8 +1627,8 @@
       "configUpdateModel": "Update Model",
       "configFillRequiredTooltip": "Fill in all required fields",
       "configSaveErrorFallback": "Failed to save model configuration",
-      "configSaveOutboundError": "PipesHub cannot reach this model provider from inside the container. Cloud providers need outbound internet — see deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
-      "configSaveTimeoutError": "Request timed out while validating the model. Cloud providers need outbound internet from the PipesHub container — see deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveOutboundError": "OddJeeves cannot reach this model provider from inside the container. Cloud providers need outbound internet — see deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
+      "configSaveTimeoutError": "Request timed out while validating the model. Cloud providers need outbound internet from the OddJeeves container — see deployment/docker-compose/ADVANCED_DEPLOYMENT.md#container-outbound-connectivity.",
       "configNoConfigRequired": "No configuration required for this provider.",
       "configDefaultModelNotice": "\"{{modelName}}\" will be used by the system by default.",
       "configSectionModelConfiguration": "Model Configuration",
@@ -1931,7 +1931,7 @@
       "selectPrompt": "Select an archived chat to preview",
       "restore": "Restore",
       "permanentlyDelete": "Permanently Delete",
-      "deleteConfirmMessage": "This chat will be permanently deleted from Pipeshub. Any shared access will be lost.",
+      "deleteConfirmMessage": "This chat will be permanently deleted from OddJeeves. Any shared access will be lost.",
       "restoreSuccess": "Chat restored",
       "restoreError": "Failed to restore chat",
       "deleteSuccess": "Deleted Successfully",
@@ -1974,7 +1974,7 @@
       "postalCodePlaceholder": "eg: 94107",
       "dataCollection": "Data Collection Settings",
       "enableDataCollection": "Enable",
-      "dataCollectionDescription": "PipesHub collects and processes personal information for a variety of business purposes.",
+      "dataCollectionDescription": "OddJeeves collects and processes personal information for a variety of business purposes.",
       "dataCollectionReason1": "To provide customer service and support for our products",
       "dataCollectionReason2": "To send marketing communications",
       "dataCollectionReason3": "To manage your subscription to newsletters or other updates",
@@ -2154,7 +2154,7 @@
       },
       "successDialog": {
         "title": "Instance is configured and ready to sync!",
-        "description": "You can start syncing your {{name}} data with Pipeshub now,",
+        "description": "You can start syncing your {{name}} data with OddJeeves now,",
         "descriptionSuffix": "or choose to do it later from settings.",
         "later": "I'll do it later",
         "startSync": "Start Syncing Now"
@@ -2265,8 +2265,8 @@
         "additionalSettingsDescription": "Configure connector-specific sync options",
         "nonEditableUrlFieldTooltip": "The website URL can't be changed after it's set.",
         "nonEditableLockedFieldTooltip": "This value can't be changed after it's set.",
-        "localFsDesktopOnlyBanner": "Local filesystem settings can only be changed in the PipesHub desktop app. This view is read-only.",
-        "localFsDesktopOnlySaveTooltip": "Open the PipesHub desktop app to change these settings.",
+        "localFsDesktopOnlyBanner": "Local filesystem settings can only be changed in the OddJeeves desktop app. This view is read-only.",
+        "localFsDesktopOnlySaveTooltip": "Open the OddJeeves desktop app to change these settings.",
         "importDate": "Import start date",
         "importDateDescription": "Choose the date from which messages are imported",
         "importAllTime": "Import All Time Data",
@@ -2373,11 +2373,11 @@
         }
       },
       "localFsDesktop": {
-        "offlineToast": "Open the PipesHub desktop app on the machine that owns this folder to sync.",
-        "offlineNamedToast": "{{deviceName}}, the device that owns this folder, is not connected. Open the PipesHub desktop app on that device to sync.",
-        "unclaimedToast": "This connector has not been set up on a desktop yet. Open the PipesHub desktop app on the machine that owns this folder and enable sync there once.",
-        "ownedByOtherDeviceToast": "This connector belongs to {{deviceName}}. Enable sync from the PipesHub desktop app on that device.",
-        "ownedByOtherDeviceUnknownToast": "This connector belongs to another device. Enable sync from the PipesHub desktop app on that device.",
+        "offlineToast": "Open the OddJeeves desktop app on the machine that owns this folder to sync.",
+        "offlineNamedToast": "{{deviceName}}, the device that owns this folder, is not connected. Open the OddJeeves desktop app on that device to sync.",
+        "unclaimedToast": "This connector has not been set up on a desktop yet. Open the OddJeeves desktop app on the machine that owns this folder and enable sync there once.",
+        "ownedByOtherDeviceToast": "This connector belongs to {{deviceName}}. Enable sync from the OddJeeves desktop app on that device.",
+        "ownedByOtherDeviceUnknownToast": "This connector belongs to another device. Enable sync from the OddJeeves desktop app on that device.",
         "deviceIdentityError": "Could not identify this device: {{error}}"
       },
       "schemaForm": {
@@ -2389,7 +2389,7 @@
       },
       "personal": {
         "desktopRequiredTitle": "Desktop app required",
-        "desktopRequiredDescription": "Local filesystem connector is only available in the PipesHub desktop app. Please use the desktop app to set up this connector."
+        "desktopRequiredDescription": "Local filesystem connector is only available in the OddJeeves desktop app. Please use the desktop app to set up this connector."
       },
       "syncStatus": {
         "paused": "Sync Paused",
@@ -2597,7 +2597,7 @@
         "authMode": "Auth Mode",
         "headerName": "Header Name",
         "authorizationUrl": "Authorization URL",
-        "dcrHint": "Leave blank — PipesHub will detect and use dynamic client registration automatically when the server supports it",
+        "dcrHint": "Leave blank — OddJeeves will detect and use dynamic client registration automatically when the server supports it",
         "tokenUrl": "Token URL",
         "scopes": "Scopes",
         "scopesPlaceholder": "Add a scope",
@@ -2622,14 +2622,14 @@
         "saved": "OAuth app saved",
         "saveError": "Failed to save OAuth app",
         "title": "Configure OAuth App",
-        "description": "PipesHub automatically detects whether this server supports dynamic client registration. Client credentials are only needed when it doesn't.",
+        "description": "OddJeeves automatically detects whether this server supports dynamic client registration. Client credentials are only needed when it doesn't.",
         "alreadyConfigured": "An OAuth app is already configured for this server.",
         "clientId": "Client ID",
         "clientIdPlaceholder": "Enter client ID",
         "clientSecret": "Client Secret",
         "clientSecretPlaceholder": "Enter client secret",
         "dcrProbing": "Checking whether this server can register itself automatically…",
-        "dcrSupportedHint": "This server supports automatic registration. PipesHub will register itself and no client credentials are required.",
+        "dcrSupportedHint": "This server supports automatic registration. OddJeeves will register itself and no client credentials are required.",
         "dcrUnsupportedHint": "This server requires a manually registered OAuth app. Create one with the callback URL below, then enter its client ID and secret.",
         "dcrUnknownHint": "Couldn't confirm automatic registration support. If it isn't supported, register an OAuth app with the callback URL below and enter its client ID and secret.",
         "callbackUrlLabel": "Callback URL",
@@ -2641,7 +2641,7 @@
         "completingTitle": "Completing sign-in…",
         "processingHint": "Please wait while we finish connecting your account.",
         "successTitle": "Connected successfully",
-        "successBody": "You can close this window and return to PipesHub.",
+        "successBody": "You can close this window and return to OddJeeves.",
         "failedTitle": "Connection failed",
         "retryHint": "Something went wrong. Please close this window and try again.",
         "providerError": "The provider returned an error: {{error}}",
@@ -2911,7 +2911,7 @@
         "title": "Roles & Permissions",
         "role": "Role",
         "groups": "Groups",
-        "roleDescription": "Your role on Pipeshub app",
+        "roleDescription": "Your role on OddJeeves app",
         "groupsDescription": "User groups you belong to",
         "noGroups": "No user groups found"
       },
@@ -2982,7 +2982,7 @@
       "moreChats": "More Chats",
       "demoData": {
         "title": "Demo data",
-        "description": "Acme Corp is a fictional company loaded so you can try PipesHub. This only changes what you see; nothing is deleted.",
+        "description": "Acme Corp is a fictional company loaded so you can try OddJeeves. This only changes what you see; nothing is deleted.",
         "label": "Show Acme Corp demo data in my answers, search and records",
         "followingDefault": "Following the default: shown until your organization has data of its own, then hidden.",
         "yourChoice": "Your own choice.",
@@ -3258,7 +3258,7 @@
       "subtitle": "Create long-lived tokens for your own scripts and integrations, like the MCP server. Only you see your tokens here.",
       "newToken": "New token",
       "emptyTitle": "No personal access tokens",
-      "emptyDescription": "Create a token to connect the PipesHub MCP server or your own scripts.",
+      "emptyDescription": "Create a token to connect the OddJeeves MCP server or your own scripts.",
       "errorGeneric": "Failed to load personal access tokens",
       "retry": "Retry",
       "columnName": "Name",
@@ -3476,12 +3476,12 @@
     },
     "serviceAccounts": {
       "title": "Service accounts",
-      "subtitle": "Service accounts let an automated system connect to PipesHub with its own identity and its own permissions, instead of using a person's account.",
+      "subtitle": "Service accounts let an automated system connect to OddJeeves with its own identity and its own permissions, instead of using a person's account.",
       "newAccount": "New service account",
       "errorGeneric": "The service accounts could not be loaded.",
       "retry": "Try again",
       "emptyTitle": "No service accounts yet",
-      "emptyDescription": "Scripts, integrations, and scheduled jobs can use a service account to read from PipesHub without signing in as a colleague. Each account has only the access you grant it, and it keeps working when people change roles or leave the organization.",
+      "emptyDescription": "Scripts, integrations, and scheduled jobs can use a service account to read from OddJeeves without signing in as a colleague. Each account has only the access you grant it, and it keeps working when people change roles or leave the organization.",
       "columnName": "Name",
       "columnDescription": "Purpose",
       "columnStatus": "Status",
@@ -3536,7 +3536,7 @@
         "mintErrorTitle": "The token could not be created",
         "loadErrorTitle": "The tokens could not be loaded",
         "copyNowTitle": "Copy this token now",
-        "copyNowBody": "This is the only time the token is shown. PipesHub stores only a hash of it, so it cannot be retrieved later.",
+        "copyNowBody": "This is the only time the token is shown. OddJeeves stores only a hash of it, so it cannot be retrieved later.",
         "disabledNote": "This account is disabled, so you cannot create new tokens for it. The tokens it already holds are listed below and can still be revoked.",
         "rotationHelp": "To replace a token, create the new one first and move the integration across while both still work, then revoke the old token. Revoking it first would break whatever is using it.",
         "loading": "Loading tokens…",
@@ -4052,12 +4052,12 @@
   },
   "auth": {
     "titleSection": {
-      "defaultTitle": "Welcome to Pipeshub",
+      "defaultTitle": "Welcome to OddJeeves",
       "defaultSubtitle": "Your organization's knowledge, finally searchable and connected."
     },
     "signUp": {
       "title": "Get Started",
-      "subtitle": "Welcome to Pipeshub -- let's get started!",
+      "subtitle": "Welcome to OddJeeves -- let's get started!",
       "firstNameLabel": "First Name*",
       "lastNameLabel": "Last Name*",
       "orgNameLabel": "Workspace Name*",
@@ -4100,10 +4100,10 @@
         "fullNameRequired": "Full name is required."
       },
       "confirmDialog": {
-        "title": "How PipesHub assigns permissions",
-        "description": "PipesHub uses your email to identify you across the platform and all connected apps.",
+        "title": "How OddJeeves assigns permissions",
+        "description": "OddJeeves uses your email to identify you across the platform and all connected apps.",
         "permissionsTitle": "Permissions mirror your native apps",
-        "permissionsBody": "The access you have inside PipesHub is the same as in each connected app — no more, no less. If a document is restricted in Google Drive, it stays restricted here.",
+        "permissionsBody": "The access you have inside OddJeeves is the same as in each connected app — no more, no less. If a document is restricted in Google Drive, it stays restricted here.",
         "emailNotePre": "Make sure the email you registered with —",
         "emailNotePost": "— is the same one used in your organisation's apps so your permissions are recognised correctly.",
         "cancelButton": "Cancel",
@@ -4123,7 +4123,7 @@
       "orgEmailVerifyFailedTitle": "Verification failed",
       "orgEmailVerifyFailedDescription": "The link may be invalid or expired. Please sign up again.",
       "loadFailedTitle": "Couldn't load sign-in",
-      "loadFailedDescription": "PipesHub couldn't reach the server to load sign-in options. Check your connection or server address and try again.",
+      "loadFailedDescription": "OddJeeves couldn't reach the server to load sign-in options. Check your connection or server address and try again.",
       "retry": "Try again"
     },
     "common": {
@@ -4160,15 +4160,15 @@
       "tooManyIncorrectCredentials": "You have entered incorrect credentials too many times"
     },
     "desktopHandoff": {
-      "title": "Sign-in sent to PipesHub",
-      "description": "You can close this tab and return to the PipesHub app.",
-      "openApp": "Open PipesHub"
+      "title": "Sign-in sent to OddJeeves",
+      "description": "You can close this tab and return to the OddJeeves app.",
+      "openApp": "Open OddJeeves"
     }
   },
   "healthGate": {
     "title": "Unable to Connect to Server",
     "description": "The server is currently unreachable. It may be starting up or undergoing maintenance. We're trying to reconnect.",
-    "contactAdmin": "If this persists, please contact your PipesHub administrator."
+    "contactAdmin": "If this persists, please contact your OddJeeves administrator."
   },
   "askUserQuestion": {
     "questionsHeadingSingular": "Question :",
@@ -4198,7 +4198,7 @@
     },
     "removalNotice": {
       "title": "The Acme Corp demo data is still in your workspace",
-      "description": "Your company's own data is now in PipesHub. The demo is hidden from answers by default, but anyone can turn it back on, and its sample accounts can still sign in. Turn it off for everyone, or remove it permanently.",
+      "description": "Your company's own data is now in OddJeeves. The demo is hidden from answers by default, but anyone can turn it back on, and its sample accounts can still sign in. Turn it off for everyone, or remove it permanently.",
       "remove": "Remove permanently",
       "keep": "Keep for now",
       "turnOff": "Turn off for everyone"
@@ -4290,7 +4290,7 @@
       "restoreFailedTitle": "Couldn't restore '{{name}}'",
       "noneRestored_one": "{{count}} item couldn't be restored",
       "noneRestored_other": "None of the {{count}} items could be restored",
-      "reindexPending": "Restored, but some files aren't searchable yet because they couldn't be queued for indexing. PipesHub queues them again on its own within about an hour. To do it sooner, open each file's menu and choose {{action}}.",
+      "reindexPending": "Restored, but some files aren't searchable yet because they couldn't be queued for indexing. OddJeeves queues them again on its own within about an hour. To do it sooner, open each file's menu and choose {{action}}.",
       "searchableAfterIndexing": "Restored items are back where they were, and show up in search again once indexing finishes.",
       "renamed": "'{{from}}' came back as '{{to}}', because another item there already has that name.",
       "partiallyRestored": "Restored {{restored}} of {{total}} items",
@@ -4389,6 +4389,6 @@
     },
     "team": "Team",
     "teamsNoRoles": "Teams do not have roles",
-    "invite": "Invite to Pipeshub"
+    "invite": "Invite to OddJeeves"
   }
 }

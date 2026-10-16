@@ -1,8 +1,8 @@
 {
   "name": "pipeshub",
   "version": "0.1.0",
-  "description": "PipesHub Desktop App",
-  "author": "PipesHub",
+  "description": "OddJeeves Desktop App",
+  "author": "OddJeeves",
   "homepage": "https://github.com/pipeshub-ai/pipeshub-ai",
   "private": true,
   "main": "electron/compile/main.js",

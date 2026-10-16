@@ -360,6 +360,7 @@ async def run_agent_loop_stream(
         llm_provider=llm_provider, context_length=context_length,
         is_reasoning_model=is_reasoning_model,
         run_id=run_id, cancellation_token=cancellation_token,
+        authenticated_user_id=run_owner.user_id,
     )
 
     async def _produce() -> None:

@@ -524,8 +524,8 @@ const TOOL_STATUS_ICON: Record<NonNullable<MessagePart['status']>, string> = {
 };
 
 const TOOL_STATUS_COLOR: Record<NonNullable<MessagePart['status']>, string> = {
-  running: 'var(--blue-9)',
-  completed: 'var(--green-9)',
+  running: 'var(--accent-9)',
+  completed: 'var(--accent-9)',
   failed: 'var(--slate-9)',
   blocked: 'var(--amber-9)',
 };

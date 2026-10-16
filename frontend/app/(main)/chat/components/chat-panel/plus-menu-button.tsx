@@ -7,6 +7,7 @@ import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
 import { MobileBottomSheet } from '@/app/components/ui/mobile-bottom-sheet';
 import { ICON_SIZES } from '@/lib/constants/icon-sizes';
 import { DEFAULT_AGENT_CAPABILITIES } from '@/chat/types';
+import { useFeatureFlagsStore, selectPublicWebAccessEnabled } from '@/lib/store/feature-flags-store';
 
 export function hasNonDefaultSearchCapabilities(
   internalSearch: boolean,
@@ -151,6 +152,7 @@ export function PlusMenuContent({
   agentHasWebSearch,
 }: PlusMenuContentProps) {
   const { t } = useTranslation();
+  const publicWebAccessEnabled = useFeatureFlagsStore(selectPublicWebAccessEnabled);
   const notConfiguredLabel = t('chat.agentCapabilities.notConfiguredOnAgent', {
     defaultValue: 'Not configured on this agent',
   });
@@ -175,13 +177,15 @@ export function PlusMenuContent({
         disabledTooltip={notConfiguredLabel}
         onCheckedChange={onToggleInternalSearch}
       />
-      <PlusMenuToggleRow
-        label={t('chat.agentCapabilities.webSearch', { defaultValue: 'Web Search' })}
-        checked={webSearch}
-        disabled={agentHasWebSearch === false}
-        disabledTooltip={notConfiguredLabel}
-        onCheckedChange={onToggleWebSearch}
-      />
+      {publicWebAccessEnabled && (
+        <PlusMenuToggleRow
+          label={t('chat.agentCapabilities.webSearch', { defaultValue: 'Web Search' })}
+          checked={webSearch}
+          disabled={agentHasWebSearch === false}
+          disabledTooltip={notConfiguredLabel}
+          onCheckedChange={onToggleWebSearch}
+        />
+      )}
     </Flex>
   );
 }

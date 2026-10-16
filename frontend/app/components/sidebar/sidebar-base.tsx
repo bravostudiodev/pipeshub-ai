@@ -57,7 +57,7 @@ export function SidebarBase({ header, children, footer, secondaryPanel, onDismis
           position: 'fixed',
           inset: 0,
           zIndex: 200,
-          backgroundColor: 'var(--olive-1)',
+          backgroundColor: 'var(--app-sidebar-surface)',
           fontFamily: 'Manrope, sans-serif',
         }}
       >
@@ -188,8 +188,8 @@ export function SidebarBase({ header, children, footer, secondaryPanel, onDismis
       style={{
         width: `${sidebarWidth}px`,
         height: '100%',
-        backgroundColor: 'var(--olive-1)',
-        borderRight: '1px solid var(--olive-3)',
+        backgroundColor: 'var(--app-sidebar-surface)',
+        borderRight: '1px solid var(--olive-4)',
         flexShrink: 0,
         fontFamily: 'Manrope, sans-serif',
         position: 'relative',

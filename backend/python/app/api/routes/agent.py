@@ -61,6 +61,7 @@ from app.modules.transformers.blob_storage import (
     BlobStorage,  # noqa: F401 - re-exported, see above
 )
 from app.services.graph_db.interface.graph_db_provider import IGraphDBProvider
+from app.services.featureflag.platform_settings import is_public_web_access_enabled
 from app.telemetry.event_buffer import record_event
 from app.telemetry.identity import domain_from_email
 from app.utils.aimodels import model_default_reasoning_effort
@@ -3810,6 +3811,13 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
 
                     agent_mcp_servers = configured_mcp_servers
 
+                logger.info(
+                    "MCP attach: enabled=%s tools_filter=%s attached=%d (conversation=%s)",
+                    mcp_enabled,
+                    "none" if chat_query.tools is None else len(chat_query.tools),
+                    len(agent_mcp_servers),
+                    chat_query.conversationId,
+                )
                 timer.mark("mcp_cfg")
 
                 agent_knowledge = agent.get("knowledge", [])
@@ -3869,7 +3877,7 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                 web_search_tool_config = await web_search_coro if web_search_coro is not None else None
                 connector_configs = await connector_task
                 timer.mark("connector_cfg")
-                if not _is_web_search_enabled(chat_query.tools):
+                if not await is_public_web_access_enabled(config_service) or not _is_web_search_enabled(chat_query.tools):
                     web_search_provider = None
                     web_search_tool_config = None
 
@@ -4081,7 +4089,7 @@ async def get_assistant_agent(
                 instances=mcp_instances,
             )
         except Exception as e:
-            logger.error(f"Error fetching authenticated MCP servers: {e}", exc_info=True)
+            logger.error(f"Error fetching authenticated MCP servers for user {user_id}: {e}", exc_info=True)
             authenticated_mcp_servers_list = []
     else:
         authenticated_mcp_servers_list = []

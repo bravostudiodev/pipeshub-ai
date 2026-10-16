@@ -1,5 +1,5 @@
 """Unit tests for app.api.routes.mcp_servers."""
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from fastapi import HTTPException
@@ -9,7 +9,13 @@ from app.agents.constants.mcp_server_constants import (
     get_mcp_dcr_client_path,
 )
 from app.agents.mcp.dcr import DiscoveryBlockedError
-from app.agents.mcp.models import DCRClient, DiscoveredOAuthMetadata, MCPAuthMode, MCPServerInstanceConfig, MCPTransport
+from app.agents.mcp.models import (
+    DCRClient,
+    DiscoveredOAuthMetadata,
+    MCPAuthMode,
+    MCPServerInstanceConfig,
+    MCPTransport,
+)
 from app.api.routes.mcp_servers import (
     AuthenticateRequest,
     OAuthDiscoveryRequest,
@@ -29,6 +35,7 @@ from app.api.routes.mcp_servers import (
     _resolve_validated_base_url,
     _validate_instance_config,
     discover_oauth_metadata_endpoint,
+    get_mcp_retrieval_traces,
     handle_oauth_callback,
     remove_credentials,
 )
@@ -943,3 +950,82 @@ class TestHandleOauthCallback:
 
         assert result["success"] is False
         assert result["error"] == "expired_state"
+
+
+class TestMcpRetrievalTraceInspection:
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_inspect_trace(self) -> None:
+        service = MagicMock()
+        request = _mock_request(user={"userId": "member", "orgId": "org-1"}, app_state={"config_service": service})
+        with (
+            patch("app.api.routes.mcp_servers._check_user_is_admin", new=AsyncMock(return_value=False)),
+            patch("app.api.routes.mcp_servers.trace_enabled", new=AsyncMock(return_value=True)),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await get_mcp_retrieval_traces(request, trace_id="trace-1", run_id=None, trace_ids=None, run_ids=None)
+        assert exc.value.status_code == 403
+        service.list_keys_in_directory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_admin_can_compare_traces_within_own_org(self) -> None:
+        import hashlib
+        from datetime import datetime, timedelta, timezone
+
+        expires = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        trace_ids = ("trace-1", "trace-2")
+        indexes = {
+            f"/services/mcp/retrieval-traces/org-1/index/by-trace/{hashlib.sha256(trace_id.encode()).hexdigest()}": {
+                "traceId": trace_id, "runId": f"run-{i}", "userId": f"user-{i}",
+                "effectiveUserId": f"user-{i}", "orgId": "org-1", "expiresAt": expires,
+            }
+            for i, trace_id in enumerate(trace_ids, start=1)
+        }
+        events = {
+            f"/services/mcp/retrieval-traces/org-1/events/{trace_id}/event-{i}": {
+                "traceId": trace_id, "runId": f"run-{i}", "eventId": f"event-{i}",
+                "eventType": "invocation", "expiresAt": expires,
+            }
+            for i, trace_id in enumerate(trace_ids, start=1)
+        }
+        service = MagicMock()
+        service.list_keys_in_directory = AsyncMock(side_effect=lambda prefix: [
+            key for key in events if key.startswith(prefix)
+        ])
+        service.get_config = AsyncMock(side_effect=lambda key, **_kwargs: indexes.get(key) or events.get(key))
+        request = _mock_request(user={"userId": "admin", "orgId": "org-1"}, app_state={"config_service": service})
+        with (
+            patch("app.api.routes.mcp_servers._check_user_is_admin", new=AsyncMock(return_value=True)),
+            patch("app.api.routes.mcp_servers.trace_enabled", new=AsyncMock(return_value=True)),
+        ):
+            result = await get_mcp_retrieval_traces(
+                request, trace_id=None, run_id=None, trace_ids="trace-1,trace-2", run_ids=None,
+            )
+        assert service.list_keys_in_directory.await_args_list == [
+            call("/services/mcp/retrieval-traces/org-1/events/trace-1/"),
+            call("/services/mcp/retrieval-traces/org-1/events/trace-2/"),
+        ]
+        assert [run["traceId"] for run in result["runs"]] == ["trace-1", "trace-2"]
+        assert all(run["events"][0]["eventType"] == "invocation" for run in result["runs"])
+
+    @pytest.mark.asyncio
+    async def test_admin_run_listing_reads_only_recent_run_index_and_filters_expired_entries(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        service = MagicMock()
+        service.list_keys_in_directory = AsyncMock(return_value=["/by-run/recent", "/by-run/expired"])
+        service.get_config = AsyncMock(side_effect=[
+            {"runId": "run-1", "traceId": "trace-1", "userId": "u1", "expiresAt": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()},
+            {"runId": "run-old", "traceId": "trace-old", "userId": "u2", "expiresAt": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()},
+        ])
+        request = _mock_request(user={"userId": "admin", "orgId": "org-1"}, app_state={"config_service": service})
+        with (
+            patch("app.api.routes.mcp_servers._check_user_is_admin", new=AsyncMock(return_value=True)),
+            patch("app.api.routes.mcp_servers.trace_enabled", new=AsyncMock(return_value=True)),
+        ):
+            result = await get_mcp_retrieval_traces(
+                request, trace_id=None, run_id=None, trace_ids=None, run_ids=None,
+            )
+        service.list_keys_in_directory.assert_awaited_once_with(
+            "/services/mcp/retrieval-traces/org-1/index/by-run/",
+        )
+        assert [run["runId"] for run in result["runs"]] == ["run-1"]
