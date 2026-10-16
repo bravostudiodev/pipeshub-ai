@@ -268,6 +268,23 @@ class TestFetchBlobBytes:
         assert data == payload
 
     @pytest.mark.asyncio
+    async def test_raw_json_file_with_attachment_header_returned_as_bytes(self):
+        cfg = _mock_config_service()
+        raw = b'{"signedUrl": "inside the file", "rows": []}'
+        resp = _mock_response(content_type="application/json", read_bytes=raw)
+        resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''r.json"
+        session = _mock_session(response=resp)
+        with patch(
+            "app.agents.actions.util.blob_staging.aiohttp.ClientSession",
+            return_value=session,
+        ):
+            data = await fetch_blob_bytes(
+                org_id="org-1", config_service=cfg, storage_document_id="doc-1",
+            )
+        assert data == raw
+        assert session.get.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_json_without_signed_url_or_base64_raises(self):
         cfg = _mock_config_service()
         json_resp = _mock_response(
