@@ -503,7 +503,7 @@ class TestMCPClientManagerSession:
             await manager.open()
             result = await manager.call_tool_in_session("search", {"q": "test"})
             assert result == {"result": "ok"}
-            mock_client.call_tool.assert_awaited_once_with("search", {"q": "test"})
+            mock_client.call_tool.assert_awaited_once_with("search", {"q": "test"}, raise_on_error=False)
 
     @pytest.mark.asyncio
     async def test_call_tool_in_session_surfaces_http_error_body(self) -> None:

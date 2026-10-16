@@ -18,11 +18,11 @@ from fastmcp.client.transports import (
     StdioTransport,
     StreamableHttpTransport,
 )
-from mcp.shared._httpx_utils import create_mcp_http_client
 
 from app.agents.mcp.models import MCPServerConfig, MCPTransport
 from app.utils.outbound_http import tag_client
 from app.utils.url_redaction import redact_url
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,29 @@ class MCPConnectionError(Exception):
     """Raised when an MCP server cannot be reached or its transport config is invalid."""
 
 
+class MCPProviderRejectedError(MCPConnectionError):
+    """The provider answered a tool call with an HTTP error; carries what it said."""
+
+    def __init__(self, status_code: int, url: str | None, body: str | None, retry_after: str | None) -> None:
+        self.status_code = status_code
+        self.url = url
+        self.body = body
+        self.retry_after = retry_after
+        detail = f" — server response: {body}" if body else ""
+        super().__init__(f"HTTP {status_code} from {url or 'MCP server'}{detail}")
+
+
+class MCPReauthRequiredError(MCPConnectionError):
+    """The stored credential can't be refreshed; only the user reconnecting fixes it."""
+
+    def __init__(self, server_name: str, reason: str) -> None:
+        self.server_name = server_name
+        super().__init__(
+            f"{server_name} needs to be reconnected: {reason}. Ask the user to reconnect it from the chat "
+            "source cards; retrying will not help."
+        )
+
+
 class _LastHttpResponse:
     """Records the most recent HTTP status/URL seen on an HTTP transport's httpx
     client, purely for diagnostics.
@@ -88,6 +111,7 @@ class _LastHttpResponse:
         self.url: Optional[str] = None
         self.error_body: Optional[str] = None
         self.error_request: Optional[str] = None
+        self.retry_after: Optional[str] = None
 
     async def _on_response(self, response: httpx.Response) -> None:
         self.status_code = response.status_code
@@ -100,6 +124,7 @@ class _LastHttpResponse:
         except Exception:
             self.error_body = None
         self.error_request = _describe_request(response.request)
+        self.retry_after = response.headers.get("Retry-After")
 
     def httpx_client_factory(
         self,
@@ -337,6 +362,11 @@ class MCPClientManager:
         self._session_recorder = response_recorder
         return client
 
+    @property
+    def last_http(self) -> Optional[_LastHttpResponse]:
+        """Most recent HTTP exchange on the open session, for diagnostics; None for STDIO."""
+        return self._session_recorder
+
     async def call_tool_in_session(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Calls a tool on the session `open()` established.
 
@@ -346,20 +376,20 @@ class MCPClientManager:
             raise MCPConnectionError(f"MCP session for {self.config.id} ({self.config.name}) is not open")
         try:
             return await asyncio.wait_for(
-                self._session_client.call_tool(tool_name, arguments), timeout=DEFAULT_CALL_TIMEOUT_SECONDS,
+                # raise_on_error=False keeps a server-reported tool error (bad arguments) as a result with
+                # is_error set, instead of an exception indistinguishable from a transport failure.
+                self._session_client.call_tool(tool_name, arguments, raise_on_error=False),
+                timeout=DEFAULT_CALL_TIMEOUT_SECONDS,
             )
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
             recorder = self._session_recorder
-            logger.warning(
-                "MCP session call failed: instance=%s server=%s tool=%s arg_keys=%s error_type=%s error=%s "
-                "last_http=%s %s body=%s request=%s",
-                self.config.id, self.config.name, tool_name, sorted(arguments or {}), type(e).__name__,
-                str(e)[:300], recorder.status_code if recorder else None, recorder.url if recorder else None,
-                recorder.error_body if recorder else None, recorder.error_request if recorder else None,
-            )
-            if isinstance(e, httpx.HTTPStatusError) and recorder and recorder.error_body:
-                # Lets the model see why the provider rejected the call and fix its arguments.
-                raise MCPConnectionError(f"{str(e).splitlines()[0]} — server response: {recorder.error_body}") from e
+            raise MCPProviderRejectedError(
+                e.response.status_code,
+                recorder.url if recorder else None,
+                recorder.error_body if recorder else None,
+                recorder.retry_after if recorder else None,
+            ) from e
+        except Exception as e:
             stderr_tail = _read_stderr_tail(self._session_stderr_path)
             if not stderr_tail:
                 raise

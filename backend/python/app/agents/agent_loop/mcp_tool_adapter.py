@@ -27,10 +27,8 @@ from app.agents.agent_loop.tool_adapter import (
     _to_tool_output,
     resolve_json_schema_refs,
 )
-from app.agents.mcp.client import MCPConnectionError
-from app.agents.mcp.oauth_client import MCPOAuthError
+from app.agents.mcp.client import MCPReauthRequiredError
 from app.agents.mcp.retrieval_trace import invocation_fields, record_event
-from app.agents.mcp.token_refresh import MCPTokenRefreshError
 
 if TYPE_CHECKING:
     from app.agents.agent_loop.mcp_access import ResolvedMCPServer
@@ -272,7 +270,8 @@ class MCPToolAdapter(Tool):
         started = time.perf_counter()
         try:
             raw_result = await self._session_manager.call(self._server, self._tool_info.name, kwargs)
-        except (MCPConnectionError, MCPTokenRefreshError, MCPOAuthError) as exc:
+        except Exception as exc:
+            # Classification, retries and the detailed log line happen in MCPSessionManager.
             await record_event(
                 getattr(self._session_manager, "_context", None),
                 "invocation",
@@ -280,32 +279,16 @@ class MCPToolAdapter(Tool):
             )
             logger.warning(
                 "MCP tool call failed: instance_id=%s server=%s tool=%s duration_ms=%d "
-                "error_type=%s error=%s",
+                "error_type=%s reauth_required=%s error=%s",
                 self._server.instance_id,
                 self._server.display_name,
                 self._tool_info.name,
                 round((time.perf_counter() - started) * 1000),
                 type(exc).__name__,
+                isinstance(exc, MCPReauthRequiredError),
                 _safe_error_text(exc, self._server.auth),
             )
-            return ToolOutput(success=False, error=str(exc))
-        except Exception as exc:
-            await record_event(
-                getattr(self._session_manager, "_context", None),
-                "invocation",
-                invocation_fields(self._server, self._tool_info.name, kwargs, started, error=exc),
-            )
-            logger.error(
-                "MCP tool call raised unexpectedly: instance_id=%s server=%s tool=%s "
-                "duration_ms=%d error_type=%s error=%s",
-                self._server.instance_id,
-                self._server.display_name,
-                self._tool_info.name,
-                round((time.perf_counter() - started) * 1000),
-                type(exc).__name__,
-                _safe_error_text(exc, self._server.auth),
-            )
-            return ToolOutput(success=False, error=str(exc))
+            return ToolOutput(success=False, error=_safe_error_text(exc, self._server.auth))
         succeeded, result_data = _mcp_result_to_tuple(raw_result)
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         await record_event(
