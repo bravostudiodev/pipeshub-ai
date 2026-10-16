@@ -30,38 +30,25 @@ pipeline:
     "Image build":
       branch: "!main"
       imageBuild:
-        name: platform/pipeshubai
+        <<: &imageBuild
+          name: platform/pipeshubai
+          securityScan:
+            failSeverity: CRITICAL
+            issueAllowlist:
+              - CVE-2026-49261
+              - CVE-2026-44172
+              - CVE-2026-6653
+              - CVE-2026-85394
+              - CVE-2026-90711
+              - CVE-2026-8838
+              - CVE-2026-106445
+              - CVE-2026-106446
+          context: .
+          push: false
         tags:
-          - oddyssey1.0.0.1-15 #TODO
-        securityScan:
-          failSeverity: CRITICAL
-          issueAllowlist:
-            - CVE-2026-49261
-            - CVE-2026-44172
-            - CVE-2026-6653
-            - CVE-2026-85394
-            - CVE-2026-90711
-            - CVE-2026-8838
-            - CVE-2026-106445
-            - CVE-2026-106446
-        context: .
-        push: true #TODO
+          - 0.9.1.oddyssey1
     "Image build and push":
       branch: "main"
       imageBuild:
-        name: platform/pipeshubai
-        tags:
-          - oddyssey1.0.0.1
-        securityScan:
-          failSeverity: CRITICAL
-          issueAllowlist:
-            - CVE-2026-49261
-            - CVE-2026-44172
-            - CVE-2026-6653
-            - CVE-2026-85394
-            - CVE-2026-90711
-            - CVE-2026-8838
-            - CVE-2026-106445
-            - CVE-2026-106446
-        context: .
+        <<: *imageBuild
         push: true
