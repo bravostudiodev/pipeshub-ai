@@ -16024,6 +16024,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16059,6 +16065,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16093,6 +16105,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16128,6 +16146,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16163,6 +16187,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16198,6 +16228,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16233,6 +16269,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':
@@ -16267,6 +16309,12 @@ paths:
                     type: boolean
                   hasCredentials:
                     type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
         '401':
           description: Authentication required
         '403':

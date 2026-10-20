@@ -39,6 +39,7 @@ from app.agents.mcp import oauth_client as oauth_client_module
 from app.agents.mcp import service as mcp_service
 from app.agents.mcp import token_refresh as mcp_token_refresh
 from app.agents.mcp.client import MCPConnectionError
+from app.agents.mcp.credential_status import mark_reauth_required, reauth_status
 from app.agents.mcp.discovery import discover_tools
 from app.agents.mcp.models import (
     DiscoveredOAuthMetadata,
@@ -1171,11 +1172,9 @@ async def refresh_oauth_token(request: Request, instance_id: str) -> dict[str, A
         # must configure OAuth, not that the token endpoint itself rejected anything.
         raise HTTPException(status_code=HttpStatusCode.BAD_REQUEST.value, detail=str(e)) from e
     except oauth_client_module.MCPRefreshTokenInvalidError as e:
-        cred_path = get_mcp_credentials_path(instance_id, user_id)
-        record = await config_service.get_config(cred_path, default=None, use_cache=False)
-        if isinstance(record, dict):
-            record["isAuthenticated"] = False
-            await config_service.set_config(cred_path, record)
+        await mark_reauth_required(
+            instance_id, user_id, config_service, detail="refresh token rejected", source="manual_refresh",
+        )
         # Both `MCPRefreshTokenInvalidError` and `MCPOAuthError` embed the token endpoint's
         # raw response body (see `oauth_client._post_token_request`) — log it server-side
         # only, same treatment as `/oauth/callback`'s token-exchange-failure branch above.
@@ -1285,6 +1284,7 @@ async def _build_mcp_instance_entry(
     entry["isAuthenticated"] = bool(effective_auth is not None and (
         effective_auth == {} or effective_auth.get("isAuthenticated")
     ))
+    entry["needsReauth"], entry["statusDetail"] = reauth_status(effective_auth)
     entry["tools"] = []
     entry["toolsError"] = None
 
@@ -1472,6 +1472,7 @@ async def _get_designated_mcp_connection(
     instance = matches[0]
     auth = await _resolve_effective_user_auth(instance, user_context["user_id"], config_service)
     has_credentials = bool(auth is not None and auth.get("isAuthenticated"))
+    needs_reauth, detail = reauth_status(auth)
     return {
         "configured": True,
         "instanceId": instance["_id"],
@@ -1479,6 +1480,10 @@ async def _get_designated_mcp_connection(
         # is separate and must not turn a completed OAuth flow into a connection error.
         "isConnected": has_credentials,
         "hasCredentials": has_credentials,
+        # Set when the provider rejected the saved credential (discovery, a tool call or a
+        # refresh); the card shows "Reconnect needed" instead of a plain disconnected state.
+        "needsReauth": needs_reauth,
+        "statusDetail": detail,
     }
 
 

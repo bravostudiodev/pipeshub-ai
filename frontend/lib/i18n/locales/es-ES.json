@@ -3044,6 +3044,7 @@
       "fetchFailed": "Error al verificar el estado de los servicios",
       "statusHealthy": "Funcionando",
       "statusUnhealthy": "No funcionando",
+      "statusNotConfigured": "No configurado",
       "statusUnknown": "Desconocido",
       "infra": {
         "redis": {
@@ -3090,6 +3091,10 @@
         "docling": {
           "label": "Servicio Docling",
           "description": "Análisis avanzado de documentos y OCR"
+        },
+        "embedding": {
+          "label": "Servicio de embeddings",
+          "description": "Servidor de embeddings integrado para modelos locales"
         },
         "parsing": {
           "label": "Servicio de análisis",

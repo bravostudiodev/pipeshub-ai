@@ -36,8 +36,13 @@ from app.agent_loop_lib.tools.errors import (
 )
 from app.agents.agent_loop.lazy_tools_wiring import MCP_PARENT
 from app.agents.agent_loop.mcp_access import MCPAccessResolver, ResolvedMCPServer
-from app.agents.agent_loop.mcp_session import MCPSessionManager
+from app.agents.agent_loop.mcp_call_policy import POLICY, Action, Outcome, classify
+from app.agents.agent_loop.mcp_session import (
+    MCPSessionManager,
+    refresh_server_credentials,
+)
 from app.agents.agent_loop.mcp_tool_adapter import MCPToolAdapter
+from app.agents.mcp.credential_status import mark_reauth_required
 from app.agents.mcp.discovery import build_namespaced_tool_name, discover_tools
 from app.agents.mcp.models import MCPToolInfo
 from app.agents.mcp.retrieval_trace import discovery_fields, record_event
@@ -114,7 +119,7 @@ class MCPToolProvider:
         state_logger = context.logger or logger
 
         discovery_started = asyncio.get_running_loop().time()
-        tool_infos, failure_reason = await self._discover_or_fallback(server, timeout_seconds)
+        tool_infos, failure_reason = await self._discover_or_fallback(server, timeout_seconds, context)
         trace_fields = discovery_fields(server, tool_infos, failure_reason)
         trace_fields["durationMs"] = max(0, round((asyncio.get_running_loop().time() - discovery_started) * 1000))
         await record_event(context, "discovery", trace_fields)
@@ -153,19 +158,49 @@ class MCPToolProvider:
         return True
 
     async def _discover_or_fallback(
-        self, server: "ResolvedMCPServer", timeout_seconds: float,
+        self, server: "ResolvedMCPServer", timeout_seconds: float, context: "AgentContext",
     ) -> tuple[list[MCPToolInfo] | None, str | None]:
-        try:
-            config = instance_config_from_dict(server.instance)
-            credentials = credentials_to_discovery_dict(server.instance.get("authMode", ""), server.auth)
-            tool_infos = await discover_tools(config, credentials, timeout_seconds=timeout_seconds)
-            return self._filter_by_attached(server, tool_infos), None
-        except Exception as exc:
-            logger.warning(
-                "MCPToolProvider: live discovery failed for instance %s (%s): %s",
-                server.instance_id, server.name, exc,
-            )
-            return None, "discovery_failed"
+        """Same outcome policy as a tool call (`mcp_call_policy`): an expired OAuth token
+        is refreshed once, a rejected credential is recorded so status reads stop saying
+        "Connected", anything else is reported as temporarily unavailable."""
+        auth_mode = server.instance.get("authMode")
+        refreshed = False
+        while True:
+            try:
+                config = instance_config_from_dict(server.instance)
+                credentials = credentials_to_discovery_dict(auth_mode or "", server.auth)
+                tool_infos = await discover_tools(config, credentials, timeout_seconds=timeout_seconds)
+                return self._filter_by_attached(server, tool_infos), None
+            except Exception as exc:
+                outcome = classify(exc, auth_mode=auth_mode, last_status=getattr(exc, "status_code", None))
+                action = POLICY[outcome].action
+                if outcome is Outcome.AUTH_EXPIRED and action is Action.REFRESH and not refreshed:
+                    refreshed = True
+                    self._log_discovery(server, exc, outcome, action="refresh")
+                    try:
+                        await refresh_server_credentials(server, context.config_service)
+                        continue
+                    except Exception as refresh_exc:
+                        exc, outcome = refresh_exc, classify(refresh_exc, auth_mode=auth_mode, last_status=None)
+                self._log_discovery(server, exc, outcome, action="give_up")
+                if outcome is Outcome.REAUTH_REQUIRED:
+                    try:
+                        await mark_reauth_required(
+                            server.instance_id, server.owner_id, context.config_service,
+                            detail=str(exc)[:200], source="discovery",
+                        )
+                    except Exception as mark_exc:
+                        logger.warning("MCPToolProvider: could not mark %s as reauth_required: %s", server.instance_id, mark_exc)
+                    return None, "reauth_required"
+                return None, "discovery_failed"
+
+    @staticmethod
+    def _log_discovery(server: "ResolvedMCPServer", exc: BaseException, outcome: Outcome, *, action: str) -> None:
+        logger.warning(
+            "MCP discovery outcome: instance=%s server=%s outcome=%s action=%s error_type=%s error=%s last_http=%s",
+            server.instance_id, server.name, outcome.value, action, type(exc).__name__, str(exc)[:300],
+            getattr(exc, "status_code", None),
+        )
 
     @staticmethod
     def _attached_full_names(server: "ResolvedMCPServer") -> set[str] | None:

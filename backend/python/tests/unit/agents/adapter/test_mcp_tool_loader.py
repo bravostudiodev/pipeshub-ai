@@ -16,6 +16,7 @@ from app.agent_loop_lib.tools.registry import ToolRegistry
 from app.agents.agent_loop import mcp_tool_loader as mcp_tool_loader_module
 from app.agents.agent_loop.lazy_tools_wiring import MCP_PARENT
 from app.agents.agent_loop.mcp_tool_loader import MCPToolProvider
+from app.agents.mcp.client import MCPConnectionError
 from app.agents.mcp.models import MCPToolInfo
 from tests.unit.agents.adapter.conftest import make_context
 
@@ -54,7 +55,57 @@ async def _discover_fails(config: Any, credentials: dict, timeout_seconds: float
     raise RuntimeError("connection refused")
 
 
+async def _discover_401(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
+    raise MCPConnectionError("Client error '401 Unauthorized' for url 'https://x/mcp'", status_code=401)
+
+
 class TestLoadInto:
+    async def test_rejected_credential_marks_reauth_and_records_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        marked: list[dict[str, Any]] = []
+
+        async def _fake_mark(instance_id: str, owner_id: str, config_service: Any, *, detail: str, source: str) -> bool:
+            marked.append({"instance_id": instance_id, "owner_id": owner_id, "source": source})
+            return True
+
+        monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover_401)
+        monkeypatch.setattr(mcp_tool_loader_module, "mark_reauth_required", _fake_mark)
+        registry = ToolRegistry()
+        context = _context_with_server()
+        context.mcp_server_configs["inst-1"]["instance"]["authMode"] = "api_token"
+
+        await MCPToolProvider().load_into(registry, context)
+
+        assert registry.names() == []
+        assert context.mcp_tool_load_failures == [
+            {"instanceId": "inst-1", "name": "JiraMCP", "reason": "reauth_required"},
+        ]
+        assert marked == [{"instance_id": "inst-1", "owner_id": "user-1", "source": "discovery"}]
+
+    async def test_expired_oauth_token_is_refreshed_once_before_discovery_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        attempts = 0
+
+        async def _discover(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise MCPConnectionError("401 Unauthorized", status_code=401)
+            return await _discover_ok(config, credentials, timeout_seconds)
+
+        async def _fake_refresh(server: Any, config_service: Any) -> None:
+            server.auth = {"isAuthenticated": True, "oauthTokens": {"accessToken": "fresh"}}
+
+        monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover)
+        monkeypatch.setattr(mcp_tool_loader_module, "refresh_server_credentials", _fake_refresh)
+        registry = ToolRegistry()
+        context = _context_with_server()
+        context.mcp_server_configs["inst-1"]["instance"]["authMode"] = "oauth"
+
+        await MCPToolProvider().load_into(registry, context)
+
+        assert attempts == 2
+        assert context.mcp_tool_load_failures == []
+        assert "mcp_jiramcp_search" in registry.names()
+
     async def test_registers_discovered_tool_and_group(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover_ok)
         registry = ToolRegistry()

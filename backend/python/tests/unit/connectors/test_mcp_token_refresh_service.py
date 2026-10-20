@@ -9,6 +9,7 @@ from app.agents.mcp import oauth_client as oauth_client_module
 from app.agents.mcp.models import OAuthTokens
 from app.connectors.core.base.token_service.mcp_token_refresh_service import (
     MAX_REFRESH_TOKEN_INVALID_FAILURES,
+    MIN_REFRESH_INTERVAL_SECONDS,
     PROACTIVE_REFRESH_WINDOW_SECONDS,
     MCPTokenRefreshService,
 )
@@ -95,6 +96,15 @@ class TestCalculateRefreshDelay:
         # 20% of 120s = 24s, which is below the 60s floor, so the floor (min(60, 119)) applies.
         expected_refresh_time = created + timedelta(seconds=120 - 60)
         assert abs((refresh_time - expected_refresh_time).total_seconds()) < 1
+
+    def test_short_lived_token_is_not_refreshed_before_half_life(self, service: MCPTokenRefreshService) -> None:
+        # Miro answers a refresh with the same token and its remaining lifetime; the old rule
+        # (60s minimum window, capped at ttl-1) scheduled a 60s token 1s after issue, forever.
+        created = datetime.now(timezone.utc)
+        token = OAuthTokens(access_token="tok", expires_in=60, created_at=created)
+        delay, refresh_time = service._calculate_refresh_delay(token)
+        assert abs((refresh_time - (created + timedelta(seconds=30))).total_seconds()) < 1
+        assert 29 < delay <= 30
 
     def test_already_expired_returns_zero_or_negative_delay(self, service: MCPTokenRefreshService) -> None:
         created = datetime.now(timezone.utc) - timedelta(hours=2)
@@ -218,13 +228,12 @@ class TestScheduleTokenRefresh:
         service.cancel_refresh_task(CONFIG_PATH)
 
     @pytest.mark.asyncio
-    async def test_does_not_reschedule_within_cooldown_when_refresh_needed_immediately(
+    async def test_refresh_right_after_refresh_is_held_to_floor_not_dropped(
         self, service: MCPTokenRefreshService,
     ) -> None:
-        """Cooldown only guards the delay<=0 branch (repeated immediate-refresh attempts
-        on an already-/near-expired token) — see
-        test_reschedules_immediately_after_refresh_despite_cooldown for the branch it must
-        NOT gate."""
+        """An already-expired token right after a refresh is still scheduled (dropping it
+        left recovery to the 5-minute sweep), but no sooner than MIN_REFRESH_INTERVAL_SECONDS
+        after the last refresh."""
         import time
 
         service._last_refresh_time[CONFIG_PATH] = time.time()
@@ -232,25 +241,43 @@ class TestScheduleTokenRefresh:
             access_token="tok", expires_in=3600,
             created_at=datetime.now(timezone.utc) - timedelta(hours=2),  # already expired -> delay <= 0
         )
-        await service.schedule_token_refresh(CONFIG_PATH, token)
-        assert CONFIG_PATH not in service._refresh_tasks
+        with patch.object(service, "_delayed_refresh", new=AsyncMock()) as delayed:
+            await service.schedule_token_refresh(CONFIG_PATH, token)
+            await asyncio.sleep(0)
+        delay = delayed.call_args.args[1]
+        assert MIN_REFRESH_INTERVAL_SECONDS - 1 < delay <= MIN_REFRESH_INTERVAL_SECONDS
 
     @pytest.mark.asyncio
-    async def test_reschedules_immediately_after_refresh_despite_cooldown(
+    async def test_provider_returning_remaining_lifetime_does_not_loop_every_second(
+        self, service: MCPTokenRefreshService,
+    ) -> None:
+        """Regression for the Miro refresh storm: each refresh returned a token with ~60s
+        left, and the scheduler re-refreshed 1s later, ~40 times a minute."""
+        import time
+
+        service._last_refresh_time[CONFIG_PATH] = time.time()
+        token = OAuthTokens(access_token="tok", expires_in=60)  # freshly "issued", 60s left
+        with patch.object(service, "_delayed_refresh", new=AsyncMock()) as delayed:
+            await service.schedule_token_refresh(CONFIG_PATH, token)
+            await asyncio.sleep(0)
+        delay = delayed.call_args.args[1]
+        assert delay >= MIN_REFRESH_INTERVAL_SECONDS - 1
+
+    @pytest.mark.asyncio
+    async def test_reschedules_immediately_after_refresh_with_real_expiry(
         self, service: MCPTokenRefreshService,
     ) -> None:
         """`_refresh_credential` sets `_last_refresh_time` to "now" and then immediately
-        calls `schedule_token_refresh` with the newly-refreshed token to schedule the NEXT
-        refresh — that call must not be swallowed by the cooldown just because it's racing
-        the timestamp it itself just set, or recovery falls back to the slow 5-minute
-        periodic sweep."""
+        calls `schedule_token_refresh` with the newly-refreshed token; the floor must not
+        suppress that reschedule."""
         import time
 
         service._last_refresh_time[CONFIG_PATH] = time.time()
         token = OAuthTokens(access_token="tok", expires_in=3600)  # freshly issued, real future expiry
-        await service.schedule_token_refresh(CONFIG_PATH, token)
-        assert CONFIG_PATH in service._refresh_tasks
-        service.cancel_refresh_task(CONFIG_PATH)
+        with patch.object(service, "_delayed_refresh", new=AsyncMock()) as delayed:
+            await service.schedule_token_refresh(CONFIG_PATH, token)
+            await asyncio.sleep(0)
+        assert delayed.call_args.args[1] > 2900
 
 
 class TestCancelRefreshTasks:

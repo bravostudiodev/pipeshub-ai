@@ -1374,15 +1374,16 @@ class TestExcludePaths:
         assert "/health" in EXCLUDE_PATHS
         assert "/health/graph-db" in EXCLUDE_PATHS
         assert "/health/vector-db" in EXCLUDE_PATHS
+        assert "/health/embedding" in EXCLUDE_PATHS
         assert "/drive/webhook" in EXCLUDE_PATHS
         assert "/gmail/webhook" in EXCLUDE_PATHS
         assert "/admin/webhook" in EXCLUDE_PATHS
 
     def test_exclude_paths_length(self):
-        """EXCLUDE_PATHS has exactly 6 entries."""
+        """EXCLUDE_PATHS has exactly 7 entries."""
         from app.connectors_main import EXCLUDE_PATHS
 
-        assert len(EXCLUDE_PATHS) == 6
+        assert len(EXCLUDE_PATHS) == 7
 
 
 # ---------------------------------------------------------------------------
@@ -1791,3 +1792,58 @@ class TestRefreshConnectorMetrics:
                 await refresh_connector_metrics(gp, logger, interval_s=60)
 
         logger.warning.assert_called()
+
+
+class TestEmbeddingHealthCheck:
+    """`/health/embedding` reports `not_configured` instead of probing when a hosted
+    embedding provider is configured, so a deployment without the local server is not
+    marked unhealthy on every health poll."""
+
+    def _request(self, ai_models: dict) -> MagicMock:
+        request = MagicMock()
+        container = _make_container()
+        container.config_service.return_value.get_config = AsyncMock(return_value=ai_models)
+        request.app.container = container
+        return request
+
+    @pytest.mark.asyncio
+    async def test_hosted_provider_is_not_configured_and_not_probed(self):
+        from app.connectors_main import embedding_health_check
+
+        request = self._request({"embedding": [{"provider": "openAI", "isDefault": True, "configuration": {}}]})
+        with patch("app.connectors_main.httpx.AsyncClient") as client_cls:
+            response = await embedding_health_check(request)
+
+        assert response.status_code == 200
+        assert b'"status":"not_configured"' in response.body
+        client_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_local_provider_probes_server(self):
+        from app.connectors_main import embedding_health_check
+
+        request = self._request({"embedding": [{"provider": "sentenceTransformers", "isDefault": True}]})
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"status": "healthy"}
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=resp)
+        client.__aenter__.return_value = client
+        with patch("app.connectors_main.httpx.AsyncClient", return_value=client):
+            response = await embedding_health_check(request)
+
+        assert response.status_code == 200
+        assert b'"status":"healthy"' in response.body
+
+    @pytest.mark.asyncio
+    async def test_unconfigured_deployment_probes_and_reports_down_server(self):
+        from app.connectors_main import embedding_health_check
+
+        request = self._request({})
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=ConnectionError("refused"))
+        client.__aenter__.return_value = client
+        with patch("app.connectors_main.httpx.AsyncClient", return_value=client):
+            response = await embedding_health_check(request)
+
+        assert response.status_code == 503
+        assert b'"status":"unhealthy"' in response.body

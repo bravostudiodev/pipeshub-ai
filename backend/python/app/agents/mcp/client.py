@@ -69,6 +69,10 @@ def _describe_request(request: httpx.Request) -> str:
 class MCPConnectionError(Exception):
     """Raised when an MCP server cannot be reached or its transport config is invalid."""
 
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        self.status_code = status_code
+        super().__init__(message)
+
 
 class MCPProviderRejectedError(MCPConnectionError):
     """The provider answered a tool call with an HTTP error; carries what it said."""
@@ -79,7 +83,7 @@ class MCPProviderRejectedError(MCPConnectionError):
         self.body = body
         self.retry_after = retry_after
         detail = f" — server response: {body}" if body else ""
-        super().__init__(f"HTTP {status_code} from {url or 'MCP server'}{detail}")
+        super().__init__(f"HTTP {status_code} from {url or 'MCP server'}{detail}", status_code=status_code)
 
 
 class MCPReauthRequiredError(MCPConnectionError):
@@ -296,7 +300,9 @@ class MCPClientManager:
                 message = _annotate_with_stderr(str(e), _read_stderr_tail(stderr_path))
                 message = _annotate_with_last_http_response(message, response_recorder)
                 logger.error(f"Failed to connect to MCP server {self.config.id} ({self.config.name}): {message}")
-                raise MCPConnectionError(message) from e
+                raise MCPConnectionError(
+                    message, status_code=response_recorder.status_code if response_recorder else None,
+                ) from e
 
     async def list_tools(self) -> list[Any]:
         async with self.connect() as client:
@@ -356,7 +362,9 @@ class MCPClientManager:
             message = _annotate_with_stderr(str(e), stderr_tail)
             message = _annotate_with_last_http_response(message, response_recorder)
             logger.error(f"Failed to open MCP session for {self.config.id} ({self.config.name}): {message}")
-            raise MCPConnectionError(message) from e
+            raise MCPConnectionError(
+                message, status_code=response_recorder.status_code if response_recorder else None,
+            ) from e
         self._session_client = client
         self._session_stderr_path = stderr_path
         self._session_recorder = response_recorder

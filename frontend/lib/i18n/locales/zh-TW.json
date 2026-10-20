@@ -3312,6 +3312,7 @@
       "fetchFailed": "無法檢查服務健康狀態",
       "statusHealthy": "正常",
       "statusUnhealthy": "異常",
+      "statusNotConfigured": "未設定",
       "statusUnknown": "未知",
       "infra": {
         "redis": {
@@ -3358,6 +3359,10 @@
         "docling": {
           "label": "Docling 服務",
           "description": "進階文件解析與 OCR"
+        },
+        "embedding": {
+          "label": "嵌入服務",
+          "description": "用於本機模型的內建嵌入伺服器"
         },
         "parsing": {
           "label": "Parsing 服務",

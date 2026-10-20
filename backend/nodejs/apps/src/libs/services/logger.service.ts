@@ -95,11 +95,12 @@ export class Logger {
         let metaString = '';
         if (metadata) {
           try {
-            // Handle circular references by using a custom replacer
+            // One physical line: log collectors split on newlines, so pretty-printed
+            // metadata became ~9 unrelated entries per event, without the request id.
             const safeMetadata = this.sanitizeForLogging(metadata);
-            metaString = `\nmetadata: ${JSON.stringify(safeMetadata, null, 2)}`;
+            metaString = ` metadata=${JSON.stringify(safeMetadata)}`;
           } catch (error) {
-            metaString = '\nmetadata: [Circular Structure]';
+            metaString = ' metadata=[Circular Structure]';
           }
         }
         const stackString = stack ? `\nstack: ${stack}` : '';

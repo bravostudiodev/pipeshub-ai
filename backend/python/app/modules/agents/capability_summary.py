@@ -279,14 +279,18 @@ def _build_mcp_failures_section(state: dict[str, Any], *, parts: list[str]) -> N
 
     parts.append("### Unavailable MCP Servers")
     parts.append(
-        "The following attached MCP servers could not be reached this "
-        "request (connection/timeout, not a missing capability) — if the "
-        "user's query targets one of these, tell them it's temporarily "
-        "unavailable rather than saying the capability doesn't exist:"
+        "The following attached MCP servers are configured but could not be used this "
+        "request. Never say the capability doesn't exist; tell the user the state below:"
     )
     for failure in failures:
         name = failure.get("name") or failure.get("instanceId") or "unknown"
-        parts.append(f"- {name}")
+        if failure.get("reason") == "reauth_required":
+            parts.append(
+                f"- {name}: its saved credential was rejected by the provider. The user must "
+                "reconnect it from the source card in chat; retrying will not help."
+            )
+        else:
+            parts.append(f"- {name}: temporarily unreachable (connection or timeout); it may work on a retry.")
     parts.append("")
 
 

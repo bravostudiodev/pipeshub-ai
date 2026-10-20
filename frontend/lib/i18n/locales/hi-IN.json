@@ -3021,6 +3021,7 @@
       "fetchFailed": "सेवा स्वास्थ्य जाँचने में विफल",
       "statusHealthy": "स्वस्थ",
       "statusUnhealthy": "अस्वस्थ",
+      "statusNotConfigured": "कॉन्फ़िगर नहीं किया गया",
       "statusUnknown": "अज्ञात",
       "infra": {
         "redis": {
@@ -3067,6 +3068,10 @@
         "docling": {
           "label": "डॉकलिंग सेवा",
           "description": "उन्नत दस्तावेज़ पार्सिंग और OCR"
+        },
+        "embedding": {
+          "label": "एम्बेडिंग सेवा",
+          "description": "स्थानीय मॉडल के लिए अंतर्निहित एम्बेडिंग सर्वर"
         },
         "parsing": {
           "label": "पार्सिंग सेवा",

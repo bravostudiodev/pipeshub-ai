@@ -679,8 +679,37 @@ class TestDiscoveryHandlers:
             "instanceId": "org-slack-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "needsReauth": False,
+            "statusDetail": None,
         }
         assert "clientSecret" not in result
+
+    @pytest.mark.asyncio
+    async def test_slack_status_reports_rejected_credential_as_reconnect_needed(self) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            _id="org-slack-instance",
+            url="https://mcp.slack.com/mcp",
+            transport=MCPTransport.STREAMABLE_HTTP.value,
+            authMode=MCPAuthMode.OAUTH.value,
+            typeId=None,
+        )
+        rejected = {"isAuthenticated": False, "deauthReason": "credential_rejected", "deauthDetail": "401 Unauthorized"}
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value=rejected)),
+        ):
+            result = await get_slack_connection(request)
+
+        assert result == {
+            "configured": True,
+            "instanceId": "org-slack-instance",
+            "isConnected": False,
+            "hasCredentials": False,
+            "needsReauth": True,
+            "statusDetail": "401 Unauthorized",
+        }
 
     @pytest.mark.asyncio
     async def test_slack_status_does_not_probe_tools_to_check_saved_authorization(self) -> None:
@@ -755,6 +784,8 @@ class TestDiscoveryHandlers:
             "instanceId": "org-miro-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "needsReauth": False,
+            "statusDetail": None,
         }
 
     def test_atlassian_rovo_designation_requires_official_oauth_instance(self) -> None:
@@ -791,6 +822,8 @@ class TestDiscoveryHandlers:
             "instanceId": "org-atlassian-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "needsReauth": False,
+            "statusDetail": None,
         }
 
     @pytest.mark.parametrize(

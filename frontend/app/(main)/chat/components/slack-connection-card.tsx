@@ -187,6 +187,12 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
               </Flex>
             ) : (
               <>
+                {connection.needsReauth && (
+                  <Flex align="center" gap="1" aria-label={t(`${i18nPrefix}.reauthRequired`, { defaultValue: 'Reconnect needed' })}>
+                    <MaterialIcon name="error" size={14} color="var(--amber-9)" />
+                    <Text size="1" color="gray">{t(`${i18nPrefix}.reauthRequired`, { defaultValue: 'Reconnect needed' })}</Text>
+                  </Flex>
+                )}
                 <Button
                   size="1"
                   variant="soft"

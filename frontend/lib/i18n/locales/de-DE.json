@@ -3026,6 +3026,7 @@
       "fetchFailed": "Fehler beim Prüfen des Dienststatus",
       "statusHealthy": "Funktionsfähig",
       "statusUnhealthy": "Nicht funktionsfähig",
+      "statusNotConfigured": "Nicht konfiguriert",
       "statusUnknown": "Unbekannt",
       "infra": {
         "redis": {
@@ -3072,6 +3073,10 @@
         "docling": {
           "label": "Docling-Dienst",
           "description": "Erweiterte Dokumentenverarbeitung und OCR"
+        },
+        "embedding": {
+          "label": "Embedding-Dienst",
+          "description": "Integrierter Embedding-Server für lokale Modelle"
         },
         "parsing": {
           "label": "Parsing-Dienst",

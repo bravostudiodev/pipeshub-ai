@@ -28,6 +28,7 @@ from app.agents.agent_loop.mcp_call_policy import (
     retry_after_seconds,
 )
 from app.agents.mcp.client import MCPClientManager, MCPReauthRequiredError
+from app.agents.mcp.credential_status import mark_reauth_required
 from app.agents.mcp.discovery import build_auth_env_and_headers
 from app.agents.mcp.service import (
     credentials_to_discovery_dict,
@@ -41,7 +42,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["MCPSessionManager"]
+__all__ = ["MCPSessionManager", "refresh_server_credentials"]
+
+
+async def refresh_server_credentials(server: "ResolvedMCPServer", config_service: Any) -> None:
+    """Refresh the OAuth token behind `server` and update `server.auth` in place so later
+    opens this request use it. Raises what `refresh_credential_record` raises."""
+    new_tokens = await refresh_credential_record(server.instance_id, server.owner_id, config_service)
+    server.auth = {
+        "isAuthenticated": True,
+        "oauthTokens": new_tokens.model_dump(by_alias=True, mode="json"),
+    }
 
 
 class MCPSessionManager:
@@ -83,7 +94,7 @@ class MCPSessionManager:
                 self._log_outcome(server, tool_name, arguments, exc, outcome, attempt, rule.action if can_retry else None, last_http)
                 if not can_retry:
                     if outcome is Outcome.REAUTH_REQUIRED:
-                        raise MCPReauthRequiredError(server.display_name, str(exc)[:200]) from exc
+                        raise await self._reauth_error(server, exc, source="tool_call") from exc
                     raise
                 attempts[outcome] = attempt + 1
                 try:
@@ -95,7 +106,7 @@ class MCPSessionManager:
                     recovery_outcome = classify(recovery_exc, auth_mode=auth_mode, last_status=None)
                     self._log_outcome(server, tool_name, arguments, recovery_exc, recovery_outcome, attempt, None, None)
                     if recovery_outcome is Outcome.REAUTH_REQUIRED:
-                        raise MCPReauthRequiredError(server.display_name, str(recovery_exc)[:200]) from recovery_exc
+                        raise await self._reauth_error(server, recovery_exc, source="token_refresh") from recovery_exc
                     raise recovery_exc from exc
                 if wait:
                     await asyncio.sleep(wait)
@@ -105,6 +116,18 @@ class MCPSessionManager:
                     server.instance_id, tool_name, outcome.value, attempt + 1,
                     round((time.perf_counter() - started) * 1000),
                 )
+
+    async def _reauth_error(
+        self, server: "ResolvedMCPServer", exc: BaseException, *, source: str,
+    ) -> MCPReauthRequiredError:
+        detail = str(exc)[:200]
+        try:
+            await mark_reauth_required(
+                server.instance_id, server.owner_id, self._context.config_service, detail=detail, source=source,
+            )
+        except Exception as mark_exc:
+            self._log.warning("MCPSessionManager: could not mark %s as reauth_required: %s", server.instance_id, mark_exc)
+        return MCPReauthRequiredError(server.display_name, detail)
 
     def _log_outcome(
         self, server: "ResolvedMCPServer", tool_name: str, arguments: dict[str, Any], exc: BaseException,
@@ -199,12 +222,6 @@ class MCPSessionManager:
         if old_manager is not None:
             await old_manager.aclose()
 
-        new_tokens = await refresh_credential_record(
-            server.instance_id, server.owner_id, self._context.config_service,
-        )
-        server.auth = {
-            "isAuthenticated": True,
-            "oauthTokens": new_tokens.model_dump(by_alias=True, mode="json"),
-        }
+        await refresh_server_credentials(server, self._context.config_service)
         manager = await self._build_and_open(server)
         self._managers[server.instance_id] = manager

@@ -137,6 +137,9 @@ export interface SlackConnectionStatus {
   instanceId?: string;
   isConnected: boolean;
   hasCredentials?: boolean;
+  /** The provider rejected the saved credential; only reconnecting fixes it. */
+  needsReauth?: boolean;
+  statusDetail?: string | null;
 }
 
 export type NotionConnectionStatus = SlackConnectionStatus;

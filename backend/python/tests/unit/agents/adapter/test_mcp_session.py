@@ -316,6 +316,25 @@ class TestPolicy:
         assert await session_manager.call(server, "search", {}) == "ok"
         assert recorded_sleeps == [2.0]  # Retry-After honoured over the table's 0.5s
 
+    async def test_reauth_required_marks_credential_and_raises_reconnect_error(
+        self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        marked: list[str] = []
+
+        async def _fake_mark(instance_id: str, owner_id: str, config_service: Any, *, detail: str, source: str) -> bool:
+            marked.append(source)
+            return True
+
+        monkeypatch.setattr(mcp_session_module, "mark_reauth_required", _fake_mark)
+        session_manager = MCPSessionManager(make_context())
+        server = _server(auth_mode="api_token")
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [MCPProviderRejectedError(401, "https://x/mcp", None, None)]
+
+        with pytest.raises(MCPReauthRequiredError, match="reconnect"):
+            await session_manager.call(server, "search", {})
+        assert marked == ["tool_call"]
+
     async def test_rejected_call_is_not_retried(
         self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
     ) -> None:

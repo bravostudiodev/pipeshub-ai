@@ -26,104 +26,109 @@ import type { SidebarBaseProps } from './types';
  * secondary panel render side-by-side in a horizontal flex container.
  * This is used for "More Chats", "More items", etc.
  */
-export function SidebarBase({ header, children, footer, secondaryPanel, onDismissSecondaryPanel, isMobile, mobileOpen, onMobileClose }: SidebarBaseProps) {
+export function SidebarBase(props: SidebarBaseProps) {
+  // No hooks here: `isMobile` flips after mount (see useIsMobile), and each shell owns a fixed hook set,
+  // so switching shells remounts instead of changing hook order (React #300).
+  return props.isMobile ? <MobileSidebarShell {...props} /> : <DesktopSidebarShell {...props} />;
+}
+
+function MobileSidebarShell({ header, children, footer, secondaryPanel, mobileOpen, onMobileClose }: SidebarBaseProps) {
   const { t } = useTranslation();
-  // ── Mobile full-screen drawer ─────────────────────────────────
-  // On mobile, render nothing when closed; a fixed full-width panel when open.
-  if (isMobile) {
-    if (!mobileOpen) return null;
+  // Full-screen drawer: nothing when closed; a secondary panel replaces the primary sidebar in place.
+  if (!mobileOpen) return null;
 
-    // When a secondary panel is active (e.g. More Chats), render it full-screen
-    // as an in-place replacement of the primary sidebar — no side-by-side on mobile.
-    if (secondaryPanel) {
-      return (
-        <Box
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 200,
-            fontFamily: 'Manrope, sans-serif',
-          }}
-        >
-          {secondaryPanel}
-        </Box>
-      );
-    }
-
+  // When a secondary panel is active (e.g. More Chats), render it full-screen
+  // as an in-place replacement of the primary sidebar — no side-by-side on mobile.
+  if (secondaryPanel) {
     return (
-      <Flex
-        direction="column"
+      <Box
         style={{
           position: 'fixed',
           inset: 0,
           zIndex: 200,
-          backgroundColor: 'var(--app-sidebar-surface)',
           fontFamily: 'Manrope, sans-serif',
         }}
       >
-        {/* Mobile header: logo area + × close button */}
-        {header && (
-          <Box
-            style={{
-              height: `${HEADER_HEIGHT}px`,
-              flexShrink: 0,
-              position: 'relative',
-            }}
-          >
-            <Box style={{ height: '100%', paddingRight: onMobileClose ? '40px' : undefined }}>
-              {header}
-            </Box>
-            {onMobileClose && (
-              <Box
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  right: 'var(--space-3)',
-                  transform: 'translateY(-50%)',
-                }}
-              >
-                <IconButton
-                  variant="ghost"
-                  color="gray"
-                  size="2"
-                  onClick={onMobileClose}
-                  style={{ margin: 0 }}
-                  aria-label={t('sidebar.close')}
-                >
-                  <MaterialIcon name="close" size={20} color="var(--gray-11)" />
-                </IconButton>
-              </Box>
-            )}
-          </Box>
-        )}
-
-        {/* Scrollable content */}
-        <Box
-          className="no-scrollbar"
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: CONTENT_PADDING,
-          }}
-        >
-          {children}
-        </Box>
-
-        {/* Footer */}
-        {footer && (
-          <Box
-            style={{
-              height: `${FOOTER_HEIGHT}px`,
-              flexShrink: 0,
-            }}
-          >
-            {footer}
-          </Box>
-        )}
-      </Flex>
+        {secondaryPanel}
+      </Box>
     );
   }
 
+  return (
+    <Flex
+      direction="column"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        backgroundColor: 'var(--app-sidebar-surface)',
+        fontFamily: 'Manrope, sans-serif',
+      }}
+    >
+      {/* Mobile header: logo area + × close button */}
+      {header && (
+        <Box
+          style={{
+            height: `${HEADER_HEIGHT}px`,
+            flexShrink: 0,
+            position: 'relative',
+          }}
+        >
+          <Box style={{ height: '100%', paddingRight: onMobileClose ? '40px' : undefined }}>
+            {header}
+          </Box>
+          {onMobileClose && (
+            <Box
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: 'var(--space-3)',
+                transform: 'translateY(-50%)',
+              }}
+            >
+              <IconButton
+                variant="ghost"
+                color="gray"
+                size="2"
+                onClick={onMobileClose}
+                style={{ margin: 0 }}
+                aria-label={t('sidebar.close')}
+              >
+                <MaterialIcon name="close" size={20} color="var(--gray-11)" />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Scrollable content */}
+      <Box
+        className="no-scrollbar"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: CONTENT_PADDING,
+        }}
+      >
+        {children}
+      </Box>
+
+      {/* Footer */}
+      {footer && (
+        <Box
+          style={{
+            height: `${FOOTER_HEIGHT}px`,
+            flexShrink: 0,
+          }}
+        >
+          {footer}
+        </Box>
+      )}
+    </Flex>
+  );
+}
+
+function DesktopSidebarShell({ header, children, footer, secondaryPanel, onDismissSecondaryPanel }: SidebarBaseProps) {
   const sidebarWidth = useSidebarWidthStore((s) => s.sidebarWidth);
   const setSidebarWidth = useSidebarWidthStore((s) => s.setSidebarWidth);
 
