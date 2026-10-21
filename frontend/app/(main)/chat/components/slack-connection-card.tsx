@@ -12,7 +12,7 @@ import type { SlackConnectionStatus } from '@/app/(main)/workspace/mcp-servers/t
 import { useMcpOAuthPopup } from '@/app/(main)/workspace/mcp-servers/hooks/use-mcp-oauth-popup';
 
 const initialStatus: SlackConnectionStatus = { configured: false, isConnected: false };
-type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'superhuman';
+type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'slides' | 'superhuman';
 
 function McpConnectionCard({ provider }: { provider: Provider }) {
   const { t } = useTranslation();
@@ -30,7 +30,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             ? 'Google Drive'
             : provider === 'google-calendar'
               ? 'Google Calendar'
-              : 'Superhuman Docs / Coda';
+              : provider === 'slides'
+                ? 'Slides'
+                : 'Superhuman Docs / Coda';
   const i18nPrefix = `chat.${provider}Connection`;
   const statusRequest = provider === 'slack'
     ? McpServersApi.getSlackConnection
@@ -46,7 +48,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             ? McpServersApi.getGoogleDriveConnection
             : provider === 'google-calendar'
               ? McpServersApi.getGoogleCalendarConnection
-              : McpServersApi.getSuperhumanDocsConnection;
+              : provider === 'slides'
+                ? McpServersApi.getSlidesConnection
+                : McpServersApi.getSuperhumanDocsConnection;
   const [connection, setConnection] = useState<SlackConnectionStatus>(initialStatus);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -313,6 +317,10 @@ export function GoogleDriveConnectionCard() {
 
 export function GoogleCalendarConnectionCard() {
   return <McpConnectionCard provider="google-calendar" />;
+}
+
+export function SlidesConnectionCard() {
+  return <McpConnectionCard provider="slides" />;
 }
 
 export function SuperhumanDocsConnectionCard() {

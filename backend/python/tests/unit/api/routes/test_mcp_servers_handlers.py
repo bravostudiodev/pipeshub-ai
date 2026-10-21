@@ -45,6 +45,8 @@ from app.api.routes.mcp_servers import (
     get_instance_tools,
     get_my_mcp_servers,
     get_slack_connection,
+    get_slides_connection,
+    _is_slides_mcp_instance,
     _is_atlassian_rovo_mcp_instance,
     _is_gmail_mcp_instance,
     _is_google_drive_mcp_instance,
@@ -825,6 +827,22 @@ class TestDiscoveryHandlers:
             "needsReauth": False,
             "statusDetail": None,
         }
+
+    def test_slides_designation_requires_custom_personal_oauth_instance(self) -> None:
+        instance = {
+            "name": "Slides",
+            "isCustom": True,
+            "url": "https://slides.example.com/mcp",
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "authMode": MCPAuthMode.OAUTH.value,
+        }
+        assert _is_slides_mcp_instance(instance)
+        assert _is_slides_mcp_instance({**instance, "name": " slides "})
+        assert not _is_slides_mcp_instance({**instance, "isCustom": False})
+        assert not _is_slides_mcp_instance({**instance, "name": "Slides Test"})
+        assert not _is_slides_mcp_instance({**instance, "useAdminAuth": True})
+        assert not _is_slides_mcp_instance({**instance, "authMode": MCPAuthMode.API_TOKEN.value})
+        assert not _is_slides_mcp_instance({**instance, "url": "http://slides.example.com/mcp"})
 
     @pytest.mark.parametrize(
         ("type_id", "host", "matcher"),
