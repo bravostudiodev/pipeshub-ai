@@ -43,6 +43,9 @@ pipeline:
               - CVE-2026-8838
               - CVE-2026-106445
               - CVE-2026-106446
+              - GHSA-6q48-6c7w-9gw2
+              - CVE-2026-112403
+              - GHSA-hq85-5cpj-mr62
           context: .
           push: true #TODO
         tags:
