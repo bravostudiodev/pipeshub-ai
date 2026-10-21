@@ -37,6 +37,16 @@ import {
   updateMcpOAuthConfig,
   discoverMcpOAuthMetadata,
   getMyMcpServers,
+  getSlackConnection,
+  getNotionConnection,
+  getMiroConnection,
+  getAtlassianConnection,
+  getGmailConnection,
+  getGoogleDriveConnection,
+  getGoogleCalendarConnection,
+  getSlidesConnection,
+  getSuperhumanDocsConnection,
+  getMcpRetrievalTraces,
   getMcpInstanceTools,
   getAgentMcpServers,
   authenticateAgentMcpInstance,
@@ -61,6 +71,16 @@ export function createMcpServersRouter(container: Container): Router {
   // ---- Discovery / consumption (before '/instances/:instanceId' so 'my-mcp-servers' never matches as an id) --
 
   router.get('/my-mcp-servers', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getMyMcpServers(config));
+  router.get('/slack-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getSlackConnection(config));
+  router.get('/notion-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getNotionConnection(config));
+  router.get('/miro-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getMiroConnection(config));
+  router.get('/atlassian-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getAtlassianConnection(config));
+  router.get('/gmail-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGmailConnection(config));
+  router.get('/google-drive-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGoogleDriveConnection(config));
+  router.get('/google-calendar-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGoogleCalendarConnection(config));
+  router.get('/slides-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getSlidesConnection(config));
+  router.get('/superhuman-docs-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getSuperhumanDocsConnection(config));
+  router.get('/retrieval-traces', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getMcpRetrievalTraces(config));
 
   // ---- OAuth callback / discovery (state-keyed, instance-agnostic paths) --
 

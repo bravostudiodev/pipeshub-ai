@@ -27,8 +27,11 @@ logger = logging.getLogger("connector_service")
 CREDENTIALS_PREFIX = "/services/mcp/credentials/"
 MIN_PATH_PARTS_COUNT = 5  # "", services, mcp, credentials, instanceId, userId
 LOCK_TIMEOUT_SECONDS = 30
-REFRESH_COOLDOWN_SECONDS = 10
 MIN_IMMEDIATE_RECHECK_DELAY_SECONDS = 1
+# Floor between two refreshes of one credential. Some providers (Miro) answer a refresh with
+# the same access token and its *remaining* lifetime, so a naive "refresh shortly before
+# expiry" schedule collapses into a refresh every second until the token finally expires.
+MIN_REFRESH_INTERVAL_SECONDS = 30
 PROACTIVE_REFRESH_WINDOW_SECONDS = 600  # refresh 10 minutes before expiry
 MIN_SHORT_LIVED_REFRESH_WINDOW_SECONDS = 60
 SHORT_LIVED_TOKEN_BUFFER_RATIO = 0.2
@@ -223,7 +226,8 @@ class MCPTokenRefreshService:
             refresh_window = PROACTIVE_REFRESH_WINDOW_SECONDS
         else:
             refresh_window = max(MIN_SHORT_LIVED_REFRESH_WINDOW_SECONDS, int(expires_in * SHORT_LIVED_TOKEN_BUFFER_RATIO))
-            refresh_window = min(refresh_window, max(1, expires_in - 1))
+            # Never before half-life: the 60s minimum window would otherwise refresh a 60s token 1s after issue.
+            refresh_window = min(refresh_window, expires_in // 2)
 
         created_at = token.created_at if token.created_at.tzinfo else token.created_at.replace(tzinfo=timezone.utc)
         refresh_time = created_at + timedelta(seconds=max(0, expires_in - refresh_window))
@@ -253,22 +257,22 @@ class MCPTokenRefreshService:
 
             delay, refresh_time = self._calculate_refresh_delay(token)
             if delay <= 0:
-                # Cooldown only guards this branch — repeatedly computing delay<=0 (e.g. a
-                # pathologically short-lived token) would otherwise hammer the refresh
-                # endpoint. It must NOT gate the normal case below: `_refresh_credential`
-                # calls this right after a successful refresh to schedule the NEXT one from
-                # the new token's real expiry, and `_last_refresh_time` was just set to
-                # "now" by that same refresh, so an unconditional cooldown check here would
-                # always suppress that reschedule and leave recovery to the 5-minute
-                # periodic sweep — too slow for short-lived tokens.
-                time_since_last = time.time() - self._last_refresh_time.get(config_path, 0)
-                if time_since_last < REFRESH_COOLDOWN_SECONDS:
-                    return
                 delay = MIN_IMMEDIATE_RECHECK_DELAY_SECONDS
+            # Holding (not dropping) the refresh keeps a short-lived token alive without
+            # waiting for the 5-minute sweep, while bounding calls to the token endpoint.
+            last_refresh = self._last_refresh_time.get(config_path)
+            floor = (last_refresh + MIN_REFRESH_INTERVAL_SECONDS - time.time()) if last_refresh else 0.0
+            held = delay < floor
+            if held:
+                delay = floor
+                refresh_time = datetime.now(timezone.utc) + timedelta(seconds=delay)
 
             task = asyncio.create_task(self._delayed_refresh(config_path, delay))
             self._refresh_tasks[config_path] = task
-            self.logger.info(f"Scheduled MCP token refresh for {config_path} in {delay:.0f}s (at {refresh_time})")
+            self.logger.info(
+                f"Scheduled MCP token refresh for {config_path} in {delay:.0f}s (at {refresh_time}, "
+                f"expires_in={token.expires_in}s{', held to refresh floor' if held else ''})"
+            )
 
     async def _delayed_refresh(self, config_path: str, delay: float) -> None:
         try:

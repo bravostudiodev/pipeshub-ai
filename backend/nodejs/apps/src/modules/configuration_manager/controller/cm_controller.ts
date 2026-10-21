@@ -572,7 +572,7 @@ export const getSmtpConfigStatus =
   };
 const SLACK_BOT_CAS_MAX_RETRIES = 5;
 export const SLACK_BOT_SETTINGS_UNREADABLE =
-  "The saved Slack bot settings couldn't be read, so nothing was shown or changed. This usually means the server's encryption key (the SECRET_KEY setting) changed after the bots were saved. Ask whoever runs your PipesHub server to restore the original key, then try again.";
+  "The saved Slack bot settings couldn't be read, so nothing was shown or changed. This usually means the server's encryption key (the SECRET_KEY setting) changed after the bots were saved. Ask whoever runs your OddJeeves server to restore the original key, then try again.";
 
 const parseSlackBotStore = (
   encrypted: string | null | undefined,
@@ -2363,7 +2363,7 @@ export const getDesktopFrontendUrl =
     try {
       if (req.headers['client-name'] !== 'desktop') {
         throw new ForbiddenError(
-          'This endpoint is only available to the PipesHub desktop app.',
+          'This endpoint is only available to the OddJeeves desktop app.',
         );
       }
       const urls =

@@ -154,15 +154,6 @@ export function McpCredentialsDialog({
 
   const handleOAuthConnect = async () => {
     setError(null);
-    if (isAuthenticated) {
-      try {
-        if (isAgentScoped) await McpServersApi.reauthenticateAgentInstance(agentKey!, instance._id);
-        else await McpServersApi.reauthenticate(instance._id);
-      } catch (e) {
-        setError(extractErrorDetail(e) || t('agentBuilder.mcpAuthSaveError'));
-        return;
-      }
-    }
     await startOAuthPopup(instance._id);
   };
 

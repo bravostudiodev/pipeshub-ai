@@ -1102,8 +1102,8 @@ class ToolsetTokenRefreshService:
                 MIN_SHORT_LIVED_REFRESH_WINDOW_SECONDS,
                 int(expires_in * SHORT_LIVED_TOKEN_BUFFER_RATIO)
             )
-            # Keep the window strictly less than TTL to avoid immediate refresh loops.
-            refresh_window = min(refresh_window, max(1, expires_in - 1))
+            # Never before half-life: the 60s minimum window would otherwise refresh a 60s token 1s after issue.
+            refresh_window = min(refresh_window, expires_in // 2)
 
         refresh_time = token.created_at + timedelta(seconds=max(0, expires_in - refresh_window))
         delay = (refresh_time - datetime.now()).total_seconds()

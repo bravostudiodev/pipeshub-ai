@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.agents.mcp.client import (
@@ -502,7 +503,24 @@ class TestMCPClientManagerSession:
             await manager.open()
             result = await manager.call_tool_in_session("search", {"q": "test"})
             assert result == {"result": "ok"}
-            mock_client.call_tool.assert_awaited_once_with("search", {"q": "test"})
+            mock_client.call_tool.assert_awaited_once_with("search", {"q": "test"}, raise_on_error=False)
+
+    @pytest.mark.asyncio
+    async def test_call_tool_in_session_surfaces_http_error_body(self) -> None:
+        config = _config(transport=MCPTransport.STDIO, command="npx")
+        request = httpx.Request("POST", "https://example.test/mcp")
+        error = httpx.HTTPStatusError("Client error '400 Bad Request'", request=request, response=httpx.Response(400, request=request))
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.call_tool = AsyncMock(side_effect=error)
+
+        with patch("app.agents.mcp.client.build_transport", return_value=MagicMock()), \
+             patch("app.agents.mcp.client.Client", return_value=mock_client):
+            manager = MCPClientManager(config)
+            await manager.open()
+            manager._session_recorder = MagicMock(status_code=400, url="u", error_body="invalid timeMin", error_request="r")
+            with pytest.raises(MCPConnectionError, match="invalid timeMin"):
+                await manager.call_tool_in_session("list_events", {"timeMin": "x"})
 
     @pytest.mark.asyncio
     async def test_call_tool_in_session_times_out_on_unresponsive_server(self) -> None:

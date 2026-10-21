@@ -77,6 +77,10 @@ Changes merged to `main` since the last release: [`v0.7.0...HEAD`](https://githu
 ### Security
 - `x-is-admin` header injection closed; admin status derives from the JWT role ([#2985](https://github.com/pipeshub-ai/pipeshub-ai/pull/2985)). Prompt-injection guard on sub-agent execution ([#2987](https://github.com/pipeshub-ai/pipeshub-ai/pull/2987)).
 
+### OddJeeves fork-specific changes
+- Added a shared outbound HTTP proxy route and request logging for Python and Node clients, plus an admin-wide public web search/URL-fetch control. Public web failures now end the turn instead of triggering repeated broader searches. See [fork customizations](docs/fork-customizations.md).
+- Documented first-party metrics/event collection, the identifiers and usage fields it can send, optional Opik traces, and Hugging Face's independent telemetry opt-out. The application does not currently set `HF_HUB_DISABLE_TELEMETRY`.
+
 ### Breaking changes & upgrade notes
 - Admin privilege migrates from admin user groups to `User.role` on first boot; users without a role in their JWT must re-login ([#2939](https://github.com/pipeshub-ai/pipeshub-ai/pull/2939)). A storage-record `orgId` backfill also runs at startup ([#3059](https://github.com/pipeshub-ai/pipeshub-ai/pull/3059)).
 - Compose containers are recreated and renamed to `{project}-{service}-1`; `docker exec pipeshub-ai` becomes `docker compose -p pipeshub-ai exec -T pipeshub-ai …` ([#2634](https://github.com/pipeshub-ai/pipeshub-ai/pull/2634)).

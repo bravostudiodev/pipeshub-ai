@@ -551,7 +551,7 @@ export function MoveFolderSidebar({
             loadingLabel={t('moveFolder.moving')}
             onClick={handleMove}
             style={{
-              background: 'var(--emerald-9)',
+              background: 'var(--accent-9)',
               color: 'white',
             }}
           >

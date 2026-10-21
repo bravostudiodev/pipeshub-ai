@@ -100,6 +100,9 @@ function buildAppServices(t: TFunction, appServices: AppServices | null): Servic
     { key: 'docling', icon: 'description', label: t('workspace.services.app.docling.label'), description: t('workspace.services.app.docling.description') },
   ];
 
+  if (appServices && 'embedding' in appServices) {
+    services.push({ key: 'embedding', icon: 'memory', label: t('workspace.services.app.embedding.label'), description: t('workspace.services.app.embedding.description') });
+  }
   // Parsing + extraction are opt-in (USE_PARSING_SERVICE); the health API only reports them when enabled
   if (appServices && 'parsing' in appServices) {
     services.push({ key: 'parsing', icon: 'article', label: t('workspace.services.app.parsing.label'), description: t('workspace.services.app.parsing.description') });
@@ -128,6 +131,13 @@ function ServiceStatusBadge({ status }: { status: ServiceStatus | undefined }) {
     return (
       <Badge color="green" variant="soft" size="1" style={{ flexShrink: 0 }}>
         {t('workspace.services.statusHealthy')}
+      </Badge>
+    );
+  }
+  if (status === 'not_configured') {
+    return (
+      <Badge color="gray" variant="soft" size="1" style={{ flexShrink: 0 }}>
+        {t('workspace.services.statusNotConfigured')}
       </Badge>
     );
   }

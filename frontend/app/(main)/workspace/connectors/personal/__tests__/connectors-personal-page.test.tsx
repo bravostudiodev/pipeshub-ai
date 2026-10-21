@@ -129,7 +129,7 @@ describe('Personal connectors page', () => {
       variant: 'info',
       title: 'Desktop app required',
       description:
-        'Local filesystem connector is only available in the PipesHub desktop app. Please use the desktop app to set up this connector.',
+        'Local filesystem connector is only available in the OddJeeves desktop app. Please use the desktop app to set up this connector.',
     });
     expect(screen.queryByRole('dialog', { name: 'Set up Local Folder' })).toBeNull();
   });

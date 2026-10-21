@@ -131,7 +131,7 @@ export const hydrateScopedRequestAsUser = async (
       }
     }
     throw new NotFoundError(
-      'User not found, create an account on the Pipeshub platform first.',
+      'User not found, create an account on the OddJeeves platform first.',
     );
   }
 

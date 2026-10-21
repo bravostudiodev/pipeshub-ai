@@ -200,6 +200,9 @@ class WebSearchTool(Tool):
         ]
 
     async def execute(self, **kwargs: Any) -> ToolOutput:
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            return ToolOutput(success=False, error="Public web access is disabled by the workspace administrator.")
         query:       str = kwargs["query"]
         max_results: int = int(kwargs.get("max_results") or 5)
         loop = asyncio.get_event_loop()

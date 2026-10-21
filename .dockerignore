@@ -58,6 +58,8 @@ tests
 
 # Node
 **/node_modules/
+!backend/nodejs/apps/node_modules/
+!backend/nodejs/apps/node_modules/**
 **/npm-debug.log*
 **/yarn-debug.log*
 **/yarn-error.log*
@@ -75,9 +77,11 @@ tests
 **/.DS_Store
 **/Thumbs.db
 
-# Build outputs (we rebuild in Docker)
+# Build outputs created by the pipeline App build stage.
 frontend/dist/
 backend/nodejs/apps/dist/
+!backend/nodejs/apps/dist/
+!backend/nodejs/apps/dist/**
 
 # Documentation
 **/*.md

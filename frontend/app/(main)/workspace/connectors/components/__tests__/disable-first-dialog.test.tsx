@@ -148,7 +148,7 @@ describe('DisableFirstDialog', () => {
     toggleConnector.mockRejectedValue({
       type: 'CONFLICT',
       statusCode: 409,
-      message: `Device "Build Mac" that owns connector ${connectorId} is not connected. Open the Pipeshub desktop app on that machine.`,
+      message: `Device "Build Mac" that owns connector ${connectorId} is not connected. Open the OddJeeves desktop app on that machine.`,
       details: { code: 'DESKTOP_OFFLINE', connectorId, ownerDeviceName: 'Build Mac' },
     });
     const { onProceed } = renderDialog();
@@ -159,7 +159,7 @@ describe('DisableFirstDialog', () => {
     expect(toasts()[0]).toMatchObject({
       variant: 'info',
       title:
-        'Build Mac, the device that owns this folder, is not connected. Open the PipesHub desktop app on that device to sync.',
+        'Build Mac, the device that owns this folder, is not connected. Open the OddJeeves desktop app on that device to sync.',
     });
     expect(JSON.stringify(toasts()[0])).not.toContain(connectorId);
     expect(onProceed).not.toHaveBeenCalled();

@@ -67,3 +67,19 @@ ArangoDB:
 docker run -d --name arangodb -p 8529:8529 -e ARANGO_ROOT_PASSWORD=your_password arangodb/arangodb:latest
 
 ```
+
+## Fork-specific MCP and source connections
+
+This fork adds user-specific connection state and retrieval diagnostics for
+the employee chat experience. Organization MCP instances are configured once
+by administrators; OAuth-backed MCP calls resolve the authenticating user's
+credential. The connection status routes in
+`app/api/routes/mcp_servers.py` return only the caller's state. Do not add a
+shared-user credential fallback or include secrets in responses or logs.
+
+MCP retrieval traces are implemented in `app/agents/mcp/retrieval_trace.py`.
+`ENABLE_MCP_RETRIEVAL_TRACE` is off by default. Trace data is redacted,
+organization-scoped, and expires after seven days. The workspace admin UI is
+`/workspace/mcp-servers/diagnostics/`; its API checks admin access and never
+returns message content. Read [`../../docs/fork-customizations.md`](../../docs/fork-customizations.md)
+before changing connection discovery, OAuth handling, or trace storage.

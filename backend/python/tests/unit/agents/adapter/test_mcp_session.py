@@ -12,6 +12,7 @@ import pytest
 from app.agents.agent_loop import mcp_session as mcp_session_module
 from app.agents.agent_loop.mcp_access import ResolvedMCPServer
 from app.agents.agent_loop.mcp_session import MCPSessionManager
+from app.agents.mcp.client import MCPProviderRejectedError, MCPReauthRequiredError
 from app.agents.mcp.models import OAuthTokens
 from app.agents.mcp.token_refresh import MCPTokenRefreshError
 from tests.unit.agents.adapter.conftest import make_context
@@ -47,6 +48,7 @@ class _FakeClientManager:
         self.closed = False
         self.calls: list[tuple[str, dict]] = []
         self.responses: list[Any] = ["ok"]
+        self.last_http = None
 
     async def open(self) -> "_FakeClientManager":
         self.opened = True
@@ -125,7 +127,8 @@ class TestCall:
         opened = await manager._get_or_open(server)  # noqa: SLF001 — pre-seed to control the raised error
         opened.responses = [RuntimeError("401 unauthorized")]
 
-        with pytest.raises(RuntimeError, match="401"):
+        # An API token can't be refreshed, so a 401 is a reconnect for the user, not a retry.
+        with pytest.raises(MCPReauthRequiredError, match="reconnect"):
             await manager.call(server, "search", {})
 
         assert len(client_manager_factory.built) == 1
@@ -244,8 +247,106 @@ class TestCall:
         first_manager = await session_manager._get_or_open(server)  # noqa: SLF001
         first_manager.responses = [RuntimeError("401 unauthorized")]
 
-        with pytest.raises(MCPTokenRefreshError):
+        with pytest.raises(MCPReauthRequiredError) as excinfo:
             await session_manager.call(server, "search", {})
+        assert isinstance(excinfo.value.__cause__, MCPTokenRefreshError)
+
+
+@pytest.fixture
+def recorded_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    sleeps: list[float] = []
+
+    async def _fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(mcp_session_module.asyncio, "sleep", _fake_sleep)
+    return sleeps
+
+
+class TestPolicy:
+    """One rule per failure class — see `mcp_call_policy.POLICY`."""
+
+    async def test_dead_session_is_reopened_once_and_call_retried(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [RuntimeError("Client is not connected. Use the 'async with client:' context manager first.")]
+
+        assert await session_manager.call(server, "search", {"q": "x"}) == "ok"
+        assert first.closed is True
+        assert len(client_manager_factory.built) == 2
+        assert client_manager_factory.built[1].calls == [("search", {"q": "x"})]
+        assert recorded_sleeps == []
+
+    async def test_transient_failure_retries_with_backoff_then_gives_up(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [MCPProviderRejectedError(503, "https://x/mcp", "upstream busy", None)]
+        # Every rebuilt manager also fails, so the call exhausts the two transient retries.
+        original_call = _FakeClientManagerFactory.__call__
+
+        def _always_failing(self: _FakeClientManagerFactory, *args: Any, **kwargs: Any) -> _FakeClientManager:
+            manager = original_call(self, *args, **kwargs)
+            manager.responses = [MCPProviderRejectedError(503, "https://x/mcp", "upstream busy", None)]
+            return manager
+
+        client_manager_factory.__class__.__call__ = _always_failing  # type: ignore[method-assign]
+        try:
+            with pytest.raises(MCPProviderRejectedError, match="503"):
+                await session_manager.call(server, "search", {})
+        finally:
+            client_manager_factory.__class__.__call__ = original_call  # type: ignore[method-assign]
+
+        assert recorded_sleeps == [0.5, 1.5]
+        assert len(client_manager_factory.built) == 3
+
+    async def test_transient_failure_recovers_on_retry(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [MCPProviderRejectedError(429, "https://x/mcp", None, "2")]
+
+        assert await session_manager.call(server, "search", {}) == "ok"
+        assert recorded_sleeps == [2.0]  # Retry-After honoured over the table's 0.5s
+
+    async def test_reauth_required_marks_credential_and_raises_reconnect_error(
+        self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        marked: list[str] = []
+
+        async def _fake_mark(instance_id: str, owner_id: str, config_service: Any, *, detail: str, source: str) -> bool:
+            marked.append(source)
+            return True
+
+        monkeypatch.setattr(mcp_session_module, "mark_reauth_required", _fake_mark)
+        session_manager = MCPSessionManager(make_context())
+        server = _server(auth_mode="api_token")
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [MCPProviderRejectedError(401, "https://x/mcp", None, None)]
+
+        with pytest.raises(MCPReauthRequiredError, match="reconnect"):
+            await session_manager.call(server, "search", {})
+        assert marked == ["tool_call"]
+
+    async def test_rejected_call_is_not_retried(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)  # noqa: SLF001
+        first.responses = [MCPProviderRejectedError(400, "https://x/mcp", "invalid timeMin", None)]
+
+        with pytest.raises(MCPProviderRejectedError, match="invalid timeMin"):
+            await session_manager.call(server, "search", {})
+        assert len(client_manager_factory.built) == 1
+        assert recorded_sleeps == []
 
 
 class TestAcloseAll:

@@ -1,3 +1,4 @@
+import app.utils.outbound_bootstrap  # noqa: F401  (must precede client construction)
 """Extraction Service entry point.
 
 Standalone FastAPI microservice (port 8093) that accepts a BlocksContainer

@@ -1120,9 +1120,13 @@ export class StorageController {
         ),
       );
 
+      // The body is either the raw file or a signedUrl envelope, and a stored .json file shares a
+      // Content-Type with the envelope, so callers need an explicit marker rather than sniffing.
       if (document.storageVendor === StorageVendor.Local) {
+        res.setHeader('X-Storage-Delivery', 'inline');
         serveFileFromLocalStorage(document, res, resolvedVersion);
       } else {
+        res.setHeader('X-Storage-Delivery', 'signed-url');
         res.status(200).json({ signedUrl: signedUrlResult.data });
       }
     } catch (error) {

@@ -4,7 +4,9 @@ Every hop, redirects included, is resolved and checked against the shared policy
 ``app.utils.url_fetcher`` and then connected to the validated address, so a DNS answer
 that changes between the check and the connect cannot steer the request into the
 network. Environment proxies are never used: a proxy resolves the hostname again itself,
-which would undo the pin.
+which would undo the pin. The configured outbound proxy (``app.utils.outbound_proxy``) is
+used instead for external hops, and is given the validated address, never the hostname, so
+it has nothing to re-resolve; the hop is still resolved and checked locally first.
 """
 
 from __future__ import annotations
@@ -16,6 +18,9 @@ from urllib.parse import urljoin
 
 import httpx
 
+from app.utils.outbound_http import is_proxy_denial, log_denied, proxy_refusal_status
+from app.utils.outbound_proxy import select_route
+from app.services.featureflag.platform_settings import is_public_web_access_enabled
 from app.utils.url_fetcher import FetchError, PublicTarget, resolve_public_http_target
 from app.utils.url_redaction import redact_url
 
@@ -134,6 +139,8 @@ class PublicUrlFetcher:
         self._transport = transport
 
     async def get(self, url: str, limits: PublicFetchLimits) -> PublicFetchResponse:
+        if not await is_public_web_access_enabled():
+            raise PublicFetchError("Public URL fetching is disabled by the workspace administrator.")
         current_url = url
         for _ in range(limits.max_redirects + 1):
             target = await _resolve(current_url)
@@ -161,6 +168,13 @@ class PublicUrlFetcher:
             f"More than {limits.max_redirects} redirects from {redact_url(url)}"
         )
 
+    @staticmethod
+    def _refuse_proxy_denial(url: str) -> None:
+        """No direct fallback: the proxy's refusal (e.g. a hostname allowlist that cannot match
+        the validated IP we tunnel to) is final, so the URL is not fetched."""
+        log_denied(url, "proxy_denied", category="url_fetch")
+        raise UnsafeUrlError("The outbound proxy refused this URL; it was not fetched.")
+
     async def _connect_any(
         self, url: str, target: PublicTarget, timeout_s: float
     ) -> tuple[httpx.AsyncClient, httpx.Response]:
@@ -168,6 +182,10 @@ class PublicUrlFetcher:
         both returned objects. A dual-stack host can list an unreachable address first, and
         every address passed the SSRF check, so transport failures fail over to the next.
         Retry stops as soon as an address returns a response (never after one)."""
+        try:
+            proxy_url = select_route(url).proxy_url
+        except ValueError as e:
+            raise PublicFetchError(f"Outbound proxy is misconfigured: {e}") from e
         last_error: httpx.HTTPError | None = None
         for address in target.addresses:
             plan = plan_hop(url, replace(target, addresses=(address,)))
@@ -176,6 +194,7 @@ class PublicUrlFetcher:
                 follow_redirects=False,
                 timeout=timeout_s,
                 transport=self._transport,
+                **({} if proxy_url is None else {"proxy": proxy_url}),
             )
             try:
                 request = client.build_request(
@@ -185,10 +204,20 @@ class PublicUrlFetcher:
                     extensions=dict(plan.extensions),
                 )
                 response = await client.send(request, stream=True)
+            except httpx.ProxyError as e:
+                await client.aclose()
+                if proxy_url is not None and proxy_refusal_status(e) is not None:
+                    self._refuse_proxy_denial(url)
+                last_error = e
+                continue
             except httpx.HTTPError as e:
                 await client.aclose()
                 last_error = e
                 continue
+            if proxy_url is not None and is_proxy_denial(response.status_code, response.headers):
+                await response.aclose()
+                await client.aclose()
+                self._refuse_proxy_denial(url)
             return client, response
         raise PublicFetchError(
             f"GET {redact_url(url)} failed: {type(last_error).__name__}: {last_error}"

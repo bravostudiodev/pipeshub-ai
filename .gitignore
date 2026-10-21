@@ -229,3 +229,4 @@ deployment/docker-compose/bootstrap-first-run.env
 loom/
 node_modules
 .claude
+.idea/

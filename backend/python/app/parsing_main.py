@@ -1,3 +1,4 @@
+import app.utils.outbound_bootstrap  # noqa: F401  (must precede client construction)
 """Parsing Service entry point.
 
 Standalone FastAPI microservice (port 8092) that accepts file bytes and

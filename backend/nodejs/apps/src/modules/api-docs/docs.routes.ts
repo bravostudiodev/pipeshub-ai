@@ -53,7 +53,7 @@ function getDocumentationHtml(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PipesHub API Documentation</title>
+  <title>OddJeeves API Documentation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2288,7 +2288,7 @@ function getDocumentationHtml(): string {
               <path d="M110.72 251.637L166.081 307L110.72 362.363L55.3602 307L110.72 251.637Z" fill="#00ac3a"/>
             </svg>
           </div>
-          <span>PipesHub API</span>
+          <span>OddJeeves API</span>
         </a>
         <div class="search-box">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2354,10 +2354,10 @@ function getDocumentationHtml(): string {
                 <path d="M110.72 251.637L166.081 307L110.72 362.363L55.3602 307L110.72 251.637Z" fill="white"/>
               </svg>
             </div>
-            <h1 class="welcome-title">Welcome to PipesHub API</h1>
+            <h1 class="welcome-title">Welcome to OddJeeves API</h1>
             <p class="welcome-description">
               Explore our comprehensive API documentation. Select a module from the sidebar
-              to view available endpoints and learn how to integrate with PipesHub.
+              to view available endpoints and learn how to integrate with OddJeeves.
             </p>
           </div>
 
@@ -4197,10 +4197,10 @@ function getDocumentationHtml(): string {
         '<path d="M110.72 251.637L166.081 307L110.72 362.363L55.3602 307L110.72 251.637Z" fill="white"/>' +
         '</svg>' +
         '</div>' +
-        '<h1 class="welcome-title">Welcome to PipesHub API</h1>' +
+        '<h1 class="welcome-title">Welcome to OddJeeves API</h1>' +
         '<p class="welcome-description">' +
         'Explore our comprehensive API documentation. Select a module from the sidebar ' +
-        'to view available endpoints and learn how to integrate with PipesHub.' +
+        'to view available endpoints and learn how to integrate with OddJeeves.' +
         '</p>' +
         '</div>' +
         renderHealthSection(null);

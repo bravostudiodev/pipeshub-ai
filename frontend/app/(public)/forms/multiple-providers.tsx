@@ -81,7 +81,9 @@ export default function MultipleProviders({
   authProviders,
   onBack,
 }: MultipleProvidersProps) {
-  const [activeMethod, setActiveMethod] = useState<AuthMethod>(allowedMethods[0]);
+  const [activeMethod, setActiveMethod] = useState<AuthMethod>(
+    allowedMethods.includes('google') ? 'google' : allowedMethods[0],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);

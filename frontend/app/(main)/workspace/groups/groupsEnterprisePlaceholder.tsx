@@ -73,15 +73,7 @@ export default function GroupsEnterprisePlaceholder() {
             )}
           </Text>
           <Text size="2" style={{ color: 'var(--slate-11)', lineHeight: '20px' }}>
-            {t('workspace.groups.enterpriseContact', 'Contact')}{' '}
-            <a
-              href="https://docs.pipeshub.com/contact-us"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
-            >
-              @pipeshub.com
-            </a>
+            Contact your administrator to learn more.
           </Text>
         </Flex>
       </Flex>

@@ -1820,10 +1820,8 @@ class TestCalculateRefreshDelay:
         svc = _make_service()
         token = _make_short_lived_token(expires_in=10)
         delay, refresh_time = svc._calculate_refresh_delay(token)
-        # Window = max(60, 10*0.2) = 60, clamped to min(60, max(1, 9)) = 9
-        # delay ~ 10 - 9 = 1 second
-        assert delay >= 0
-        assert delay < 5
+        # Window = max(60, 10*0.2) = 60, capped at half-life (5) -> delay ~ 5 seconds
+        assert 4 < delay <= 5
 
     def test_expired_token(self):
         svc = _make_service()

@@ -10,9 +10,9 @@ import { extractApiErrorMessage } from './api-error';
 export const STREAM_ERROR_MESSAGES = {
   sessionExpired: 'Your session has expired. Sign in again to continue.',
   forbidden: "You don't have access to this. Ask a workspace admin if you need it.",
-  offline: "Couldn't reach PipesHub. Check your internet connection, then try again.",
-  interrupted: 'The connection to PipesHub dropped before this finished. Please try again.',
-  unavailable: 'PipesHub is having trouble right now. Please try again in a minute.',
+  offline: "Couldn't reach the service. Check your internet connection, then try again.",
+  interrupted: 'The connection dropped before this finished. Please try again.',
+  unavailable: 'The service is having trouble right now. Please try again in a minute.',
 } as const;
 
 /** Chat shows the error as the assistant's reply, so it speaks about the answer. */
@@ -20,7 +20,7 @@ export const CHAT_STREAM_ERROR_MESSAGES = {
   ...STREAM_ERROR_MESSAGES,
   interrupted:
     'The answer was interrupted before it finished. Click Regenerate or send your message again.',
-  unavailable: "PipesHub couldn't answer right now. Please try again in a minute.",
+  unavailable: "The service couldn't answer right now. Please try again in a minute.",
 } as const;
 
 type StreamErrorMessages = typeof STREAM_ERROR_MESSAGES | typeof CHAT_STREAM_ERROR_MESSAGES;
@@ -38,8 +38,8 @@ export class StreamError extends Error {
 
 export function busyStreamMessage(retryAfterSeconds?: number): string {
   return retryAfterSeconds
-    ? `PipesHub is busy right now. Please try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`
-    : 'PipesHub is busy right now. Please try again in a few seconds.';
+    ? `The service is busy right now. Please try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`
+    : 'The service is busy right now. Please try again in a few seconds.';
 }
 
 // Server text that is a raw error rather than a sentence for the user.
@@ -86,7 +86,7 @@ export async function streamHttpError(
 
 /**
  * The message for a stream that failed in the browser: the request never
- * reached PipesHub, or the connection dropped part-way through an answer.
+ * reached the server, or the connection dropped part-way through an answer.
  * Errors this module already built pass through unchanged.
  */
 export function streamFailure(

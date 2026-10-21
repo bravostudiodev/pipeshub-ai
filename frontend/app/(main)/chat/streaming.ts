@@ -1555,14 +1555,12 @@ export async function streamRegenerateForSlot(
       // Universal agent mode: read current tool selection at regen time
       const isUniversalAgent = store.settings.queryMode === 'agent';
       const universalToolsSel = useChatStore.getState().universalAgentStreamTools;
-      const universalToolCatalog = useChatStore.getState().universalAgentToolCatalogFullNames;
-      // null → "all tools" (send full catalog), array → explicit subset, undefined → not an agent turn
-      // Strip instanceId prefix from internal keys before putting on the wire.
-      const regenStreamTools = isUniversalAgent
-        ? [...new Set(
-            (universalToolsSel === null ? [...universalToolCatalog] : [...universalToolsSel]).map(stripInstancePrefix)
-          )]
-        : undefined;
+      // null → no filter: omit the field so the backend attaches every authenticated toolset
+      // and MCP server. Sending only the toolset catalog would make it drop all MCP servers.
+      const regenStreamTools =
+        isUniversalAgent && universalToolsSel !== null
+          ? [...new Set(universalToolsSel.map(stripInstancePrefix))]
+          : undefined;
       // Left unset when the user chose nothing, so the backend applies the model's default.
       const assistantRegenReasoningEffort =
         useChatStore.getState().settings.reasoningEffort[regenCtxKey] ?? null;

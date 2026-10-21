@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import app.utils.outbound_bootstrap  # noqa: F401  (must precede client construction)
 import app.utils.runtime_threads  # noqa: E402 - must precede all ML library imports
 from app.api.middlewares.admin_gate import require_admin_caller
 from app.api.middlewares.request_context import RequestContextMiddleware

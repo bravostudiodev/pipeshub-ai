@@ -34,6 +34,10 @@ def _embedding_server_base_url() -> str:
     return base
 
 
+def embedding_server_health_url() -> str:
+    return f"{_embedding_server_base_url().removesuffix('/v1')}/health"
+
+
 def _embedding_server_max_retries() -> int:
     raw = os.getenv("EMBEDDING_SERVER_MAX_RETRIES")
     if raw is None:
