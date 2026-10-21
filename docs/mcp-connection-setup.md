@@ -68,18 +68,6 @@ events. This template requests only Google's documented read scopes, so the
 user's OAuth grant does not authorize those write operations. Keep the Google
 OAuth Data Access scopes and the MCP instance scopes read-only.
 
-## Custom Slides MCP
-
-The employee chat card uses the existing custom MCP instance named exactly
-**Slides**. In Workspace → MCP Servers, configure that custom instance with the
-provider-approved HTTPS endpoint, Streamable HTTP transport, OAuth, and user-bound
-authorization (do not enable shared administrator authentication). Every
-employee then clicks **Connect** on the Slides card and authorizes their own
-Google account. The status check only selects a unique custom instance with
-those characteristics and the exact name; if none or more than one match, the
-card remains unavailable. The card uses the existing Google Slides logo at
-`frontend/public/icons/connectors/slides.svg`.
-
 ## Adding another MCP connection to this fork
 
 Keep a new connection limited to its provider's official endpoint and the

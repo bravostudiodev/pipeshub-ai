@@ -10,7 +10,6 @@ import {
   MiroConnectionCard,
   GmailConnectionCard,
   GoogleDriveConnectionCard,
-  SlidesConnectionCard,
   SlackConnectionCard,
   SuperhumanDocsConnectionCard,
   ConfluenceConnectionCard,
@@ -28,7 +27,6 @@ vi.mock('@/app/(main)/workspace/mcp-servers/api', () => ({
     getAtlassianConnection: vi.fn(),
     getGmailConnection: vi.fn(),
     getGoogleDriveConnection: vi.fn(),
-    getSlidesConnection: vi.fn(),
     getSuperhumanDocsConnection: vi.fn(),
     authenticate: vi.fn(),
     removeCredentials: vi.fn(),
@@ -57,7 +55,6 @@ const getMiroStatus = vi.mocked(McpServersApi.getMiroConnection);
 const getAtlassianStatus = vi.mocked(McpServersApi.getAtlassianConnection);
 const getGmailStatus = vi.mocked(McpServersApi.getGmailConnection);
 const getGoogleDriveStatus = vi.mocked(McpServersApi.getGoogleDriveConnection);
-const getSlidesStatus = vi.mocked(McpServersApi.getSlidesConnection);
 const getSuperhumanStatus = vi.mocked(McpServersApi.getSuperhumanDocsConnection);
 
 function renderCard() {
@@ -70,7 +67,6 @@ beforeEach(() => {
   getAtlassianStatus.mockReset();
   getGmailStatus.mockReset();
   getGoogleDriveStatus.mockReset();
-  getSlidesStatus.mockReset();
   getSuperhumanStatus.mockReset();
   vi.mocked(McpServersApi.authenticate).mockReset();
   vi.mocked(ConnectorsApi.getActiveConnectors).mockReset();
@@ -189,14 +185,5 @@ describe('SlackConnectionCard', () => {
     render(<Theme><GoogleDriveConnectionCard /></Theme>);
 
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeTruthy();
-  });
-
-  it('offers personal OAuth connection for custom Slides and uses its logo', async () => {
-    getSlidesStatus.mockResolvedValue({ configured: true, instanceId: 'custom-slides', isConnected: false });
-    render(<Theme><SlidesConnectionCard /></Theme>);
-
-    expect(await screen.findByRole('button', { name: 'Connect' })).toBeTruthy();
-    expect(screen.getByText('Slides')).toBeTruthy();
-    expect(document.querySelector('img[src="/icons/connectors/slides.svg"]')).toBeTruthy();
   });
 });

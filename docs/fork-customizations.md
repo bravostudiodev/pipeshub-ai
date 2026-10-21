@@ -33,7 +33,6 @@ The current chat cards cover:
 | Gmail | Live Google MCP and per-user OAuth | Uses the organization-configured Gmail MCP instance. |
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
 | Google Calendar | Live Google MCP and per-user OAuth | Uses the organization-configured Calendar MCP instance with Google's documented read-only OAuth scopes. The service is currently in Google's Developer Preview. |
-| Slides | Live custom MCP and per-user OAuth | Uses the organization-configured custom Streamable HTTP MCP instance named `Slides`; status designation requires exactly one matching custom OAuth instance and does not expose credentials. Uses the Google Slides logo at `frontend/public/icons/connectors/slides.svg`. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
 
 The MCP cards are implemented in
@@ -41,9 +40,7 @@ The MCP cards are implemented in
 is historical). Connection status and authorization use the existing MCP
 server APIs in `frontend/app/(main)/workspace/mcp-servers/api.ts` and
 `backend/python/app/api/routes/mcp_servers.py`. Designation is based on provider
-metadata and validated endpoint/auth characteristics, not a database ID. Slides
-is the custom MCP exception: it is identified by exact instance name plus
-custom-instance, HTTPS, Streamable HTTP, user OAuth, and no admin-auth checks.
+metadata and validated endpoint/auth characteristics, not a database ID.
 Custom MCP instances may be identified by explicit type/name metadata together
 with transport and auth mode. Keep these matchers strict enough to avoid
 accidentally selecting a different server.

@@ -16280,46 +16280,6 @@ paths:
         '403':
           description: Caller is not permitted to use this API
 
-  /mcp-servers/slides-connection:
-    get:
-      tags:
-        - MCP Servers
-      summary: Get the current user's Slides MCP connection status
-      description: |
-        Returns whether exactly one custom Streamable HTTP MCP instance named
-        Slides is configured for user-bound OAuth and whether the authenticated
-        user has their own saved credentials. Credentials are never returned.
-      operationId: getSlidesMcpConnection
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Slides connection status for the authenticated user
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [configured, isConnected]
-                properties:
-                  configured:
-                    type: boolean
-                  instanceId:
-                    type: string
-                  isConnected:
-                    type: boolean
-                  hasCredentials:
-                    type: boolean
-                  needsReauth:
-                    type: boolean
-                    description: The provider rejected the saved credential; the user must reconnect.
-                  statusDetail:
-                    type: string
-                    nullable: true
-        '401':
-          description: Authentication required
-        '403':
-          description: Caller is not permitted to use this API
-
   /mcp-servers/superhuman-docs-connection:
     get:
       tags:
