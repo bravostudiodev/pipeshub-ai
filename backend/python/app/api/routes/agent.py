@@ -3955,6 +3955,7 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                     protocol=protocol,
                     llm_provider=llm_config.get("provider", ""),
                     context_length=llm_config.get("contextLength"),
+                    configured_context_window=llm_config.get("contextLength"),
                     is_reasoning_model=bool(llm_config.get("isReasoning", False)),
                     stage_timer=timer,
                     cancellation_registry=cancellation_registry,

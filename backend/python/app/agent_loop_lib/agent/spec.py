@@ -33,6 +33,9 @@ class ModelSpec(BaseModel):
     model: str = "claude-sonnet-5"
     thinking_budget: int | None = None
     effort: str | None = None
+    # The deployment's configured window for this model, in tokens. None falls
+    # back to the built-in table (`get_context_window`).
+    context_window: int | None = None
 
     model_config = {"frozen": True}
 
@@ -47,6 +50,18 @@ class ModelSpec(BaseModel):
 
         transport = registry.resolve(self.provider)
         return TransportModel(transport)
+
+
+
+def model_spec_for(
+    provider: str, model: str | None, *, configured_model: str, context_window: int | None,
+) -> ModelSpec:
+    """`context_window` was configured for `configured_model`; a spec on any
+    other model falls back to that model's table entry."""
+    name = model or configured_model
+    return ModelSpec(
+        provider=provider, model=name, context_window=context_window if name == configured_model else None,
+    )
 
 
 class AgentSpec(BaseModel):

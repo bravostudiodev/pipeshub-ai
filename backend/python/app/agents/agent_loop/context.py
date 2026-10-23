@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
 
 class AgentContext(BaseModel):
@@ -279,7 +279,25 @@ class AgentContext(BaseModel):
     # go through get_llm_for_chat.
     llm_provider: str = ""
     context_length: int | None = None
+    # The window an admin set in the model config, or None. Kept apart from
+    # `context_length`, which some routes fill with a 128k default: reading that
+    # default as configured would shrink models the built-in table knows larger.
+    configured_context_window: int | None = None
     is_reasoning_model: bool = False
+
+    @field_validator("configured_context_window", mode="before")
+    @classmethod
+    def _window_or_none(cls, value: Any) -> int | None:  # noqa: ANN401
+        # Model config is admin-entered JSON. Only a whole number, or one written
+        # as digits, is a window: `true` or 1.5 means "not configured", never 1.
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, float):
+            value = int(value) if value.is_integer() else None
+        elif isinstance(value, str):
+            text = value.strip()
+            value = int(text) if text.isascii() and text.isdigit() else None
+        return value if isinstance(value, int) and value > 0 else None
 
     # Record IDs for which dynamic_fetch_full_record was called this request.
     # Written directly by _FetchFullRecordTool.execute() (citations.py /
@@ -349,6 +367,7 @@ class AgentContext(BaseModel):
     def from_chat_state(
         cls, state: dict[str, Any], *, event_sink: Any = None, protocol: str = "legacy",
         llm_provider: str = "", context_length: int | None = None,
+        configured_context_window: Any = None,  # noqa: ANN401 — admin JSON, normalized by the field validator
         is_reasoning_model: bool = False, run_id: str | None = None,
         cancellation_token: Any = None, authenticated_user_id: str | None = None,
     ) -> "AgentContext":
@@ -413,6 +432,7 @@ class AgentContext(BaseModel):
             protocol=protocol,
             llm_provider=llm_provider,
             context_length=context_length,
+            configured_context_window=configured_context_window,
             is_reasoning_model=is_reasoning_model,
             run_id=run_id,
             cancellation_token=cancellation_token,

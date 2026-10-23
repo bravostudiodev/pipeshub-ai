@@ -45,7 +45,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from app.agent_loop_lib.agent.loops import ReActLoop
-from app.agent_loop_lib.agent.spec import AgentSpec, ModelSpec
+from app.agent_loop_lib.agent.spec import AgentSpec, model_spec_for
 from app.agent_loop_lib.tools.builtin.coordination.agent_tool import AgentTool
 from app.agent_loop_lib.tools.errors import DuplicateToolNameError, DuplicateToolPathError
 from app.agents.agent_loop.sub_agent_prompt import build_sub_agent_prompt
@@ -499,6 +499,7 @@ def register_domain_agents(
     *,
     provider: str,
     model_name: str,
+    context_window: int | None = None,
     lazy_tools: "Callable[[ToolRegistry, list[str]], tuple[list[str], str]] | None" = None,
     shared_tool_names: frozenset[str] = frozenset(),
 ) -> list[str]:
@@ -566,7 +567,9 @@ def register_domain_agents(
             ),
             tool_names=child_tool_names,
             tool_disclosure=tool_disclosure,
-            model=ModelSpec(provider=provider, model=definition.model or model_name),
+            model=model_spec_for(
+                provider, definition.model, configured_model=model_name, context_window=context_window,
+            ),
             loop=ReActLoop(),
             max_turns=definition.max_turns,
         )
@@ -607,6 +610,7 @@ def compose_domain_agents(
     *,
     provider: str,
     model_name: str,
+    context_window: int | None = None,
     definitions: tuple[DomainAgentDefinition, ...] = DOMAIN_AGENT_DEFINITIONS,
     lazy_tools: "Callable[[ToolRegistry, list[str]], tuple[list[str], str]] | None" = None,
     shared_tool_names: frozenset[str] = frozenset(),
@@ -617,7 +621,7 @@ def compose_domain_agents(
     plan = plan_domain_agents(tool_registry, definitions)
     return register_domain_agents(
         plan, tool_registry, runtime, context,
-        provider=provider, model_name=model_name, lazy_tools=lazy_tools,
+        provider=provider, model_name=model_name, context_window=context_window, lazy_tools=lazy_tools,
         shared_tool_names=shared_tool_names,
     )
 
