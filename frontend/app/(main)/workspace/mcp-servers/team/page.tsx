@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/store/toast-store';
 import { isProcessedError } from '@/lib/api';
+import { currentCatalogIdentity, mcpCatalogRevision, notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
 import { ServiceGate } from '@/app/components/ui/service-gate';
 import { useUserStore, selectIsAdmin, selectIsProfileInitialized } from '@/lib/store/user-store';
 import {
@@ -83,6 +84,12 @@ function TeamMcpServersPageContent() {
     setIsDeleting(true);
     try {
       await McpServersApi.deleteInstance(target._id);
+      notifyMcpCatalogChanged();
+      setToolsState((prev) => {
+        const next = { ...prev };
+        delete next[target._id];
+        return next;
+      });
       toast.success(t('workspace.mcpServers.toasts.deleted'));
       store.closeDeleteDialog();
       store.closeConfigPanel();
@@ -139,6 +146,8 @@ function TeamMcpServersPageContent() {
       return Boolean(target?.isAuthenticated);
     },
     onVerified: () => {
+      notifyMcpCatalogChanged();
+      setToolsState({});
       setBusyInstanceId(null);
       void loadData();
       toast.success(t('workspace.mcpServers.toasts.authenticated'));
@@ -161,22 +170,15 @@ function TeamMcpServersPageContent() {
   );
 
   const handleReauthenticate = useCallback(
-    async (instance: McpMyServerEntry) => {
+    (instance: McpMyServerEntry) => {
       if (instance.authMode === 'oauth') {
         setBusyInstanceId(instance._id);
-        try {
-          await McpServersApi.reauthenticate(instance._id);
-          await startOAuthPopup(instance._id);
-        } catch (error) {
-          setBusyInstanceId(null);
-          const detail = isProcessedError(error) ? error.message : undefined;
-          toast.error(t('workspace.mcpServers.toasts.authenticateError'), detail ? { description: detail } : undefined);
-        }
+        void startOAuthPopup(instance._id);
         return;
       }
       setAuthDialogInstance(instance);
     },
-    [startOAuthPopup, t]
+    [startOAuthPopup]
   );
 
   const handleDisconnect = useCallback(
@@ -184,6 +186,12 @@ function TeamMcpServersPageContent() {
       setBusyInstanceId(instance._id);
       try {
         await McpServersApi.removeCredentials(instance._id);
+        notifyMcpCatalogChanged();
+        setToolsState((prev) => {
+          const next = { ...prev };
+          delete next[instance._id];
+          return next;
+        });
         toast.success(t('workspace.mcpServers.toasts.disconnected'));
         await loadData();
       } catch (error) {
@@ -200,11 +208,16 @@ function TeamMcpServersPageContent() {
 
   const handleDiscoverTools = useCallback(
     async (instance: McpMyServerEntry) => {
+      const revision = mcpCatalogRevision();
+      const identity = currentCatalogIdentity();
       setToolsState((prev) => ({ ...prev, [instance._id]: { tools: [], loading: true } }));
       try {
         const res = await McpServersApi.getInstanceTools(instance._id);
-        setToolsState((prev) => ({ ...prev, [instance._id]: { tools: res.tools, loading: false } }));
+        if (revision === mcpCatalogRevision() && identity === currentCatalogIdentity()) {
+          setToolsState((prev) => ({ ...prev, [instance._id]: { tools: res.tools, loading: false } }));
+        }
       } catch (error) {
+        if (revision !== mcpCatalogRevision() || identity !== currentCatalogIdentity()) return;
         const detail = isProcessedError(error) ? error.message : t('workspace.mcpServers.toasts.discoveryError');
         setToolsState((prev) => ({ ...prev, [instance._id]: { tools: [], error: detail, loading: false } }));
       }
@@ -257,7 +270,11 @@ function TeamMcpServersPageContent() {
         onOpenChange={(open) => {
           if (!open) store.closeConfigPanel();
         }}
-        onSaved={() => void loadData()}
+        onSaved={() => {
+          notifyMcpCatalogChanged();
+          setToolsState({});
+          void loadData();
+        }}
         onRequestDelete={(instance) => store.openDeleteDialog(instance)}
         busyInstanceId={busyInstanceId}
         onAuthenticate={handleAuthenticate}
@@ -271,7 +288,10 @@ function TeamMcpServersPageContent() {
         onOpenChange={(open) => {
           if (!open) setAuthDialogInstance(null);
         }}
-        onAuthenticated={() => void loadData()}
+        onAuthenticated={() => {
+          setToolsState({});
+          void loadData();
+        }}
       />
 
       <ConfirmationDialog

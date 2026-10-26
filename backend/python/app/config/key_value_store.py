@@ -101,6 +101,14 @@ class KeyValueStore(ABC, Generic[T]):
         """
         pass
 
+    async def compare_and_set(self, key: str, expected: T, value: T | None) -> bool:
+        """Atomically replace an existing matching value, or delete it when value is None.
+
+        Return False on absence/conflict and raise on storage failure. Backends must
+        not implement this as an unconditional write following a separate read.
+        """
+        raise NotImplementedError("This key-value backend does not support conditional writes")
+
     @abstractmethod
     async def get_all_keys(self) -> List[str]:
         """

@@ -5,6 +5,7 @@ flow for a call that looks like it failed against an expired token."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -12,9 +13,29 @@ import pytest
 from app.agents.agent_loop import mcp_session as mcp_session_module
 from app.agents.agent_loop.mcp_access import ResolvedMCPServer
 from app.agents.agent_loop.mcp_session import MCPSessionManager
+from app.agents.mcp.client import (
+    MCPCallInterruptedError,
+    MCPProviderRejectedError,
+    MCPReauthRequiredError,
+)
+from app.agents.mcp.errors import MCPRequestNotSentError
 from app.agents.mcp.models import OAuthTokens
+from app.agents.mcp.oauth_client import MCPRefreshTokenInvalidError
 from app.agents.mcp.token_refresh import MCPTokenRefreshError
 from tests.unit.agents.adapter.conftest import make_context
+
+
+@pytest.fixture(autouse=True)
+def _isolate_policy_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests isolate recovery policy; real authority is tested by catalog/session tests."""
+    async def scope(*args, **kwargs) -> SimpleNamespace:
+        return SimpleNamespace(identity="unit-test-scope")
+
+    async def authorize(self, server, expected_identity) -> None:
+        server.scope_identity = expected_identity
+
+    monkeypatch.setattr(mcp_session_module, "load_catalog_scope", scope)
+    monkeypatch.setattr(MCPSessionManager, "_authorize", authorize)
 
 
 def _instance(auth_mode: str = "none") -> dict[str, Any]:
@@ -25,10 +46,11 @@ def _instance(auth_mode: str = "none") -> dict[str, Any]:
     }
 
 
-def _server(auth_mode: str = "none", **overrides: Any) -> ResolvedMCPServer:
+def _server(auth_mode: str = "none", **overrides: Any) -> ResolvedMCPServer:  # noqa: ANN401
     defaults: dict[str, Any] = {
         "instance_id": "inst-1", "name": "JiraMCP", "display_name": "Jira MCP",
         "instance": _instance(auth_mode), "auth": {}, "owner_id": "user-1", "attached_tools": None,
+        "org_id": "org-1", "scope_identity": "unit-test-scope",
     }
     defaults.update(overrides)
     return ResolvedMCPServer(**defaults)
@@ -39,7 +61,7 @@ class _FakeClientManager:
     is consumed in order (an `Exception` instance is raised instead of
     returned)."""
 
-    def __init__(self, config: Any, env: dict | None = None, headers: dict | None = None) -> None:
+    def __init__(self, config: Any, env: dict | None = None, headers: dict | None = None) -> None:  # noqa: ANN401
         self.config = config
         self.env = env
         self.headers = headers
@@ -47,15 +69,26 @@ class _FakeClientManager:
         self.closed = False
         self.calls: list[tuple[str, dict]] = []
         self.responses: list[Any] = ["ok"]
+        self.last_http = None
+        self.tools_changed = False
 
     async def open(self) -> "_FakeClientManager":
         self.opened = True
         return self
 
-    async def call_tool_in_session(self, tool_name: str, arguments: dict) -> Any:
+    @property
+    def is_open(self) -> bool:
+        return self.opened and not self.closed
+
+    def update_headers(self, headers: dict[str, str]) -> None:
+        self.headers = {**(self.headers or {}), **headers}
+
+    async def call_tool_in_session(self, tool_name: str, arguments: dict) -> Any:  # noqa: ANN401
         self.calls.append((tool_name, arguments))
         response = self.responses.pop(0) if self.responses else "ok"
         if isinstance(response, Exception):
+            if isinstance(response, MCPRequestNotSentError):
+                self.opened = False
             raise response
         return response
 
@@ -71,7 +104,7 @@ class _FakeClientManagerFactory:
     def __init__(self) -> None:
         self.built: list[_FakeClientManager] = []
 
-    def __call__(self, config: Any, env: dict | None = None, headers: dict | None = None) -> _FakeClientManager:
+    def __call__(self, config: Any, env: dict | None = None, headers: dict | None = None) -> _FakeClientManager:  # noqa: ANN401
         manager = _FakeClientManager(config, env=env, headers=headers)
         self.built.append(manager)
         return manager
@@ -122,20 +155,47 @@ class TestCall:
         manager = MCPSessionManager(context)
         server = _server(auth_mode="api_token")
 
-        opened = await manager._get_or_open(server)  # noqa: SLF001 — pre-seed to control the raised error
+        opened = await manager._get_or_open(server)
         opened.responses = [RuntimeError("401 unauthorized")]
 
-        with pytest.raises(RuntimeError, match="401"):
+        # Diagnostic text is not evidence that the credential was rejected.
+        with pytest.raises(RuntimeError, match="401 unauthorized"):
             await manager.call(server, "search", {})
 
         assert len(client_manager_factory.built) == 1
+
+    async def test_a_sibling_refresh_is_reused_when_the_session_already_closed(
+        self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        refreshes = 0
+
+        async def _fake_refresh(*_args: object, **_kwargs: object) -> OAuthTokens:
+            nonlocal refreshes
+            refreshes += 1
+            return OAuthTokens(access_token="fresh-token")
+
+        monkeypatch.setattr(mcp_session_module, "refresh_credential_record", _fake_refresh)
+        server = _server(auth_mode="oauth", auth={"isAuthenticated": True, "oauthTokens": {"accessToken": "old-token"}})
+        session_manager = MCPSessionManager(make_context())
+        stale = await session_manager._get_or_open(server)
+        # A sibling refreshed while this call's session died.
+        server.auth = {"isAuthenticated": True, "oauthTokens": {"accessToken": "fresh-token"}}
+        stale.closed = True
+
+        manager = await session_manager._refresh_and_reopen_locked(
+            server, stale_manager=stale, rejected_token="old-token",
+        )
+
+        assert refreshes == 0
+        assert manager is not stale and manager.is_open
+        assert manager.headers["Authorization"] == "Bearer fresh-token"
 
     async def test_non_expiry_error_propagates_without_refresh(
         self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         called = False
 
-        async def _fake_refresh(*_args: Any, **_kwargs: Any) -> OAuthTokens:
+        async def _fake_refresh(*_args: Any, **_kwargs: Any) -> OAuthTokens:  # noqa: ANN401
             nonlocal called
             called = True
             raise AssertionError("refresh should not be attempted for a non-expiry error")
@@ -145,19 +205,19 @@ class TestCall:
         server = _server(auth_mode="oauth")
 
         session_manager = MCPSessionManager(context)
-        opened = await session_manager._get_or_open(server)  # noqa: SLF001
+        opened = await session_manager._get_or_open(server)
         opened.responses = [RuntimeError("some unrelated network error")]
 
         with pytest.raises(RuntimeError, match="unrelated"):
             await session_manager.call(server, "search", {})
         assert called is False
 
-    async def test_oauth_expiry_refreshes_rebuilds_and_retries_once(
+    async def test_oauth_expiry_refreshes_headers_and_retries_once(
         self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         refreshed_tokens = OAuthTokens(access_token="fresh-token")
 
-        async def _fake_refresh(instance_id: str, owner_id: str, config_service: Any, **kwargs: Any) -> OAuthTokens:
+        async def _fake_refresh(instance_id: str, owner_id: str, config_service: Any, **kwargs: Any) -> OAuthTokens:  # noqa: ANN401
             assert instance_id == "inst-1"
             assert owner_id == "user-1"
             return refreshed_tokens
@@ -167,17 +227,18 @@ class TestCall:
         server = _server(auth_mode="oauth")
         session_manager = MCPSessionManager(context)
 
-        first_manager = await session_manager._get_or_open(server)  # noqa: SLF001
-        first_manager.responses = [RuntimeError("401 Unauthorized: token expired")]
+        first_manager = await session_manager._get_or_open(server)
+        first_manager.responses = [MCPProviderRejectedError(401, "https://x/mcp", None, None)]
 
         result = await session_manager.call(server, "search", {"q": "x"})
 
         assert result == "ok"
-        assert len(client_manager_factory.built) == 2
-        assert first_manager.closed is True
+        assert len(client_manager_factory.built) == 1
+        assert first_manager.closed is False
+        assert first_manager.headers["Authorization"] == "Bearer fresh-token"
         assert server.auth["oauthTokens"]["accessToken"] == "fresh-token"
-        second_manager = client_manager_factory.built[1]
-        assert second_manager.calls == [("search", {"q": "x"})]
+        second_manager = client_manager_factory.built[0]
+        assert second_manager.calls == [("search", {"q": "x"}), ("search", {"q": "x"})]
 
     async def test_concurrent_expiry_refreshes_only_once(
         self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
@@ -192,7 +253,7 @@ class TestCall:
         refresh_started = asyncio.Event()
         release_refresh = asyncio.Event()
 
-        async def _fake_refresh(instance_id: str, owner_id: str, config_service: Any, **kwargs: Any) -> OAuthTokens:
+        async def _fake_refresh(instance_id: str, owner_id: str, config_service: Any, **kwargs: Any) -> OAuthTokens:  # noqa: ANN401
             nonlocal refresh_calls
             refresh_calls += 1
             refresh_started.set()
@@ -204,11 +265,11 @@ class TestCall:
         server = _server(auth_mode="oauth")
         session_manager = MCPSessionManager(context)
 
-        first_manager = await session_manager._get_or_open(server)  # noqa: SLF001
+        first_manager = await session_manager._get_or_open(server)
         # Both concurrent calls see an expired-token failure on the same (only) manager.
         first_manager.responses = [
-            RuntimeError("401 Unauthorized: token expired"),
-            RuntimeError("401 Unauthorized: token expired"),
+            MCPProviderRejectedError(401, "https://x/mcp", None, None),
+            MCPProviderRejectedError(401, "https://x/mcp", None, None),
         ]
 
         task_a = asyncio.create_task(session_manager.call(server, "search", {"q": "a"}))
@@ -225,15 +286,14 @@ class TestCall:
         assert result_a == "ok"
         assert result_b == "ok"
         assert refresh_calls == 1
-        # Exactly one rebuilt session — the second caller reused it instead of building
-        # its own third manager.
-        assert len(client_manager_factory.built) == 2
-        assert first_manager.closed is True
+        # Both calls keep the healthy session; a refresh must not cancel its siblings.
+        assert len(client_manager_factory.built) == 1
+        assert first_manager.closed is False
 
     async def test_refresh_failure_propagates(
         self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def _fake_refresh(*_args: Any, **_kwargs: Any) -> OAuthTokens:
+        async def _fake_refresh(*_args: Any, **_kwargs: Any) -> OAuthTokens:  # noqa: ANN401
             raise MCPTokenRefreshError("no refresh token available")
 
         monkeypatch.setattr(mcp_session_module, "refresh_credential_record", _fake_refresh)
@@ -241,11 +301,95 @@ class TestCall:
         server = _server(auth_mode="oauth")
         session_manager = MCPSessionManager(context)
 
-        first_manager = await session_manager._get_or_open(server)  # noqa: SLF001
-        first_manager.responses = [RuntimeError("401 unauthorized")]
+        first_manager = await session_manager._get_or_open(server)
+        first_manager.responses = [MCPProviderRejectedError(401, "https://x/mcp", None, None)]
 
-        with pytest.raises(MCPTokenRefreshError):
+        with pytest.raises(MCPTokenRefreshError, match="no refresh token"):
             await session_manager.call(server, "search", {})
+
+
+@pytest.fixture
+def recorded_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    sleeps: list[float] = []
+
+    async def _fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(mcp_session_module.asyncio, "sleep", _fake_sleep)
+    return sleeps
+
+
+class TestPolicy:
+    """One rule per failure class — see `mcp_call_policy.POLICY`."""
+
+    async def test_dead_session_is_reopened_once_and_call_retried(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)
+        first.responses = [MCPRequestNotSentError("Connection closed before the request was sent")]
+
+        assert await session_manager.call(server, "search", {"q": "x"}) == "ok"
+        assert first.closed is True
+        assert len(client_manager_factory.built) == 2
+        assert client_manager_factory.built[1].calls == [("search", {"q": "x"})]
+        assert recorded_sleeps == [0.5]
+
+    @pytest.mark.parametrize("status", [429, 503])
+    async def test_ambiguous_http_failure_is_not_replayed(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float], status: int,
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)
+        first.responses = [MCPProviderRejectedError(status, "https://x/mcp", "upstream busy", "2")]
+
+        with pytest.raises(MCPCallInterruptedError, match="do not repeat"):
+            await session_manager.call(server, "search", {})
+
+        assert first.calls == [("search", {})]
+        assert recorded_sleeps == []
+        assert len(client_manager_factory.built) == 1
+
+    async def test_reauth_required_marks_credential_and_raises_reconnect_error(
+        self, client_manager_factory: _FakeClientManagerFactory, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        marked: list[str] = []
+
+        async def _fake_mark(instance_id: str, owner_id: str, config_service: Any, *, detail: str, source: str, expected_auth=None) -> bool:  # noqa: ANN401
+            assert expected_auth == {"isAuthenticated": True}
+            marked.append(source)
+            return True
+
+        async def _reject_refresh(*args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+            error = MCPRefreshTokenInvalidError("invalid_grant")
+            error.rejected_auth = {"isAuthenticated": True}
+            raise error
+
+        monkeypatch.setattr(mcp_session_module, "refresh_credential_record", _reject_refresh)
+        monkeypatch.setattr(mcp_session_module, "mark_reauth_required", _fake_mark)
+        session_manager = MCPSessionManager(make_context())
+        server = _server(auth_mode="oauth")
+        first = await session_manager._get_or_open(server)
+        first.responses = [MCPProviderRejectedError(401, "https://x/mcp", None, None)]
+
+        with pytest.raises(MCPReauthRequiredError, match="reconnect"):
+            await session_manager.call(server, "search", {})
+        assert marked == ["token_refresh"]
+
+    async def test_rejected_call_is_not_retried(
+        self, client_manager_factory: _FakeClientManagerFactory, recorded_sleeps: list[float],
+    ) -> None:
+        session_manager = MCPSessionManager(make_context())
+        server = _server()
+        first = await session_manager._get_or_open(server)
+        first.responses = [MCPProviderRejectedError(400, "https://x/mcp", "invalid timeMin", None)]
+
+        with pytest.raises(MCPProviderRejectedError, match="invalid timeMin"):
+            await session_manager.call(server, "search", {})
+        assert len(client_manager_factory.built) == 1
+        assert recorded_sleeps == []
 
 
 class TestAcloseAll:
@@ -262,7 +406,7 @@ class TestAcloseAll:
         await session_manager.aclose_all()
 
         assert all(m.closed for m in client_manager_factory.built)
-        assert session_manager._managers == {}  # noqa: SLF001
+        assert session_manager._managers == {}
 
     async def test_is_a_no_op_when_nothing_was_ever_opened(self) -> None:
         context = make_context()

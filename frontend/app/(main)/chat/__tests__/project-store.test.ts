@@ -272,6 +272,21 @@ describe('setProjectScope', () => {
     // Settings saved: app-2 and slack.read removed from the project.
     useChatStore.getState().setProjectScope(makeScope());
     expect(useChatStore.getState().projectKnowledgeScope).toEqual({ apps: [], kb: ['kb-1'] });
+    // Every narrowed tool left: fall back to the project set, never to "no tools".
+    expect(useChatStore.getState().projectStreamTools).toBeNull();
+  });
+
+  it('keeps narrowing when the scope is republished before its catalog loads', () => {
+    useChatStore.getState().setProjectScope(makeScope());
+    useChatStore.getState().setProjectStreamTools(['i1:slack.send']);
+    useChatStore.getState().setProjectScope(makeScope({ toolGroups: [], toolCatalogFullNames: [] }));
+    expect(useChatStore.getState().projectStreamTools).toEqual(['i1:slack.send']);
+  });
+
+  it('keeps an explicit empty selection on a same-project re-hydrate', () => {
+    useChatStore.getState().setProjectScope(makeScope());
+    useChatStore.getState().setProjectStreamTools([]);
+    useChatStore.getState().setProjectScope(makeScope());
     expect(useChatStore.getState().projectStreamTools).toEqual([]);
   });
 

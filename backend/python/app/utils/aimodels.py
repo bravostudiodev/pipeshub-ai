@@ -2190,6 +2190,10 @@ _MAX_PROVIDER_IMAGE_BYTES = 50 * 1024 * 1024
 async def _download_provider_image(url: str) -> bytes:
     """Fetch an image a provider returned as a URL. The URL is the provider's to choose,
     so it is held to the same address policy as the endpoint it came from."""
+    from app.services.featureflag.platform_settings import is_public_web_access_enabled
+    from app.utils.outbound_proxy import select_route
+    if select_route(url).via == "proxy" and not await is_public_web_access_enabled():
+        raise ValueError("Public URL fetching is disabled by the workspace administrator.")
     require_allowed_endpoint(url)
     if private_addresses_blocked():
         from app.utils.public_http import PublicFetchLimits, PublicUrlFetcher

@@ -1,17 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ToolsetsApi, MAX_TOOLSETS_LIST_LIMIT } from '@/app/(main)/toolsets/api';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import type { McpMyServerEntry } from '@/app/(main)/workspace/mcp-servers/types';
 import { useFeatureFlagsStore, selectMcpEnabled } from '@/lib/store/feature-flags-store';
 import { useChatStore, type ProjectChatScope } from '@/chat/store';
 import type { ProjectDetail } from '@/chat/project-types';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { catalogIdentityFromToken, currentCatalogIdentity, mcpCatalogRevision, MCP_CATALOG_CHANGED_EVENT } from '@/chat/mcp-catalog-refresh';
 import {
-  bareToolFullName,
   buildCatalogMcpGroups,
   buildCatalogToolGroups,
   restrictGroupsToBareNames,
+  resolveProjectToolKeys,
   type CatalogToolGroupRow,
 } from '@/chat/tool-groups';
 
@@ -21,7 +23,7 @@ export interface ToolCatalog {
 }
 
 const CATALOG_TTL_MS = 5 * 60 * 1000;
-let catalogCache: { mcpEnabled: boolean; fetchedAt: number; promise: Promise<ToolCatalog> } | null = null;
+let catalogCache: { identity: string; revision: number; mcpEnabled: boolean; fetchedAt: number; promise: Promise<ToolCatalog> } | null = null;
 
 /**
  * The caller's authenticated toolsets + MCP servers, shared by the project settings picker and
@@ -29,7 +31,10 @@ let catalogCache: { mcpEnabled: boolean; fetchedAt: number; promise: Promise<Too
  */
 export function fetchToolCatalog(mcpEnabled: boolean): Promise<ToolCatalog> {
   const now = Date.now();
-  if (catalogCache && catalogCache.mcpEnabled === mcpEnabled && now - catalogCache.fetchedAt < CATALOG_TTL_MS) {
+  const identity = currentCatalogIdentity();
+  const revision = mcpCatalogRevision();
+  if (identity && catalogCache && catalogCache.identity === identity && catalogCache.revision === revision &&
+      catalogCache.mcpEnabled === mcpEnabled && now - catalogCache.fetchedAt < CATALOG_TTL_MS) {
     return catalogCache.promise;
   }
   const promise = (async (): Promise<ToolCatalog> => {
@@ -43,7 +48,7 @@ export function fetchToolCatalog(mcpEnabled: boolean): Promise<ToolCatalog> {
       mcpGroups: buildCatalogMcpGroups(authenticatedMcp),
     };
   })();
-  catalogCache = { mcpEnabled, fetchedAt: now, promise };
+  catalogCache = identity ? { identity, revision, mcpEnabled, fetchedAt: now, promise } : null;
   // A failed fetch must not be served from cache for five minutes.
   promise.catch(() => {
     if (catalogCache?.promise === promise) catalogCache = null;
@@ -67,9 +72,9 @@ export function buildProjectChatScope(project: ProjectDetail, catalog: ToolCatal
     return { id, name: node?.name ?? id, sourceType: node?.connector || undefined };
   });
 
-  const allowedBare = new Set((project.tools ?? []).map(bareToolFullName));
-  const toolGroups = restrictGroupsToBareNames(catalog.toolGroups, allowedBare);
-  const mcpGroups = restrictGroupsToBareNames(catalog.mcpGroups, allowedBare);
+  const { keys, legacyMcpKeys } = resolveProjectToolKeys(project.tools ?? [], catalog.mcpGroups);
+  const toolGroups = restrictGroupsToBareNames(catalog.toolGroups, keys);
+  const mcpGroups = restrictGroupsToBareNames(catalog.mcpGroups, keys, true);
 
   return {
     projectId: project._id,
@@ -79,6 +84,7 @@ export function buildProjectChatScope(project: ProjectDetail, catalog: ToolCatal
     toolGroups,
     mcpGroups,
     toolCatalogFullNames: [...toolGroups, ...mcpGroups].flatMap((g) => g.fullNames),
+    legacyMcpKeys: [...legacyMcpKeys],
   };
 }
 
@@ -89,7 +95,15 @@ export function buildProjectChatScope(project: ProjectDetail, catalog: ToolCatal
  */
 export function useProjectScopeHydration(project: ProjectDetail | null): void {
   const mcpEnabled = useFeatureFlagsStore(selectMcpEnabled);
+  const identity = useAuthStore((s) => catalogIdentityFromToken(s.accessToken));
+  const [revision, setRevision] = useState(mcpCatalogRevision);
   const setProjectScope = useChatStore((s) => s.setProjectScope);
+
+  useEffect(() => {
+    const changed = () => setRevision(mcpCatalogRevision());
+    window.addEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+  }, []);
 
   useEffect(() => {
     if (!project) {
@@ -97,11 +111,16 @@ export function useProjectScopeHydration(project: ProjectDetail | null): void {
       return;
     }
     let cancelled = false;
+    const requestedIdentity = identity;
+    const requestedRevision = revision;
     // Connectors/collections need no fetch; publish them immediately and fill tools in after.
     setProjectScope(buildProjectChatScope(project, { toolGroups: [], mcpGroups: [] }));
     fetchToolCatalog(mcpEnabled)
       .then((catalog) => {
-        if (!cancelled) setProjectScope(buildProjectChatScope(project, catalog));
+        if (!cancelled && requestedIdentity === currentCatalogIdentity() &&
+            requestedRevision === mcpCatalogRevision()) {
+          setProjectScope(buildProjectChatScope(project, catalog));
+        }
       })
       .catch(() => {
         // Knowledge scope already published; tools stay empty for this turn.
@@ -109,7 +128,7 @@ export function useProjectScopeHydration(project: ProjectDetail | null): void {
     return () => {
       cancelled = true;
     };
-  }, [project, mcpEnabled, setProjectScope]);
+  }, [project, mcpEnabled, identity, revision, setProjectScope]);
 
   useEffect(() => () => setProjectScope(null), [setProjectScope]);
 }

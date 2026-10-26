@@ -1,5 +1,3 @@
-import app.utils.runtime_threads  # noqa: E402 - must precede all ML library imports
-
 import asyncio
 import logging
 import os
@@ -7,11 +5,15 @@ import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import httpx
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import app.utils.outbound_bootstrap  # noqa: F401  (must precede client construction)
+import app.utils.runtime_threads  # noqa: E402 - must precede all ML library imports
+from app.api.middlewares.request_context import RequestContextMiddleware
 from app.edition_config import (
     authMiddleware,
     connector_router,
@@ -20,7 +22,6 @@ from app.edition_config import (
     oauth_apps_router,
     sharing_router,
 )
-from app.api.middlewares.request_context import RequestContextMiddleware
 from app.modules.demo_data.router import demo_data_router
 from app.utils.request_context import set_service_suffix
 
@@ -32,26 +33,26 @@ from app.api.routes.mcp_servers import router as mcp_servers_router
 from app.api.routes.toolsets import router as toolsets_router
 from app.config.constants.arangodb import AccountType, AppStatus, CollectionNames
 from app.config.constants.service import config_node_constants
+from app.connectors.api.artifacts_router import artifacts_router
 from app.connectors.core.base.connector.instance_lock import connector_init_lock
 from app.connectors.core.base.data_store.graph_data_store import GraphDataStore
 from app.connectors.core.base.token_service.startup_service import startup_service
 from app.connectors.core.constants import ConnectorStateKeys
 from app.connectors.core.factory.connector_factory import ConnectorFactory
-from app.connectors.core.sync.sync_dispatcher import (
-    SyncSpec,
-    get_dispatcher,
-    set_dispatcher,
-)
 from app.connectors.core.sync.sync_coordinator import (
     executor_identity,
     get_coordinator,
     process_identity,
     set_coordinator,
 )
+from app.connectors.core.sync.sync_dispatcher import (
+    SyncSpec,
+    get_dispatcher,
+    set_dispatcher,
+)
 from app.connectors.core.sync.sync_runner import drain_queued_syncs, join_cleanup_tasks
 from app.connectors.core.sync.task_manager import reindex_task_manager
 from app.connectors.core.thread_pool import get_shared_connector_thread_pool
-from app.connectors.api.artifacts_router import artifacts_router
 from app.connectors.sources.localKB.api.kb_router import kb_router
 from app.connectors.sources.localKB.api.knowledge_hub_router import (
     get_knowledge_hub_service,
@@ -74,7 +75,12 @@ from app.edition_services import (
     stop_sync_reaper,
     sync_executor_enabled,
 )
-from app.services.messaging.config import ConsumerType, MessageBrokerType, Topic, get_message_broker_type
+from app.services.messaging.config import (
+    ConsumerType,
+    MessageBrokerType,
+    Topic,
+    get_message_broker_type,
+)
 from app.services.messaging.kafka.utils.utils import KafkaUtils
 from app.services.messaging.messaging_factory import MessagingFactory
 from app.services.messaging.utils import MessagingUtils
@@ -927,6 +933,7 @@ EXCLUDE_PATHS = [
     "/health",          # Basic health check endpoint
     "/health/graph-db", # Graph DB connectivity probe (called by Node.js health route)
     "/health/vector-db", # Vector DB connectivity probe (called by Node.js health route)
+    "/health/embedding", # Built-in embedding server probe (called by Node.js health route)
     "/drive/webhook",   # Google Drive webhook (has its own WebhookAuthVerifier)
     "/gmail/webhook",   # Gmail webhook (uses Google Pub/Sub authentication)
     "/admin/webhook",   # Admin webhook (has its own WebhookAuthVerifier)
@@ -1134,6 +1141,39 @@ async def graph_db_health_check(request: Request) -> JSONResponse:
     )
 
 
+@app.get("/health/embedding")
+async def embedding_health_check(request: Request) -> JSONResponse:
+    """Probe the built-in embedding server, or report `not_configured` when the configured
+    embedding provider doesn't use it. Only this service knows which provider is configured,
+    so the Node.js health route delegates here instead of probing a server that may be
+    intentionally absent."""
+    from app.utils.embedding_server_client import embedding_server_health_url
+    from app.utils.llm import is_embedding_server_configured
+
+    logger = request.app.container.logger()
+    try:
+        required = await is_embedding_server_configured(request.app.container.config_service())
+    except Exception:
+        logger.warning("Could not resolve the embedding provider; probing the embedding server", exc_info=True)
+        required = True
+    if not required:
+        return JSONResponse(
+            status_code=200,
+            content={"status": "not_configured", "timestamp": get_epoch_timestamp_in_ms()},
+        )
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(embedding_server_health_url())
+        healthy = resp.status_code == 200 and resp.json().get("status") == "healthy"
+    except Exception as exc:
+        logger.warning("Embedding server health check failed: %s", exc)
+        healthy = False
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={"status": "healthy" if healthy else "unhealthy", "timestamp": get_epoch_timestamp_in_ms()},
+    )
+
+
 @app.get("/health/vector-db")
 async def vector_db_health_check(request: Request) -> JSONResponse:
     """Probe the configured vector database.
@@ -1145,7 +1185,9 @@ async def vector_db_health_check(request: Request) -> JSONResponse:
     The provider is created once and cached on app.state for subsequent calls.
     """
     from app.services.vector_db.models import HealthStatus
-    from app.services.vector_db.vector_db_provider_factory import VectorDBProviderFactory
+    from app.services.vector_db.vector_db_provider_factory import (
+        VectorDBProviderFactory,
+    )
     from app.utils.logger import create_logger
 
     vector_db_type = os.getenv("VECTOR_DB_TYPE", "qdrant").lower().strip()

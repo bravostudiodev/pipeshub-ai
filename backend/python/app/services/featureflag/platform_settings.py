@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PLATFORM_SETTINGS_KEY = "/services/platform/settings"
+_public_web_config_service: ConfigurationService | None = None
+
+
+def register_public_web_config_service(config_service: "ConfigurationService") -> None:
+    """Make the shared settings reader available to public URL download helpers."""
+    global _public_web_config_service
+    _public_web_config_service = config_service
 
 
 async def read_platform_feature_flag(
@@ -98,6 +105,31 @@ async def is_actions_enabled(config_service: Optional["ConfigurationService"] = 
     may opt out from Labs.
     """
     return await _platform_flag(config_service, CONFIG.ENABLE_ACTIONS, default=True)
+
+
+async def is_public_web_access_enabled(
+    config_service: "ConfigurationService | None" = None,
+) -> bool:
+    """Live workspace switch for public web search and URL fetching.
+
+    Missing settings preserve the existing enabled behavior. A failed read
+    denies public web access until the settings store is available again.
+    """
+    service = config_service or _public_web_config_service
+    if service is None:
+        logger.error("Public web access settings reader is unavailable; denying public web access")
+        return False
+    try:
+        settings = await service.get_config(
+            PLATFORM_SETTINGS_KEY, default={}, use_cache=False, raise_on_error=True,
+        )
+        flags = settings.get("featureFlags") if isinstance(settings, dict) else None
+        if not isinstance(flags, dict):
+            return True
+        return flags.get(CONFIG.ENABLE_PUBLIC_WEB_ACCESS) is not False
+    except Exception:
+        logger.exception("Could not read public web access setting; denying public web access")
+        return False
 
 
 async def is_skills_enabled(config_service: Optional["ConfigurationService"] = None) -> bool:

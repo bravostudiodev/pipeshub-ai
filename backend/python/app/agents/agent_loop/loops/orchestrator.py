@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.agent.loops import LoopStrategy, ReActLoop
 from app.agent_loop_lib.agent.phase_driver import PhaseDriver
-from app.agent_loop_lib.agent.spec import AgentSpec, ModelSpec
+from app.agent_loop_lib.agent.spec import AgentSpec, model_spec_for
 from app.agent_loop_lib.core.messages import (
     AssistantMessage,
     TextPart,
@@ -199,6 +199,7 @@ def domain_spec_factory(
     default_tool_names: list[str],
     context: "AgentContext | None" = None,
     max_turns: int = _SUB_AGENT_MAX_TURNS,
+    context_window: int | None = None,
 ) -> "Callable[..., AgentSpec]":
     """Builds the `AgentRuntime.spec_factory` callable `spawn_agent` needs
     to resolve a domain "role" string into a concrete `AgentSpec` (see
@@ -211,12 +212,13 @@ def domain_spec_factory(
 
     def _factory(role_name: str, **overrides: Any) -> AgentSpec:  # noqa: ANN401
         tool_names = overrides["tool_names"] if "tool_names" in overrides else default_tool_names
-        model = overrides.get("model") or model_name
         return AgentSpec(
             name=f"pipeshub-subagent-{role_name}",
             system_prompt=build_sub_agent_prompt(role_name, context),
             tool_names=list(tool_names),
-            model=ModelSpec(provider=provider, model=model),
+            model=model_spec_for(
+                provider, overrides.get("model"), configured_model=model_name, context_window=context_window,
+            ),
             loop=ReActLoop(),
             max_turns=max_turns,
         )

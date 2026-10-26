@@ -30,18 +30,29 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from app.agent_loop_lib.tools.errors import DuplicateToolNameError, DuplicateToolPathError
+from app.agent_loop_lib.tools.errors import (
+    DuplicateToolNameError,
+    DuplicateToolPathError,
+)
 from app.agents.agent_loop.lazy_tools_wiring import MCP_PARENT
-from app.agents.agent_loop.mcp_access import MCPAccessResolver, ResolvedMCPServer
+from app.agents.agent_loop.mcp_access import (
+    MCPAccessResolver,
+    ResolvedMCPServer,
+    model_mcp_tool_name,
+)
+from app.agents.agent_loop.mcp_call_policy import POLICY, Action, Outcome, classify
 from app.agents.agent_loop.mcp_session import MCPSessionManager
-from app.agents.agent_loop.mcp_tool_adapter import MCPToolAdapter
-from app.agents.mcp.discovery import build_namespaced_tool_name, discover_tools
-from app.agents.mcp.models import MCPToolInfo
-from app.agents.mcp.service import credentials_to_discovery_dict, instance_config_from_dict
+from app.agents.agent_loop.mcp_tool_adapter import MCPToolAdapter, safe_error_text
+from app.agents.mcp.catalog_scope import LegacySharedAuthIneligible
+from app.agents.mcp.credential_status import mark_reauth_required
+from app.agents.mcp.discovery import build_namespaced_tool_name
+from app.agents.mcp.errors import timed_out
+from app.agents.mcp.retrieval_trace import discovery_fields, record_event
 
 if TYPE_CHECKING:
     from app.agent_loop_lib.tools.registry import ToolRegistry
     from app.agents.agent_loop.context import AgentContext
+    from app.agents.mcp.models import MCPToolInfo
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +69,7 @@ def _mcp_group_name(server: "ResolvedMCPServer") -> str:
     Slack toolset's `ToolsetGroup` — see `ToolRegistry.register_toolset`'s "replaces by
     name" semantics)."""
     normalized = server.name.lower().strip().replace(" ", "_").replace("-", "_")
-    return f"mcp_{normalized}"
+    return f"mcp_{server.group_key or normalized}"
 
 
 class MCPToolProvider:
@@ -99,14 +110,18 @@ class MCPToolProvider:
         context: "AgentContext",
         session_manager: "MCPSessionManager",
         *,
-        timeout_seconds: float = DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+        timeout_seconds: float | None = None,
     ) -> bool:
         """Registers one instance's tools + group. Returns whether at least one tool was
         registered. Never raises — any discovery/registration failure is recorded on
         `context.mcp_tool_load_failures` and results in `False`."""
         state_logger = context.logger or logger
 
-        tool_infos, failure_reason = await self._discover_or_fallback(server, timeout_seconds)
+        discovery_started = asyncio.get_running_loop().time()
+        tool_infos, failure_reason = await self._discover_or_fallback(server, timeout_seconds, context, session_manager)
+        trace_fields = discovery_fields(server, tool_infos, failure_reason)
+        trace_fields["durationMs"] = max(0, round((asyncio.get_running_loop().time() - discovery_started) * 1000))
+        await record_event(context, "discovery", trace_fields)
         if not tool_infos:
             context.mcp_tool_load_failures.append({
                 "instanceId": server.instance_id, "name": server.name, "reason": failure_reason or "error",
@@ -121,10 +136,32 @@ class MCPToolProvider:
         for tool_info in tool_infos:
             adapter = MCPToolAdapter(server, tool_info, session_manager)
             try:
+                # Check the full provider schema now, not on a later model
+                # turn where one oversized/broken schema could fail the
+                # entire gateway request. Never advertise a schema-less tool.
+                _ = adapter.raw_input_schema
                 registry.register_tool(adapter)
                 registered_names.append(adapter.name)
-            except (DuplicateToolNameError, DuplicateToolPathError):
-                state_logger.warning("MCPToolProvider: skipping duplicate MCP tool: %s", adapter.name)
+            except (ValueError, RecursionError, TypeError, OverflowError):
+                state_logger.warning("MCPToolProvider: skipping invalid schema for tool %s", adapter.name)
+            except DuplicateToolNameError:
+                # A different type/tool pair may flatten to the same name.
+                # Keep both attached instances, but never alias the provider's
+                # actual call target or another user's credentials.
+                alias = model_mcp_tool_name(server, tool_info.name, force_alias=True)
+                if alias == adapter.name:
+                    state_logger.warning("MCPToolProvider: duplicate MCP tool alias: %s", alias)
+                    continue
+                aliased = MCPToolAdapter(
+                    server, tool_info.model_copy(update={"namespaced_name": alias}), session_manager,
+                )
+                try:
+                    registry.register_tool(aliased)
+                    registered_names.append(alias)
+                except (DuplicateToolNameError, DuplicateToolPathError):
+                    state_logger.warning("MCPToolProvider: skipping duplicate MCP tool alias: %s", alias)
+            except DuplicateToolPathError:
+                state_logger.warning("MCPToolProvider: skipping duplicate MCP tool path: %s", adapter.name)
 
         if not registered_names:
             context.mcp_tool_load_failures.append({
@@ -132,6 +169,15 @@ class MCPToolProvider:
                 "error": "every discovered tool name collided with an already-registered tool",
             })
             return False
+
+        if server.catalog_instructions and isinstance(server.catalog_instructions, str):
+            # Descriptive source guidance only. Never interpolate it into agent
+            # instructions or use it to choose identity, grant or tool schema.
+            context.tool_state.setdefault("mcp_source_guidance", []).append({
+                "instanceId": server.instance_id,
+                "displayName": server.display_name,
+                "text": server.catalog_instructions[:2000],
+            })
 
         registry.register_toolset(
             _mcp_group_name(server),
@@ -142,19 +188,65 @@ class MCPToolProvider:
         return True
 
     async def _discover_or_fallback(
-        self, server: "ResolvedMCPServer", timeout_seconds: float,
+        self, server: "ResolvedMCPServer", timeout_seconds: float | None, context: "AgentContext",
+        session_manager: MCPSessionManager,
     ) -> tuple[list[MCPToolInfo] | None, str | None]:
-        try:
-            config = instance_config_from_dict(server.instance)
-            credentials = credentials_to_discovery_dict(server.instance.get("authMode", ""), server.auth)
-            tool_infos = await discover_tools(config, credentials, timeout_seconds=timeout_seconds)
-            return self._filter_by_attached(server, tool_infos), None
-        except Exception as exc:
-            logger.warning(
-                "MCPToolProvider: live discovery failed for instance %s (%s): %s",
-                server.instance_id, server.name, exc,
-            )
-            return None, "discovery_failed"
+        """Same outcome policy as a tool call (`mcp_call_policy`): an expired OAuth token
+        is refreshed once, a rejected credential is recorded so status reads stop saying
+        "Connected", anything else is reported as temporarily unavailable."""
+        auth_mode = server.instance.get("authMode")
+        refreshed = False
+        transient_retries = 0
+        while True:
+            try:
+                tool_infos = await session_manager.discover_tools(server, timeout_seconds)
+                selected = self._filter_by_attached(server, tool_infos)
+                selected = [tool.model_copy(update={
+                    "namespaced_name": model_mcp_tool_name(server, tool.name),
+                }) for tool in selected]
+                return selected, None
+            except Exception as exc:
+                outcome = classify(exc, auth_mode=auth_mode, last_status=getattr(exc, "status_code", None))
+                action = POLICY[outcome].action
+                if outcome is Outcome.AUTH_EXPIRED and action is Action.REFRESH and not refreshed:
+                    refreshed = True
+                    self._log_discovery(server, exc, outcome, action="refresh")
+                    try:
+                        await session_manager.refresh_credentials(server)
+                        continue
+                    except Exception as refresh_exc:
+                        exc, outcome = refresh_exc, classify(refresh_exc, auth_mode=auth_mode, last_status=None)
+                # A deadline already spent the discovery budget; retrying would double the wait.
+                if (
+                    outcome in (Outcome.TRANSIENT, Outcome.DEAD_SESSION, Outcome.REQUEST_NOT_SENT)
+                    and transient_retries < 1 and not timed_out(exc)
+                ):
+                    transient_retries += 1
+                    self._log_discovery(server, exc, outcome, action="retry_listing")
+                    await asyncio.sleep(0.5)
+                    continue
+                self._log_discovery(server, exc, outcome, action="give_up")
+                if isinstance(exc, LegacySharedAuthIneligible):
+                    return None, "shared_credentials_unsupported"
+                if outcome is Outcome.REAUTH_REQUIRED:
+                    try:
+                        await mark_reauth_required(
+                            server.instance_id, server.owner_id, context.config_service,
+                            detail=str(exc)[:200], source="discovery",
+                            expected_auth=getattr(exc, "rejected_auth", None),
+                        )
+                    except Exception as mark_exc:
+                        logger.warning("MCPToolProvider: could not mark %s as reauth_required: %s", server.instance_id, mark_exc)
+                    return None, "reauth_required"
+                return None, "discovery_failed"
+
+    @staticmethod
+    def _log_discovery(server: "ResolvedMCPServer", exc: BaseException, outcome: Outcome, *, action: str) -> None:
+        logger.warning(
+            "MCP discovery outcome: instance=%s server=%s outcome=%s action=%s error_type=%s status=%s error=%s",
+            server.instance_id, server.name, outcome.value, action, type(exc).__name__,
+            getattr(exc, "status_code", None), safe_error_text(exc, server.auth)[:300],
+        )
 
     @staticmethod
     def _attached_full_names(server: "ResolvedMCPServer") -> set[str] | None:

@@ -37,7 +37,7 @@ import {
   buildCitationMapsFromApi,
 } from './components/message-area/response-tabs/citations';
 import { getClientTimezone, getClientCurrentTime } from './utils/client-time';
-import { bareToolFullName } from './tool-groups';
+import { bareToolFullName, encodeToolSelectionForWire } from './tool-groups';
 import {
   hasUnansweredQuestions,
   mergeAskUserQuestionPayloads,
@@ -226,10 +226,18 @@ export function buildStreamChatRequestForSlot(
       ? projectScope.toolCatalogFullNames
       : currentState.universalAgentToolCatalogFullNames;
 
-  const streamTools =
-    effectiveAgentId || isUniversalAgentMode
-      ? [...new Set((toolsSel === null ? [...toolCatalog] : [...toolsSel]).map(bareToolFullName))]
-      : [];
+  const mcpGroups = effectiveAgentId
+    ? currentState.agentChatMcpGroups
+    : projectScope
+      ? projectScope.mcpGroups
+      : currentState.universalAgentMcpGroups;
+  const encodedTools = encodeToolSelectionForWire(toolsSel === null ? toolCatalog : toolsSel, mcpGroups);
+  const legacyProjectKeys = new Set(projectScope?.legacyMcpKeys ?? []);
+  const streamTools = effectiveAgentId || isUniversalAgentMode
+    ? [...new Set(encodedTools.map((key) =>
+        legacyProjectKeys.has(key) ? bareToolFullName(key) : key
+      ))]
+    : [];
 
   const modelCtxKey = ctxKeyFromAgent(effectiveAgentId ?? null);
   const rawModel = getEffectiveModel(modelCtxKey);

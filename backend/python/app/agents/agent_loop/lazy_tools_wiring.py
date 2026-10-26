@@ -53,14 +53,20 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from app.agent_loop_lib.core.text_scoring import tokenize
 from app.agent_loop_lib.hooks.events import HookEvent
 from app.agent_loop_lib.hooks.middleware.builtin.tool_preloading import tool_preloading
 from app.agent_loop_lib.tools.builtin.lazy_toolsets import (
+    MAX_VISIBLE_TOOLS,
     FetchToolsTool,
     ListToolsetsTool,
     SearchToolsTool,
 )
-from app.agent_loop_lib.tools.errors import DuplicateToolNameError, DuplicateToolPathError
+from app.agent_loop_lib.tools.errors import (
+    DuplicateToolNameError,
+    DuplicateToolPathError,
+)
+from app.agent_loop_lib.tools.toolset_index import ToolsetAwareToolIndex
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -279,10 +285,13 @@ class PipesHubGlobalCatalogFallback:
 
     async def search(self, query: str, limit: int) -> list["GlobalToolHit"]:
         from app.agent_loop_lib.tools.global_fallback import GlobalToolHit
-        from app.agents.agent_loop.tool_loader import _has_tool_decorated_methods, _infer_path_prefix
+        from app.agents.agent_loop.tool_loader import (
+            _has_tool_decorated_methods,
+            _infer_path_prefix,
+        )
         from app.agents.registry.toolset_registry import get_toolset_registry
 
-        query_terms = [t for t in query.lower().split() if t]
+        query_terms = list(tokenize(query))
         failures = self._context.toolset_load_failures if self._context is not None else {}
 
         hits: list[GlobalToolHit] = self._mcp_hits(query_terms, limit)
@@ -333,7 +342,11 @@ class PipesHubGlobalCatalogFallback:
                     return hits
         return hits
 
-    def _mcp_hits(self, query_terms: list[str], limit: int) -> list["GlobalToolHit"]:
+    async def search_unavailable(self, query: str, limit: int) -> list["GlobalToolHit"]:
+        """Keep explicitly named failed sources visible alongside other apps' matches."""
+        return self._mcp_hits(list(tokenize(query)), limit, named_sources_only=True)
+
+    def _mcp_hits(self, query_terms: list[str], limit: int, *, named_sources_only: bool = False) -> list["GlobalToolHit"]:
         """Matches `query_terms` against the attached (but unavailable) tool
         list of every MCP instance in `context.mcp_tool_load_failures`.
 
@@ -344,14 +357,20 @@ class PipesHubGlobalCatalogFallback:
         request, so there is nothing live left to read.
         """
         from app.agent_loop_lib.tools.global_fallback import GlobalToolHit
+        from app.agents.agent_loop.mcp_access import (
+            MCPAccessResolver,
+            model_mcp_tool_name,
+        )
         from app.agents.mcp.discovery import build_namespaced_tool_name
 
         if self._context is None:
             return []
-        failed_ids = {f.get("instanceId") for f in self._context.mcp_tool_load_failures if f.get("instanceId")}
+        failures = {f.get("instanceId"): f.get("reason") for f in self._context.mcp_tool_load_failures if f.get("instanceId")}
+        failed_ids = set(failures)
         if not failed_ids:
             return []
 
+        resolved = {server.instance_id: server for server in MCPAccessResolver.resolve(self._context)}
         hits: list[GlobalToolHit] = []
         for server in self._context.mcp_servers:
             instance_id = server.get("instanceId")
@@ -362,31 +381,61 @@ class PipesHubGlobalCatalogFallback:
             # come from `name`.
             server_name = server.get("name") or instance_id
             display_name = server.get("displayName") or server_name
-            group_name = _mcp_group_name_from_server_name(server_name)
+            resolved_server = resolved.get(instance_id)
+            group_name = (
+                f"mcp_{resolved_server.group_key}" if resolved_server and resolved_server.group_key
+                else _mcp_group_name_from_server_name(server_name)
+            )
             # Same discriminator `MCPToolProvider._attached_full_names` uses,
             # so the fallback name below matches what the tool registers under
             # once discovery succeeds.
             instance = (self._context.mcp_server_configs.get(instance_id) or {}).get("instance") or {}
             server_type = instance.get("typeId") or server_name
+            identity_text = f"{server_name} {display_name} {server_type}".lower()
+            source_text = f"{identity_text} {instance.get('description') or ''}".lower()
+            if named_sources_only:
+                named_terms = set(query_terms) - {"search", "find", "list", "get", "read", "mcp", "tool", "tools", "source", "sources"}
+                if not any(term in identity_text for term in named_terms):
+                    continue
+            needs_reauth = failures.get(instance_id) == "reauth_required"
+            if needs_reauth:
+                guidance = f"Reconnect {display_name} to restore access."
+            elif failures.get(instance_id) == "shared_credentials_unsupported":
+                guidance = (
+                    f"{display_name} is set up with one shared administrator credential, which is not used. "
+                    "An administrator must switch it to per-user sign-in."
+                )
+            else:
+                guidance = (
+                    f"{display_name} is temporarily unavailable. Do not treat this as a missing capability "
+                    "or suggest configuring a different connector."
+                )
+            if not server.get("tools"):
+                if not query_terms or any(term in source_text for term in query_terms):
+                    # A source-level diagnostic only: no invented tool name/schema is registered.
+                    hits.append(GlobalToolHit(
+                        name=group_name, toolset=group_name,
+                        description=f"{guidance} No validated tool listing is available; this is not a callable tool.",
+                        reason="not_authenticated" if needs_reauth else "mcp_unavailable",
+                    ))
+                    if len(hits) >= limit:
+                        return hits
+                continue
 
             for tool in server.get("tools") or []:
                 tool_name = tool.get("name") or ""
                 if not tool_name:
                     continue
                 description = tool.get("description") or f"{display_name} {tool_name}"
-                haystack = f"{tool_name} {description}".lower()
+                haystack = f"{tool_name} {description} {source_text}".lower()
                 if query_terms and not any(term in haystack for term in query_terms):
                     continue
                 hits.append(GlobalToolHit(
-                    name=tool.get("fullName") or build_namespaced_tool_name(server_type, tool_name),
+                    name=(model_mcp_tool_name(resolved_server, tool_name) if resolved_server
+                          else tool.get("fullName") or build_namespaced_tool_name(server_type, tool_name)),
                     toolset=group_name,
-                    description=(
-                        f"{description} — {display_name} is attached but "
-                        "unreachable right now (connection/timeout, not a "
-                        "missing capability); tell the user it's temporarily "
-                        "unavailable and to try again shortly."
-                    ),
-                    reason="mcp_unavailable",
+                    description=f"{description} — {guidance}",
+                    reason="not_authenticated" if needs_reauth else "mcp_unavailable",
                 ))
                 if len(hits) >= limit:
                     return hits
@@ -417,7 +466,7 @@ def register_lazy_tool_meta_tools(
             continue
     try:
         tool_registry.register_tool(
-            SearchToolsTool(tool_registry, global_fallback=PipesHubGlobalCatalogFallback(context))
+            SearchToolsTool(tool_registry, index=ToolsetAwareToolIndex(), global_fallback=PipesHubGlobalCatalogFallback(context))
         )
     except (DuplicateToolNameError, DuplicateToolPathError):
         pass
@@ -463,7 +512,10 @@ def make_lazy_tools_decider(
     """
 
     def _decide(tool_registry: "ToolRegistry", tool_names: list[str]) -> tuple[list[str], str]:
-        if not apply or not should_apply_lazy_tools(len(tool_names)):
+        # Above the per-request schema cap an eager grant could not be sent whole, so it goes
+        # lazy regardless of scope or kill-switch: every tool stays reachable through search.
+        over_cap = len(tool_names) > MAX_VISIBLE_TOOLS
+        if not over_cap and (not apply or not should_apply_lazy_tools(len(tool_names))):
             return tool_names, "eager"
         if not group_connector_toolsets(tool_registry, tool_names, exclude=essential_names):
             return tool_names, "eager"

@@ -41,7 +41,7 @@ const logger = Logger.getInstance({
 });
 
 export const RESYNC_NOT_QUEUED_MESSAGE =
-  "We couldn't start this sync because PipesHub couldn't queue it. Nothing was synced. Try again in a minute; if it keeps happening, ask your admin to check the services page.";
+  "We couldn't start this sync because OddJeeves couldn't queue it. Nothing was synced. Try again in a minute; if it keeps happening, ask your admin to check the services page.";
 
 @injectable()
 export class RecordRelationService {

@@ -460,7 +460,7 @@ function SlackBotFormView({ editingConfig, agents, onClose, onSaved, onRequestDe
           loading={isSaving}
           loadingLabel={t('workspace.bots.saving')}
           style={{
-            backgroundColor: !isValid ? 'var(--slate-6)' : 'var(--emerald-9)',
+            backgroundColor: !isValid ? 'var(--slate-6)' : 'var(--accent-9)',
           }}
         >
           {isEditMode ? t('action.save') : t('action.create')}

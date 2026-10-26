@@ -376,7 +376,6 @@ function NarrationTextImpl({ content, citationMaps, citationCallbacks }: { conte
     .replace(/\n{3,}/g, '\n\n');
 
   const cleanContent = processMarkdownContent(withoutEmptyLines);
-  if (!cleanContent.trim()) return null;
 
   const citMapsRef = useRef(citationMaps);
   citMapsRef.current = citationMaps;
@@ -385,6 +384,8 @@ function NarrationTextImpl({ content, citationMaps, citationCallbacks }: { conte
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const components = useMemo(() => createMarkdownComponents(citMapsRef, citCbRef), []);
+
+  if (!cleanContent.trim()) return null;
 
   return (
     <Box className="narration-text agent-activity-enter" style={{ color: 'var(--slate-12)', fontSize: 'var(--font-size-2)', lineHeight: 1.6 }}>
@@ -524,8 +525,8 @@ const TOOL_STATUS_ICON: Record<NonNullable<MessagePart['status']>, string> = {
 };
 
 const TOOL_STATUS_COLOR: Record<NonNullable<MessagePart['status']>, string> = {
-  running: 'var(--blue-9)',
-  completed: 'var(--green-9)',
+  running: 'var(--accent-9)',
+  completed: 'var(--accent-9)',
   failed: 'var(--slate-9)',
   blocked: 'var(--amber-9)',
 };

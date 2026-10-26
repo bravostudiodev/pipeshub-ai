@@ -9,7 +9,10 @@ instead of `MCPClientManager.connect()`'s per-call connect/disconnect.
 """
 from __future__ import annotations
 
+import json
 import logging
+import time
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.tools.base import (
@@ -21,14 +24,14 @@ from app.agent_loop_lib.tools.base import (
     _fuzzy_match_enum,
 )
 from app.agent_loop_lib.tools.errors import ToolValidationError
+from app.agents.agent_loop.mcp_result import mcp_result_to_tool_output
 from app.agents.agent_loop.tool_adapter import (
     _params_from_schema,
-    _to_tool_output,
     resolve_json_schema_refs,
 )
-from app.agents.mcp.client import MCPConnectionError
-from app.agents.mcp.oauth_client import MCPOAuthError
-from app.agents.mcp.token_refresh import MCPTokenRefreshError
+from app.agents.mcp.client import MCPReauthRequiredError
+from app.agents.mcp.retrieval_trace import invocation_fields, record_event
+from app.utils.url_redaction import redact_urls_in_text
 
 if TYPE_CHECKING:
     from app.agents.agent_loop.mcp_access import ResolvedMCPServer
@@ -37,6 +40,33 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_SENSITIVE_CREDENTIAL_KEYS = {
+    "accesstoken", "refreshtoken", "apitoken", "headervalue", "clientsecret",
+    "registrationaccesstoken",
+}
+
+
+def _credential_values(value: Any, key: str = "") -> list[str]:  # noqa: ANN401
+    """Collect credential strings so provider errors can be logged without secrets."""
+    if isinstance(value, dict):
+        found: list[str] = []
+        for child_key, child_value in value.items():
+            found.extend(_credential_values(child_value, str(child_key)))
+        return found
+    if isinstance(value, (list, tuple)):
+        return [secret for child in value for secret in _credential_values(child, key)]
+    if key.lower().replace("_", "") in _SENSITIVE_CREDENTIAL_KEYS and isinstance(value, str):
+        return [value] if value else []
+    return []
+
+
+def safe_error_text(error: Any, credentials: dict[str, Any]) -> str:  # noqa: ANN401
+    text = str(error)
+    for secret in _credential_values(credentials):
+        text = text.replace(secret, "[REDACTED]")
+    return redact_urls_in_text(text)[:1200]
+
+
 __all__ = ["MCPToolAdapter"]
 
 # Matches `executor.py::_usage_hint`'s per-parameter description cap — cheap
@@ -44,27 +74,6 @@ __all__ = ["MCPToolAdapter"]
 # one-line summary, not an MCP server's full multi-paragraph tool
 # description (some Rovo tools' `description` runs to 1000+ characters).
 _SHORT_DESCRIPTION_MAX_LEN = 160
-
-
-def _mcp_result_to_tuple(result: Any) -> tuple[bool, Any]:  # noqa: ANN401
-    """Normalizes fastmcp's `CallToolResult` (`content`/`data`/`is_error`) into the
-    `(success, data)` tuple format `_to_tool_output` (`tool_adapter.py`) already knows how
-    to read — it unwraps a 2-tuple back to its bare `data`/error payload before returning
-    `ToolOutput`, whereas a `{"success": ..., "data": ...}` dict would come back out with
-    that wrapper still attached, since `clean_tool_result` only strips `REMOVE_FIELDS` keys,
-    it never unwraps a nested `"data"`. `ToolResultExtractor.extract_success_status` was
-    written against dict/str/tuple results, not an arbitrary SDK object — falling through to
-    its generic `str(result)` substring scan for `CallToolResult` would be unreliable, so
-    this reads `is_error` directly instead."""
-    is_error = bool(getattr(result, "is_error", False))
-    data = getattr(result, "data", None)
-    if data is None:
-        content = getattr(result, "content", None) or []
-        text_parts = [text for block in content if (text := getattr(block, "text", None))]
-        data = "\n".join(text_parts) if text_parts else (content or None)
-    if is_error:
-        return False, data if isinstance(data, str) else str(data)
-    return True, data
 
 
 _NO_COERCION = object()
@@ -138,16 +147,28 @@ class MCPToolAdapter(Tool):
 
     @property
     def parameters(self) -> list[ToolParameter]:
-        return _params_from_schema(self._tool_info.input_schema, self.name)
+        return _params_from_schema(self.raw_input_schema, self.name)
 
-    @property
+    @cached_property
     def raw_input_schema(self) -> dict[str, Any] | None:
         """The MCP server's own `inputSchema`, `$ref`/`$defs`-inlined but
         otherwise verbatim — see `Tool.raw_input_schema`'s docstring for why
         `to_schema()` needs this instead of rebuilding from `parameters`."""
         if self._tool_info.input_schema is None:
             return None
-        return resolve_json_schema_refs(self._tool_info.input_schema)
+        schema = resolve_json_schema_refs(self._tool_info.input_schema, max_nodes=4096)
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        if (schema.get("type", "object") != "object"
+            or not isinstance(properties, dict)
+            or any(not isinstance(name, str) or not isinstance(prop, dict)
+                   for name, prop in properties.items())
+            or not isinstance(required, list)
+            or any(not isinstance(name, str) for name in required)):
+            raise ValueError("MCP tool has an invalid object input schema")
+        if len(json.dumps(schema, ensure_ascii=True)) > 128_000:
+            raise ValueError("MCP tool schema exceeds the expanded schema budget")
+        return schema
 
     def _properties_with_authoritative_type(self) -> frozenset[str]:
         """Property names whose schema declares exactly ONE concrete JSON
@@ -241,11 +262,58 @@ class MCPToolAdapter(Tool):
                     )
 
     async def execute(self, **kwargs: Any) -> ToolOutput:  # noqa: ANN401
+        started = time.perf_counter()
         try:
             raw_result = await self._session_manager.call(self._server, self._tool_info.name, kwargs)
-        except (MCPConnectionError, MCPTokenRefreshError, MCPOAuthError) as exc:
-            return ToolOutput(success=False, error=str(exc))
         except Exception as exc:
-            logger.exception("MCP tool %s raised unexpectedly", self.name)
-            return ToolOutput(success=False, error=str(exc))
-        return _to_tool_output(_mcp_result_to_tuple(raw_result))
+            # Classification, retries and the detailed log line happen in MCPSessionManager.
+            await record_event(
+                getattr(self._session_manager, "_context", None),
+                "invocation",
+                invocation_fields(self._server, self._tool_info.name, kwargs, started, error=exc),
+            )
+            logger.warning(
+                "MCP tool call failed: instance_id=%s server=%s tool=%s duration_ms=%d "
+                "error_type=%s reauth_required=%s error=%s",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                round((time.perf_counter() - started) * 1000),
+                type(exc).__name__,
+                isinstance(exc, MCPReauthRequiredError),
+                safe_error_text(exc, self._server.auth),
+            )
+            return ToolOutput(success=False, error=safe_error_text(exc, self._server.auth))
+        context = getattr(self._session_manager, "_context", None)
+        output = await mcp_result_to_tool_output(raw_result, context)
+        succeeded = output.success
+        if not succeeded:
+            output = ToolOutput(success=False, error=safe_error_text(output.error, self._server.auth))
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        await record_event(
+            context,
+            "invocation",
+            invocation_fields(
+                self._server, self._tool_info.name, kwargs, started,
+                result=raw_result, tool_succeeded=succeeded,
+            ),
+        )
+        if not succeeded:
+            logger.warning(
+                "MCP server returned tool error: instance_id=%s server=%s tool=%s "
+                "duration_ms=%d error=%s",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                elapsed_ms,
+                output.error,
+            )
+        else:
+            logger.debug(
+                "MCP tool call completed: instance_id=%s server=%s tool=%s duration_ms=%d",
+                self._server.instance_id,
+                self._server.display_name,
+                self._tool_info.name,
+                elapsed_ms,
+            )
+        return output

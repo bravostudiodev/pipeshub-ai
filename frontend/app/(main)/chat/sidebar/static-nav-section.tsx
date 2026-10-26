@@ -12,6 +12,7 @@ import { useIsMobile } from '@/lib/hooks/use-is-mobile';
 import { useMobileSidebarStore } from '@/lib/store/mobile-sidebar-store';
 import { useNotificationStore } from '@/app/(main)/notifications/store';
 import { useFeatureFlagsStore, selectProjectsEnabled } from '@/lib/store/feature-flags-store';
+import { useUserStore, selectIsAdmin } from '@/lib/store/user-store';
 import { usePathname, useRouter } from 'next/navigation';
 import { SidebarItem } from './sidebar-item';
 
@@ -93,6 +94,7 @@ export function StaticNavSection() {
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const toggleNotificationsPanel = useNotificationStore((s) => s.togglePanel);
   const projectsEnabled = useFeatureFlagsStore(selectProjectsEnabled);
+  const isAdmin = useUserStore(selectIsAdmin);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -176,7 +178,7 @@ export function StaticNavSection() {
           href={PROJECTS_NAV_ITEM.route}
         />
       )}
-      {!isMobile &&
+      {!isMobile && isAdmin === true &&
         MAIN_NAV_ITEMS.map((item) => (
           <SidebarItem
             key={item.route}

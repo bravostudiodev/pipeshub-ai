@@ -13,6 +13,10 @@ const logger = Logger.getInstance({
   service: 'HealthStatus'
 });
 
+// connectors.routes installs axios-retry on the global axios, which turned every failed
+// probe into four attempts with backoff. A probe reports availability; it must not retry.
+const noRetry = { 'axios-retry': { retries: 0 } };
+
 const TYPES = {
   MongoService: 'MongoService',
   RedisService: 'RedisService',
@@ -51,6 +55,12 @@ export function createHealthRouter(
 
   const appConfig = container.get<AppConfig>('AppConfig');
   const configService = ConfigService.getInstance();
+
+  // Process-only probe for Kubernetes and the process monitor. The root route below
+  // checks dependent Python services, which start later in the same pod.
+  router.get('/live', (_req, res) => {
+    res.status(200).json({ status: 'alive' });
+  });
 
   async function getDeploymentConfig() {
     try {
@@ -168,7 +178,7 @@ export function createHealthRouter(
           // doesn't expose the HTTP discovery ports 7474/7473).
           const graphDbResp = await axios.get(
             `${appConfig.connectorBackend}/health/graph-db`,
-            { timeout: 5000, validateStatus: () => true },
+            { timeout: 5000, validateStatus: () => true, ...noRetry },
           );
           services.graphDb = graphDbResp.status === 200 ? 'healthy' : 'unhealthy';
           if (graphDbResp.status !== 200) overallHealthy = false;
@@ -187,7 +197,7 @@ export function createHealthRouter(
         try {
           const vectorDbResp = await axios.get(
             `${appConfig.connectorBackend}/health/vector-db`,
-            { timeout: 5000, validateStatus: () => true },
+            { timeout: 5000, validateStatus: () => true, ...noRetry },
           );
           services.vectorDb = vectorDbResp.status === 200 ? 'healthy' : 'unhealthy';
           if (vectorDbResp.status !== 200) overallHealthy = false;
@@ -227,23 +237,24 @@ export function createHealthRouter(
       const indexingHealthUrl = `${appConfig.indexingBackend}/health`;
       const doclingBackend = process.env.DOCLING_BACKEND || 'http://localhost:8081';
       const doclingHealthUrl = `${doclingBackend}/health`;
-      const embeddingBackend = (process.env.EMBEDDING_SERVER_URL || 'http://localhost:8002').replace(/\/v1\/?$/, '');
-      const embeddingHealthUrl = `${embeddingBackend}/health`;
+      // The connector service knows whether the configured embedding provider uses the
+      // built-in server at all; it answers `not_configured` when it does not.
+      const embeddingHealthUrl = `${appConfig.connectorBackend}/health/embedding`;
       const parsingServicesEnabled = (process.env.USE_PARSING_SERVICE || '').toLowerCase() === 'true';
       const parsingBackend = process.env.PARSING_SERVICE_URL || 'http://localhost:8092';
       const extractionBackend = process.env.EXTRACTION_SERVICE_URL || 'http://localhost:8093';
 
       const baseSettled = Promise.allSettled([
-        axios.get(aiHealthUrl, { timeout: 3000 }),
-        axios.get(connectorHealthUrl, { timeout: 3000 }),
-        axios.get(indexingHealthUrl, { timeout: 3000 }),
-        axios.get(doclingHealthUrl, { timeout: 3000 }),
-        axios.get(embeddingHealthUrl, { timeout: 3000 }),
+        axios.get(aiHealthUrl, { timeout: 3000, ...noRetry }),
+        axios.get(connectorHealthUrl, { timeout: 3000, ...noRetry }),
+        axios.get(indexingHealthUrl, { timeout: 3000, ...noRetry }),
+        axios.get(doclingHealthUrl, { timeout: 3000, ...noRetry }),
+        axios.get(embeddingHealthUrl, { timeout: 5000, validateStatus: () => true, ...noRetry }),
       ]);
       const parsingSettled = parsingServicesEnabled
         ? Promise.allSettled([
-            axios.get(`${parsingBackend}/health`, { timeout: 3000 }),
-            axios.get(`${extractionBackend}/health`, { timeout: 3000 }),
+            axios.get(`${parsingBackend}/health`, { timeout: 3000, ...noRetry }),
+            axios.get(`${extractionBackend}/health`, { timeout: 3000, ...noRetry }),
           ])
         : null;
 
@@ -258,7 +269,12 @@ export function createHealthRouter(
       const connectorOk = isServiceHealthy(connectorResp);
       const indexingOk = isServiceHealthy(indexingResp);
       const doclingOk = isServiceHealthy(doclingResp);
-      const embeddingOk = isServiceHealthy(embeddingResp);
+      const embeddingStatus =
+        embeddingResp.status === 'fulfilled' &&
+        embeddingResp.value.status === 200 &&
+        embeddingResp.value.data?.status === 'not_configured'
+          ? 'not_configured'
+          : isServiceHealthy(embeddingResp) ? 'healthy' : 'unhealthy';
 
       // Critical services: query + connector (required for core functionality)
       const overallHealthy = aiOk && connectorOk;
@@ -268,7 +284,7 @@ export function createHealthRouter(
         connector: connectorOk ? 'healthy' : 'unhealthy',
         indexing: indexingOk ? 'healthy' : 'unhealthy',
         docling: doclingOk ? 'healthy' : 'unhealthy',
-        embedding: embeddingOk ? 'healthy' : 'unhealthy',
+        embedding: embeddingStatus,
       };
       if (parsingSettled) {
         const [parsingResp, extractionResp] = await parsingSettled;

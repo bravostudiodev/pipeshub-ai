@@ -58,7 +58,10 @@ def _search_with_duckduckgo_sync(query: str, config: dict[str, Any]) -> list[dic
         response = fetch_url(search_url, timeout=15)
     except FetchError as e:
         logger.error(f"DuckDuckGo fetch failed: {e}")
-        return []
+        # Preserve transport/policy failures for the tool wrapper. Returning an
+        # empty list makes a blocked search look like a successful search with
+        # no matches, which prompts the agent to keep broadening the query.
+        raise
    
     status_code = response.status_code
     if status_code != 200:
@@ -247,12 +250,27 @@ def create_web_search_tool(
         Returns search results with titles, URLs/citation_ids and snippets from web pages.
         Treat these as external sources requiring attribution.
 
+        If this tool reports a network, proxy, policy, or provider error, stop
+        web searching for this turn. Do not retry with a different query. Tell
+        the user that live web search could not be completed; do not present
+        model memory as current search results.
+
         Args:
             query: Clear search query string (e.g., "latest Python 3.12 features")
 
         Example:
             web_search(query="current AI model benchmarks 2026")
         """
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            return json.dumps({
+                "ok": False,
+                "terminal": True,
+                "error": (
+                    "Public web access is disabled by the workspace administrator. "
+                    "Do not retry or use another public web tool. Tell the user live web search is disabled."
+                ),
+            })
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -266,6 +284,17 @@ def create_web_search_tool(
                 })
             except Exception as e:
                 last_error = e
+                if "outbound proxy refused" in str(e).lower():
+                    logger.warning("Web search stopped because the outbound proxy denied the request")
+                    return json.dumps({
+                        "ok": False,
+                        "terminal": True,
+                        "error": (
+                            "Live web search is unavailable because the network policy blocked it. "
+                            "Do not retry or broaden the search. Tell the user the requested "
+                            "web search could not be completed."
+                        ),
+                    })
                 if attempt < MAX_RETRIES - 1:
                     backoff = INITIAL_BACKOFF_SECONDS * (2 ** attempt)
                     logger.warning(
@@ -277,6 +306,7 @@ def create_web_search_tool(
         logger.error(f"Web search failed after {MAX_RETRIES} attempts with {provider}: {last_error}")
         return json.dumps({
             "ok": False,
+            "terminal": True,
             "error": f"Web search failed: {str(last_error)}"
         })
 

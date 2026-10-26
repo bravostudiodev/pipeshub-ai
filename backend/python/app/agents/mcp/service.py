@@ -78,6 +78,21 @@ async def get_instance(
 # ---------------------------------------------------------------------------
 
 
+SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE = (
+    "This source is set up with one administrator credential shared by every user, which OddJeeves "
+    "does not use: each person must connect with their own access. An administrator needs to switch "
+    "it to per-user sign-in."
+)
+
+
+def uses_shared_admin_credential(instance: dict[str, Any]) -> bool:
+    """An instance whose token/header credential is the admin's, used for every caller. OAuth is
+    always per caller, so `useAdminAuth` only shares api_token/headers credentials."""
+    return bool(instance.get("useAdminAuth")) and instance.get("authMode") in (
+        MCPAuthMode.API_TOKEN.value, MCPAuthMode.HEADERS.value,
+    )
+
+
 async def resolve_effective_user_auth(
     instance: dict[str, Any],
     user_id: str,
@@ -96,7 +111,7 @@ async def resolve_effective_user_auth(
         return {}
 
     effective_user_id = user_id
-    if instance.get("useAdminAuth") and auth_mode in (MCPAuthMode.API_TOKEN.value, MCPAuthMode.HEADERS.value):
+    if uses_shared_admin_credential(instance):
         effective_user_id = instance.get("createdBy") or user_id
 
     record = await config_service.get_config(
@@ -138,6 +153,8 @@ def instance_config_from_dict(instance: dict[str, Any]) -> MCPServerConfig:
         authorization_url=instance.get("authorizationUrl"),
         token_url=instance.get("tokenUrl"),
         scopes=instance.get("scopes") or [],
+        connect_timeout_seconds=instance.get("connectTimeoutSeconds"),
+        call_timeout_seconds=instance.get("callTimeoutSeconds"),
         is_custom=bool(instance.get("isCustom")),
         created_at=instance.get("createdAt") or 0,
         updated_at=instance.get("updatedAt") or 0,
@@ -168,23 +185,70 @@ def _tool_namespace_key(instance: dict[str, Any]) -> str:
     return discriminator.lower().strip().replace(" ", "_").replace("-", "_")
 
 
+def legacy_mcp_selection_owners(
+    servers: list[dict[str, Any]], selected: set[str],
+) -> dict[str, str]:
+    """Assign each ambiguous bare name to at most one attached instance.
+
+    A legacy project grant has no instance identity. Prefer the first stable
+    instance ID, even if another type's prefix can parse the same full name.
+    Never expand one legacy permission into multiple provider connections.
+    """
+    owners: dict[str, str] = {}
+    ordered = sorted(servers, key=lambda item: str(item.get("instanceId") or ""))
+    for full_name in selected:
+        if not isinstance(full_name, str) or ":" in full_name:
+            continue
+        # An exact tool list wins; otherwise the longest type prefix, since `mcp_slack_bar_x`
+        # names type `slack_bar` before type `slack`. Ties go to the first instance ID.
+        best: tuple[int, str] | None = None
+        for server in ordered:
+            instance_id = server.get("instanceId")
+            if not instance_id:
+                continue
+            tools = server.get("tools")
+            if tools is not None:
+                if any(tool.get("fullName") == full_name for tool in tools if isinstance(tool, dict)):
+                    best = (len(full_name) + 1, instance_id)
+                    break
+                continue
+            key = _tool_namespace_key(server)
+            if key and full_name.startswith(f"mcp_{key}_") and (best is None or len(key) > best[0]):
+                best = (len(key), instance_id)
+        if best is not None:
+            owners[full_name] = best[1]
+    return owners
+
+
 def match_enabled_tools_for_mcp_server(
     mcp_server: dict[str, Any],
     enabled_tools: set[str],
+    *, allow_legacy: bool = True,
 ) -> list[dict[str, Any]]:
     """Match chat-time selected tool fullNames to one MCP server (assistant path).
 
     Assistant/placeholder attachments from `get_authenticated_mcp_servers` have no
-    stored `tools` list — only `typeId`/`name`. Selected tools use the same
-    `mcp_{type}_{tool}` names as live discovery, so match by that prefix.
+    stored `tools` list — only `typeId`/`name`. Scoped selections first match
+    the exact instance ID; bare legacy selections are accepted only when the
+    caller assigned this server ownership. Then match the provider's legacy
+    `mcp_{type}_{tool}` name before runtime aliases it for the model.
     """
     type_key = _tool_namespace_key(mcp_server)
     if not type_key:
         return []
     prefix = f"mcp_{type_key}_"
     matched: list[dict[str, Any]] = []
-    for full_name in enabled_tools:
-        if not isinstance(full_name, str) or not full_name.startswith(prefix):
+    instance_id = mcp_server.get("instanceId")
+    for selection in enabled_tools:
+        if not isinstance(selection, str):
+            continue
+        if instance_id and selection.startswith(f"{instance_id}:"):
+            full_name = selection[len(instance_id) + 1:]
+        elif allow_legacy and ":" not in selection:
+            full_name = selection
+        else:
+            continue
+        if not full_name.startswith(prefix):
             continue
         tool_name = full_name[len(prefix):]
         if tool_name:
@@ -202,10 +266,8 @@ async def get_authenticated_mcp_servers(
     `api/routes/toolsets.py::get_authenticated_toolsets`.
 
     Used by the assistant/placeholder agent (`get_assistant_agent` in `api/routes/agent.py`)
-    to auto-attach every authenticated MCP server with no graph edges involved. Because there
-    is no attach-time "reject duplicate server type" guard on this path (unlike explicit
-    per-agent attachment), duplicate types are deduped here instead — first authenticated
-    instance for a given type wins — so `mcp_{server_type}_{tool}` names stay unique.
+    to auto-attach every authenticated MCP server with no graph edges involved.
+    Per-request collision-safe names are assigned after credential resolution.
 
     ``instances``, when provided, is used as-is instead of loading from the config service.
     """
@@ -219,7 +281,6 @@ async def get_authenticated_mcp_servers(
     if not instances:
         return []
 
-    seen_type_keys: set[str] = set()
     authenticated: list[dict[str, Any]] = []
     for instance in instances:
         try:
@@ -230,15 +291,6 @@ async def get_authenticated_mcp_servers(
 
         if not is_effective_auth_authenticated(effective_auth):
             continue
-
-        type_key = _tool_namespace_key(instance)
-        if type_key in seen_type_keys:
-            logger.info(
-                f"Skipping duplicate-type MCP instance {instance.get('_id')} "
-                f"(type key '{type_key}' already included) for assistant agent auto-attach"
-            )
-            continue
-        seen_type_keys.add(type_key)
 
         authenticated.append({
             "instanceId": instance.get("_id"),

@@ -8,6 +8,7 @@ from app.config.configuration_service import ConfigurationService
 from app.config.constants.service import config_node_constants
 from app.exceptions.indexing_exceptions import DocumentProcessingError
 from app.utils.aimodels import (
+    LOCAL_CPU_EMBEDDING_PROVIDERS,
     STTAdapter,
     TTSAdapter,
     get_generator_model,
@@ -161,6 +162,15 @@ async def get_embedding_model_config(config_service: ConfigurationService) -> di
         return embedding_configs[0]
     except Exception as e:
         raise e
+
+
+async def is_embedding_server_configured(config_service: ConfigurationService) -> bool:
+    """Whether the configured embedding provider is served by the built-in embedding server
+    (`EMBEDDING_SERVER_URL`). Hosted and self-hosted API providers never touch it, so a
+    deployment on those may run without the server and health checks must not probe it.
+    Unconfigured counts as yes: that path falls back to `get_default_embedding_model()`."""
+    config = _select_default_config((await _load_ai_models(config_service)).get("embedding") or [])
+    return config is None or config.get("provider") in LOCAL_CPU_EMBEDDING_PROVIDERS
 
 
 async def is_local_cpu_embedding_configured(

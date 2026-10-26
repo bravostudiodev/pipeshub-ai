@@ -60,6 +60,7 @@ from app.modules.agents.qna.router import (
 from app.modules.transformers.blob_storage import (
     BlobStorage,  # noqa: F401 - re-exported, see above
 )
+from app.services.featureflag.platform_settings import is_public_web_access_enabled
 from app.services.graph_db.interface.graph_db_provider import IGraphDBProvider
 from app.telemetry.event_buffer import record_event
 from app.telemetry.identity import domain_from_email
@@ -3552,12 +3553,23 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                 agent_mcp_servers = agent.get("mcpServers", []) if mcp_enabled else []
                 if chat_query.tools is not None:
                     from app.agents.mcp.service import (
+                        legacy_mcp_selection_owners,
                         match_enabled_tools_for_mcp_server,
                     )
 
                     enabled_tools_set = set(chat_query.tools)
                     filtered_mcp_servers = []
+                    # One bare legacy selection must not attach two sources,
+                    # including different type prefixes that form the same
+                    # flattened fullName. Scoped keys retain exact identity.
+                    legacy_owner = legacy_mcp_selection_owners(agent_mcp_servers, enabled_tools_set)
                     for mcp_server in agent_mcp_servers:
+                        instance_id = mcp_server.get("instanceId")
+                        selected_for_instance = {
+                            name for name in enabled_tools_set
+                            if (instance_id and name.startswith(f"{instance_id}:"))
+                            or legacy_owner.get(name) == instance_id
+                        }
                         server_tools = mcp_server.get("tools")
                         if server_tools is None:
                             # Assistant/placeholder path (`get_authenticated_mcp_servers`) never
@@ -3565,7 +3577,7 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                             # prefix instead of keeping every authenticated server (which would
                             # let live discovery expose tools the chat filter excluded).
                             matched_tools = match_enabled_tools_for_mcp_server(
-                                mcp_server, enabled_tools_set,
+                                mcp_server, selected_for_instance,
                             )
                             if matched_tools:
                                 mcp_server_copy = dict(mcp_server)
@@ -3575,7 +3587,8 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                         mcp_server_copy = dict(mcp_server)
                         filtered_tools = [
                             tool for tool in server_tools
-                            if tool.get("fullName") in enabled_tools_set
+                            if (instance_id and f"{instance_id}:{tool.get('fullName')}" in selected_for_instance)
+                            or tool.get("fullName") in selected_for_instance
                         ]
                         if filtered_tools:
                             mcp_server_copy["tools"] = filtered_tools
@@ -3810,6 +3823,13 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
 
                     agent_mcp_servers = configured_mcp_servers
 
+                logger.info(
+                    "MCP attach: enabled=%s tools_filter=%s attached=%d (conversation=%s)",
+                    mcp_enabled,
+                    "none" if chat_query.tools is None else len(chat_query.tools),
+                    len(agent_mcp_servers),
+                    chat_query.conversationId,
+                )
                 timer.mark("mcp_cfg")
 
                 agent_knowledge = agent.get("knowledge", [])
@@ -3869,7 +3889,7 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                 web_search_tool_config = await web_search_coro if web_search_coro is not None else None
                 connector_configs = await connector_task
                 timer.mark("connector_cfg")
-                if not _is_web_search_enabled(chat_query.tools):
+                if not await is_public_web_access_enabled(config_service) or not _is_web_search_enabled(chat_query.tools):
                     web_search_provider = None
                     web_search_tool_config = None
 
@@ -3947,6 +3967,7 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                     protocol=protocol,
                     llm_provider=llm_config.get("provider", ""),
                     context_length=llm_config.get("contextLength"),
+                    configured_context_window=llm_config.get("contextLength"),
                     is_reasoning_model=bool(llm_config.get("isReasoning", False)),
                     stage_timer=timer,
                     cancellation_registry=cancellation_registry,
@@ -4081,7 +4102,7 @@ async def get_assistant_agent(
                 instances=mcp_instances,
             )
         except Exception as e:
-            logger.error(f"Error fetching authenticated MCP servers: {e}", exc_info=True)
+            logger.error(f"Error fetching authenticated MCP servers for user {user_id}: {e}", exc_info=True)
             authenticated_mcp_servers_list = []
     else:
         authenticated_mcp_servers_list = []

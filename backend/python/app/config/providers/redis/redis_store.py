@@ -11,7 +11,10 @@ from app.services.redis.connection_provider_factory import get_redis_provider
 from app.utils.logger import create_logger
 
 if TYPE_CHECKING:
-    from app.services.redis.connection_provider import IRedisConnectionProvider, RedisClient
+    from app.services.redis.connection_provider import (
+        IRedisConnectionProvider,
+        RedisClient,
+    )
 
 logger = create_logger("redis_store")
 
@@ -341,6 +344,28 @@ class RedisDistributedKeyValueStore(KeyValueStore[T], Generic[T]):
         except Exception as e:
             logger.error("Failed to delete key %s: %s", key, str(e))
             raise ConnectionError(f"Failed to delete key: {str(e)}")
+
+    async def compare_and_set(self, key: str, expected: T, value: T | None) -> bool:
+        full_key = self._build_key(key)
+        client = self._get_client()
+        current = await client.get(full_key)
+        if current is None or self.deserializer(current) != expected:
+            return False
+        script = """
+        if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+        if ARGV[2] == 'delete' then
+            return redis.call('DEL', KEYS[1])
+        end
+        redis.call('SET', KEYS[1], ARGV[3], 'KEEPTTL')
+        return 1
+        """
+        changed = bool(await client.eval(
+            script, 1, full_key, current, "delete" if value is None else "replace",
+            b"" if value is None else self.serializer(value),
+        ))
+        if changed:
+            await self._notify_watchers(key, value)
+        return changed
 
     async def get_all_keys(self) -> List[str]:
         """Get all keys from Redis with the configured prefix."""

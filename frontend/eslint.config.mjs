@@ -23,10 +23,9 @@ const eslintConfig = [
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/preserve-manual-memoization': 'warn',
       'react-hooks/refs': 'warn',
-      // rules-of-hooks: multiple workspace pages have hooks after early admin guard
-      // returns. These are intentional patterns reviewed and deferred (9 Apr 2026).
-      // Re-enable ('error') to flag new violations.
-      'react-hooks/rules-of-hooks': 'off',
+      // A hook after an early return crashes at runtime (React #300) whenever the
+      // condition flips between renders, e.g. useIsMobile after mount.
+      'react-hooks/rules-of-hooks': 'error',
     },
   },
   {

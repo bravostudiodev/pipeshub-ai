@@ -108,8 +108,8 @@ _USER_MESSAGES: dict[str, str] = {
         "workspace admin to check the model name and endpoint in Workspace → AI Models."
     ),
     "request_too_large": (
-        "This conversation is too long for the selected model. Shorten your "
-        "message or start a new conversation."
+        "This request was too large for the selected model. Try a narrower "
+        "question, or start a new conversation."
     ),
     "invalid_request": (
         "The AI model rejected this request. Ask a workspace admin to check the "
@@ -215,7 +215,8 @@ def classify_error(error_msg: str) -> tuple[str, str]:
     else:
         error_code = "unknown"
 
-    if error_code in ("invalid_request", "request_too_large"):
+    # The size message is complete on its own; provider wording goes to the logs only.
+    if error_code == "invalid_request":
         provider_msg = _extract_provider_message(error_msg)
         if provider_msg:
             prefix = _USER_MESSAGES[error_code].split(".")[0]

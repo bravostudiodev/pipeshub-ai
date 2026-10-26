@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -10,7 +11,14 @@ from app.agent_loop_lib.core.messages import (
     MALFORMED_TOOL_CALL_ERROR_KEY,
 )
 from app.agent_loop_lib.core.scope import ToolScope
-from app.agent_loop_lib.core.types import Artifact, Confidence, Goal, Message, ToolCall, ToolResult
+from app.agent_loop_lib.core.types import (
+    Artifact,
+    Confidence,
+    Goal,
+    Message,
+    ToolCall,
+    ToolResult,
+)
 from app.agent_loop_lib.events.base import EventType, ToolCallStatus
 from app.agent_loop_lib.tools.special_route import RouteContext, SpecialRouteRegistry
 from app.agent_loop_lib.tools.tags import TAG_DEDUP_EXACT, TAG_LIFECYCLE_TERMINAL
@@ -25,8 +33,12 @@ if TYPE_CHECKING:
     from app.agent_loop_lib.core.scope import TurnScope
     from app.agent_loop_lib.core.tool_schema import ToolSchema
     from app.agent_loop_lib.runtime.runtime import AgentRuntime
-    from app.agent_loop_lib.tools.builtin.planning.task_complete import TaskCompletionOutcome
+    from app.agent_loop_lib.tools.builtin.planning.task_complete import (
+        TaskCompletionOutcome,
+    )
     from app.agent_loop_lib.tools.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -193,8 +205,30 @@ def tool_schemas_for_turn(agent, spec: "AgentSpec", runtime: "AgentRuntime") -> 
     registry = runtime.tool_registry
     if registry is None:
         return []
+    from app.agent_loop_lib.tools.builtin.lazy_toolsets import MAX_VISIBLE_TOOLS
+
+    def bounded(names: list[str]) -> list["ToolSchema"]:
+        if len(names) <= MAX_VISIBLE_TOOLS:
+            return registry.schemas(names)
+        # A pre-existing eager grant/pinned set can exceed the lazy loader's
+        # budget. Keep discovery controls callable, rather than handing the
+        # gateway more declarations than it accepts.
+        # Order of what survives the cut: discovery controls, then pinned
+        # (essential) toolsets, then the rest by name.
+        meta = [n for n in ("list_toolsets", "search_tools", "fetch_tools") if n in names]
+        pinned = {tool for group in spec.pinned_toolsets for tool in registry.tools_in_toolset(group)}
+        rest = sorted(set(names) - set(meta), key=lambda n: (n not in pinned, n))
+        kept = meta + rest[:MAX_VISIBLE_TOOLS - len(meta)]
+        if not getattr(agent, "_tool_cap_logged", False):
+            agent._tool_cap_logged = True
+            logger.warning(
+                "Tool schemas over the per-request cap: agent=%s granted=%d sent=%d dropped=%s",
+                spec.name, len(names), len(kept), sorted(set(names) - set(kept)),
+            )
+        return registry.schemas(kept)
+
     if not registry.has_toolsets():
-        return registry.schemas(spec.tool_names or None)
+        return bounded(list(spec.tool_names or registry.names()))
 
     if agent.visible_tools is None:
         agent.visible_tools = initial_visible_tools(spec, runtime)
@@ -208,7 +242,7 @@ def tool_schemas_for_turn(agent, spec: "AgentSpec", runtime: "AgentRuntime") -> 
             # ceiling (see lazy_toolsets.py's `_grant_set` usage) — so this
             # intersection is a defensive no-op in the common case, not the
             # only enforcement point.
-            return registry.schemas(sorted(agent.visible_tools & set(spec.tool_names)))
+            return bounded(sorted(agent.visible_tools & set(spec.tool_names)))
         # eager (default): the explicit tool grant is ALL named tools,
         # fully visible from the start. Lazy disclosure (grouping tools
         # into toolsets and hiding them until fetch_tools loads them) only
@@ -218,9 +252,9 @@ def tool_schemas_for_turn(agent, spec: "AgentSpec", runtime: "AgentRuntime") -> 
         # permanently locked out of grouped tools it was explicitly given,
         # since it lacks the list_toolsets/fetch_tools meta-tools needed
         # to discover and unlock them.
-        return registry.schemas(spec.tool_names)
+        return bounded(list(spec.tool_names))
 
-    return registry.schemas(list(agent.visible_tools))
+    return bounded(sorted(agent.visible_tools))
 
 
 async def execute_tool_call(

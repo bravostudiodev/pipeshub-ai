@@ -83,6 +83,9 @@ class WebScrapeTool(Tool):
         ]
 
     async def execute(self, **kwargs: Any) -> ToolOutput:
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            return ToolOutput(success=False, error="Public web access is disabled by the workspace administrator.")
         url: str = kwargs["url"]
         max_chars: int = int(kwargs.get("max_chars") or _MAX_CHARS)
 

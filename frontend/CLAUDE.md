@@ -1,12 +1,43 @@
-# CLAUDE.md - PipesHub Dashboard UI
+# CLAUDE.md - OddJeeves Dashboard UI
 
 When implementing backend or repo-wide changes, also read the repository-root `AGENTS.md`. This file is the UI conventions for `frontend/`.
 
 ## Project Overview
 
-PipesHub is an AI-powered knowledge management dashboard on **Next.js** (App Router, client-rendered React).
+OddJeeves is an internal knowledge platform built on **Next.js** (App Router, client-rendered React), based on an independent PipesHub fork.
+
+Use **OddJeeves** in user-facing UI, emails, and application labels. Keep legacy
+technical identifiers such as package names and `pipeshub://` callbacks when a
+rename would break compatibility.
 
 In Docker Compose the built UI is served by Express on port **3000** (same origin as `/api` and `/mcp`). When you run `PORT=3001 npm run dev` from this directory, the dashboard is on 3001 and calls Express on 3000. Do not assume 3001 is where operators open the product.
+
+This is an independent internal-knowledge-platform fork. Read the repository
+[`docs/fork-customizations.md`](../docs/fork-customizations.md) before changing
+chat source connections, their APIs, or workspace MCP diagnostics.
+
+### Fork connection UI
+
+- The persistent integration strip is rendered by
+  `app/(main)/chat/page.tsx`; provider cards and their per-user actions live in
+  `app/(main)/chat/components/slack-connection-card.tsx` (historical filename).
+- Keep the strip compact, horizontally scrollable, and visible in both new and
+  active conversations. Reserve vertical room so it never covers the prompt,
+  messages, or result content.
+- The card already names the provider. Use short action labels such as
+  `Connect`, `Reconnect`, and `Disconnect` instead of repeating its name.
+- Provider setup details belong in administrator pages. Employee-facing flows
+  should not show OAuth client configuration or MCP terminology. The
+  exceptions are deliberately short user credential inputs: a read-only
+  Superhuman Docs token and Confluence username/password.
+- Superhuman Docs setup is `/superhuman-guide/`; its screenshots are static
+  files in `public/guides/superhuman-docs/`. Keep static-export compatibility
+  by using public asset paths rather than server-side image optimization.
+- MCP diagnostics are admin-only at
+  `app/(main)/workspace/mcp-servers/diagnostics/`. Do not fetch or render trace
+  data for a non-admin; the backend remains the authoritative access check.
+- Add or update focused component/page tests beside the changed UI. Do not
+  weaken the user's own credential ownership or expose secrets in status APIs.
 
 **Tech Stack:**
 - Next.js 14+ (App Router, CSR-only with `'use client'`)

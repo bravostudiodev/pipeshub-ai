@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from app.agent_loop_lib.core.messages import (
     AssistantMessage,
@@ -12,6 +13,9 @@ from app.agent_loop_lib.core.messages import (
     ToolMessage,
     UserMessage,
 )
+
+if TYPE_CHECKING:
+    from app.agent_loop_lib.core.tool_schema import ToolSchema
 
 """Single source of truth for pre-call token estimation.
 
@@ -27,6 +31,9 @@ _CHARS_PER_TOKEN = 4
 # Every message costs a few tokens of protocol overhead (role marker,
 # separators) regardless of content, on top of raw character count.
 _MESSAGE_OVERHEAD_TOKENS = 4
+# JSON Schema is dense in punctuation and short identifiers, which tokenizers
+# split finely; prose-rate counting underestimated large MCP tool lists.
+_SCHEMA_CHARS_PER_TOKEN = 3
 
 # Images used to count as zero here, which is how a request could carry tens
 # of thousands of visual tokens while every shaper believed the context was
@@ -105,3 +112,8 @@ def count_tokens(messages: list[Message]) -> int:
 
 def count_text_tokens(text: str) -> int:
     return len(text) // _CHARS_PER_TOKEN
+
+
+def count_schema_tokens(schemas: list[ToolSchema]) -> int:
+    """Tool definitions as sent beside the messages."""
+    return sum(len(schema.model_dump_json()) // _SCHEMA_CHARS_PER_TOKEN for schema in schemas)

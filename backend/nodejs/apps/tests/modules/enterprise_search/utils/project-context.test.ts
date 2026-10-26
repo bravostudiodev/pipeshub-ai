@@ -196,10 +196,16 @@ describe('project-context', () => {
       expect(payload.tools).to.deep.equal(['project-tool'])
     })
 
-    it('treats an explicit empty tools array the same as "not narrowed" (falls back to the whole project set)', () => {
+    it('keeps an explicit empty tools array as "no tools" instead of widening it to the project set', () => {
       const payload: Record<string, unknown> = { tools: [] }
       applyProjectScope(payload, makeProject({ tools: ['project-tool'] }))
-      expect(payload.tools).to.deep.equal(['project-tool'])
+      expect(payload.tools).to.deep.equal([])
+    })
+
+    it('does not let an instance-scoped MCP grant authorize the same tool on another instance', () => {
+      const payload: Record<string, unknown> = { tools: ['inst-b:mcp_notion_search', 'inst-a:mcp_notion_search'] }
+      applyProjectScope(payload, makeProject({ tools: ['inst-a:mcp_notion_search'] }))
+      expect(payload.tools).to.deep.equal(['inst-a:mcp_notion_search'])
     })
 
     it('sets tools to [] when the project has none configured', () => {

@@ -1106,7 +1106,7 @@ describe('tokens_manager/routes/health.routes', () => {
 
     it('should still be healthy when only embedding is down (non-critical)', async () => {
       sinon.stub(axiosModule, 'get').callsFake((url: string) => {
-        if (url.includes('8002')) {
+        if (url.includes('/health/embedding')) {
           return Promise.reject(new Error('Embedding down'))
         }
         return Promise.resolve({ status: 200, data: { status: 'healthy' } })
@@ -1197,55 +1197,40 @@ describe('tokens_manager/routes/health.routes', () => {
       expect(doclingCall!.args[0]).to.equal('http://localhost:8081/health')
     })
 
-    it('should use EMBEDDING_SERVER_URL env var for embedding health check URL', async () => {
-      process.env.EMBEDDING_SERVER_URL = 'http://custom-embedding:9002'
-
-      router = createHealthRouter(container, cmContainer)
-      const handler = router.stack.find(
-        (l: any) => l.route && l.route.path === '/services' && l.route.methods.get,
-      )?.route.stack[0].handle
-
+    it('should delegate the embedding probe to the connector service', async () => {
       const axiosStub = sinon.stub(axiosModule, 'get').resolves({
         status: 200,
         data: { status: 'healthy' },
       })
 
+      const handler = findHandler('/services', 'get')
       const res = mockRes()
-      const next = sinon.stub()
-
-      await handler({}, res, next)
+      await handler({}, res, sinon.stub())
 
       const embeddingCall = axiosStub.getCalls().find(
-        (c: any) => c.args[0].includes('custom-embedding:9002'),
+        (c: any) => c.args[0].includes('/health/embedding'),
       )
       expect(embeddingCall).to.exist
-      expect(embeddingCall!.args[0]).to.equal('http://custom-embedding:9002/health')
-
-      delete process.env.EMBEDDING_SERVER_URL
+      expect(embeddingCall!.args[0]).to.equal('http://localhost:8088/health/embedding')
+      expect(embeddingCall!.args[1]['axios-retry']).to.deep.equal({ retries: 0 })
+      expect(res.json.firstCall.args[0].services.embedding).to.equal('healthy')
     })
 
-    it('should default embedding URL to http://localhost:8002 when env not set', async () => {
-      delete process.env.EMBEDDING_SERVER_URL
-      router = createHealthRouter(container, cmContainer)
-      const handler = router.stack.find(
-        (l: any) => l.route && l.route.path === '/services' && l.route.methods.get,
-      )?.route.stack[0].handle
-
-      const axiosStub = sinon.stub(axiosModule, 'get').resolves({
-        status: 200,
-        data: { status: 'healthy' },
+    it('should report embedding as not_configured, not unhealthy, when the connector says so', async () => {
+      sinon.stub(axiosModule, 'get').callsFake((url: string) => {
+        if (url.includes('/health/embedding')) {
+          return Promise.resolve({ status: 200, data: { status: 'not_configured' } })
+        }
+        return Promise.resolve({ status: 200, data: { status: 'healthy' } })
       })
 
+      const handler = findHandler('/services', 'get')
       const res = mockRes()
-      const next = sinon.stub()
+      await handler({}, res, sinon.stub())
 
-      await handler({}, res, next)
-
-      const embeddingCall = axiosStub.getCalls().find(
-        (c: any) => c.args[0].includes('8002'),
-      )
-      expect(embeddingCall).to.exist
-      expect(embeddingCall!.args[0]).to.equal('http://localhost:8002/health')
+      const jsonArg = res.json.firstCall.args[0]
+      expect(jsonArg.status).to.equal('healthy')
+      expect(jsonArg.services.embedding).to.equal('not_configured')
     })
 
     it('should mark service as unhealthy when it returns 200 but no data', async () => {
@@ -1353,13 +1338,13 @@ describe('tokens_manager/routes/health.routes', () => {
         if (url.includes('8000')) {
           return Promise.resolve({ status: 200, data: { status: 'healthy' } })
         }
+        if (url.includes('/health/embedding')) {
+          return Promise.resolve({ status: 200, data: { status: 'healthy' } })
+        }
         if (url.includes('8088')) {
           return Promise.reject(new Error('Connector down'))
         }
         if (url.includes('8091')) {
-          return Promise.resolve({ status: 200, data: { status: 'healthy' } })
-        }
-        if (url.includes('8002')) {
           return Promise.resolve({ status: 200, data: { status: 'healthy' } })
         }
         // docling
@@ -1398,7 +1383,7 @@ describe('tokens_manager/routes/health.routes', () => {
       expect(urls).to.include('http://localhost:8088/health')
       expect(urls).to.include('http://localhost:8091/health')
       expect(urls).to.include('http://localhost:8081/health')
-      expect(urls).to.include('http://localhost:8002/health')
+      expect(urls).to.include('http://localhost:8088/health/embedding')
     })
 
     describe('parsing + extraction services (USE_PARSING_SERVICE)', () => {

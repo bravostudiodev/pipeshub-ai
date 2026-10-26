@@ -1,10 +1,10 @@
 openapi: 3.0.0
 info:
-  title: PipesHub API
+  title: OddJeeves API
   description: |
-    Unified API documentation for PipesHub services.
+    Unified API documentation for OddJeeves services.
 
-    PipesHub is an enterprise-grade platform providing:
+    OddJeeves is an enterprise-grade platform providing:
     - User authentication and management
     - Document storage and version control
     - Knowledge base management
@@ -52,7 +52,7 @@ tags:
     description: OAuth 2.0 token exchange for third-party authentication providers
   - name: OAuth Provider
     description: |
-      PipesHub OAuth 2.0 Authorization Server implementing RFC 6749, RFC 7636 (PKCE), and OpenID Connect.
+      OddJeeves OAuth 2.0 Authorization Server implementing RFC 6749, RFC 7636 (PKCE), and OpenID Connect.
 
       **Supported Grant Types:**
       - `authorization_code` - Standard OAuth flow with PKCE support
@@ -78,9 +78,9 @@ tags:
       **Operational note:** Prefer tokens whose JWT already carries the creator as **`userId`**; use **`POST /oauth-clients/{appId}/revoke-all-tokens`** and obtain new tokens from **`POST /oauth2/token`** when rotating integrations.
   - name: OAuth Apps
     description: |
-      Manage OAuth 2.0 client applications registered with PipesHub.
+      Manage OAuth 2.0 client applications registered with OddJeeves.
 
-      OAuth apps allow third-party applications to access PipesHub APIs on behalf of users
+      OAuth apps allow third-party applications to access OddJeeves APIs on behalf of users
       or organizations. Each app receives a client ID and secret for authentication.
 
       **Who can see which apps**
@@ -311,7 +311,7 @@ tags:
     description: |
       Configure telemetry and metrics collection for application monitoring and analytics.
 
-      PipesHub collects anonymized usage metrics to help improve the product. Metrics are pushed
+      OddJeeves collects anonymized usage metrics to help improve the product. Metrics are pushed
       to a configurable remote server at regular intervals.
 
       **Collected Metrics:**
@@ -334,8 +334,8 @@ tags:
     description: |
       Model Context Protocol (MCP) endpoints for AI tool integration.
 
-      PipesHub exposes a Streamable HTTP MCP server that allows MCP-compatible clients
-      (such as Claude Desktop, Cursor, or custom agents) to interact with PipesHub tools
+      OddJeeves exposes a Streamable HTTP MCP server that allows MCP-compatible clients
+      (such as Claude Desktop, Cursor, or custom agents) to interact with OddJeeves tools
       including search, conversations, knowledge base management, and connector operations.
 
       **Transport:** Streamable HTTP (JSON-RPC over HTTP)
@@ -352,7 +352,7 @@ tags:
       Endpoints for scheduling, managing, and monitoring data crawling jobs for enterprise connectors.
 
       The Crawling Manager uses BullMQ (Redis-based queue) to schedule and execute crawling jobs that
-      sync data from external connectors (Google Drive, OneDrive, Slack, Jira, etc.) into PipesHub's
+      sync data from external connectors (Google Drive, OneDrive, Slack, Jira, etc.) into OddJeeves's
       search index.
 
       **Key Features:**
@@ -512,6 +512,73 @@ components:
             crawl:write: Create and manage crawling jobs
 
   schemas:
+    McpServerInstanceInput:
+      type: object
+      required: [name, transport, authMode]
+      properties:
+        name:
+          type: string
+        typeId:
+          type: string
+          nullable: true
+        transport:
+          type: string
+          enum: [stdio, sse, streamable_http]
+        authMode:
+          type: string
+          enum: [none, api_token, oauth, headers]
+        useAdminAuth:
+          type: boolean
+          default: false
+          description: Legacy instance setting; employee source cards use their own credentials.
+        description:
+          type: string
+          nullable: true
+        command:
+          type: string
+          nullable: true
+        args:
+          type: array
+          items:
+            type: string
+        requiredEnv:
+          type: array
+          items:
+            type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          description: Administrator-configured, allowlisted STDIO environment only.
+        url:
+          type: string
+          nullable: true
+        headerName:
+          type: string
+          nullable: true
+        authorizationUrl:
+          type: string
+          nullable: true
+        tokenUrl:
+          type: string
+          nullable: true
+        scopes:
+          type: array
+          items:
+            type: string
+        connectTimeoutSeconds:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 45
+          nullable: true
+          description: Optional administrator connection budget. Omission on update preserves the current override; null restores the environment default.
+        callTimeoutSeconds:
+          type: number
+          minimum: 1
+          maximum: 600
+          nullable: true
+          description: Optional administrator idle call budget. Progress restarts this deadline, never the absolute maximum. Omission preserves the current override; null restores the environment default.
     StoragePurgeResult:
       type: object
       required:
@@ -1856,7 +1923,7 @@ components:
           type: string
           description: App description
           maxLength: 500
-          example: "Integrates PipesHub with our internal tools"
+          example: "Integrates OddJeeves with our internal tools"
         redirectUris:
           type: array
           items:
@@ -3525,7 +3592,7 @@ components:
     Document:
       type: object
       description: |
-        Represents a document stored in PipesHub storage system. Documents can be versioned to maintain complete history of changes. Supports multiple storage backends (S3, Azure Blob, Local).
+        Represents a document stored in OddJeeves storage system. Documents can be versioned to maintain complete history of changes. Supports multiple storage backends (S3, Azure Blob, Local).
       required:
         - _id
         - documentName
@@ -5012,7 +5079,7 @@ components:
         Response returned by GET /connectors/navigate.
 
         Field names are snake_case, matching the knowledge graph's internal
-        view models. `text` carries the same flat-text rendering PipesHub's
+        view models. `text` carries the same flat-text rendering OddJeeves's
         own agent sees for this node; the remaining fields carry the same
         information in structured form.
       required:
@@ -6699,7 +6766,7 @@ components:
 
         **Query Processing:**
 
-        The query is processed through PipesHub's AI pipeline which:
+        The query is processed through OddJeeves's AI pipeline which:
 
         - Performs semantic search across indexed knowledge bases
         - Retrieves relevant context from matching documents
@@ -8539,9 +8606,11 @@ components:
           items:
             type: string
           description: |
-            Tool fullNames (toolset + MCP tools, same format as the
-            composer's `agentStreamTools`) this project's agent-mode chats
-            may use. Empty means no tools beyond the project's own files.
+            Allowed tool names for this project's agent-mode chats. Native
+            toolset names remain bare; MCP names use `instanceId:fullName` to
+            distinguish duplicate provider instances. Legacy bare MCP grants
+            match at most one instance. Empty means no tools beyond the
+            project's own files.
         linkedKnowledgeBaseId:
           type: string
           nullable: true
@@ -12725,7 +12794,7 @@ components:
           description: |
             UTF-8 text to synthesize. Capped at 4096 characters to match the
             underlying provider limit (OpenAI TTS) and avoid unbounded cost.
-          example: "Hello, this is a PipesHub voice test."
+          example: "Hello, this is a OddJeeves voice test."
         voice:
           type: string
           nullable: true
@@ -13333,7 +13402,7 @@ components:
           enum: [DESKTOP_OFFLINE, DESKTOP_UNCLAIMED, DESKTOP_OWNED_BY_OTHER_DEVICE]
         message:
           type: string
-          example: "No desktop is connected for connector conn_abc123. Open the Pipeshub desktop app on the machine that owns this folder."
+          example: "No desktop is connected for connector conn_abc123. Open the OddJeeves desktop app on the machine that owns this folder."
         details:
           type: object
           required:
@@ -13497,7 +13566,7 @@ components:
               example: "12345678-1234-1234-1234-123456789abc"
         baseUrl:
           type: string
-          description: "PipesHub's public origin, prefixed to the connector's redirect path to build the stored redirectUri. When omitted, the frontend public endpoint is used. Not the provider's URL; a self-hosted provider's address goes in config."
+          description: "OddJeeves's public origin, prefixed to the connector's redirect path to build the stored redirectUri. When omitted, the frontend public endpoint is used. Not the provider's URL; a self-hosted provider's address goes in config."
           format: uri
           example: "https://pipeshub.mycompany.com"
 
@@ -13574,6 +13643,7 @@ components:
             Available flags:
             - ENABLE_BETA_CONNECTORS: Allow usage of beta connector integrations that may be unstable
             - ENABLE_MCP: Allow agents to use MCP servers and show MCP server management in the UI
+            - ENABLE_PUBLIC_WEB_ACCESS: Allow public web search and public URL downloads (default: true)
             - ENABLE_ACTIONS: Allow agents to use toolset actions and show Actions management in the UI
             - ENABLE_VECTOR_STORE_REBUILD: Allow admins to clean up and reindex the vector store
             - ENABLE_SKILLS: Allow users to create, import and manage Skills (SKILL.md packages) and let agents load them (default: true)
@@ -14282,7 +14352,7 @@ components:
       type: object
       description: |
         Skill metadata (SKILL.md YAML frontmatter, agentskills.io-compatible, plus
-        PipesHub lifecycle fields nested under `metadata["agent-loop"]` on the wire
+        OddJeeves lifecycle fields nested under `metadata["agent-loop"]` on the wire
         format — flattened here for the REST response). Returned by list/search/
         create/update/deprecate/rollback; `GET /skills/{name}` returns this shape
         plus `body`/`resources` (see Skill).
@@ -15648,7 +15718,7 @@ components:
         productName:
           type: string
           description: Name of the product sending the email (used in templates for branding)
-          example: "PipesHub"
+          example: "OddJeeves"
         emailTemplateType:
           type: string
           enum: [loginWithOTP, resetPassword, accountCreation, appuserInvite, suspiciousLoginAttempt]
@@ -15683,7 +15753,7 @@ components:
         subject:
           type: string
           description: Email subject line
-          example: "Your OTP Code for PipesHub"
+          example: "Your OTP Code for OddJeeves"
         templateData:
           description: |
             Dynamic data to populate the email template. Required fields depend on <code>emailTemplateType</code>.<br><br>
@@ -15939,6 +16009,713 @@ security:
   - oauth2: []
 
 paths:
+  /mcp-servers/retrieval-traces:
+    get:
+      tags:
+        - MCP Servers
+      summary: Inspect redacted MCP retrieval traces
+      description: Lists recent non-expired trace runs for the caller's organization when no selector is provided, or returns metadata for up to 10 selected trace IDs or run IDs. Requires an administrator role and ENABLE_MCP_RETRIEVAL_TRACE. Message text, queries, credentials, URLs, and raw tool responses are excluded.
+      operationId: getMcpRetrievalTraces
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: traceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: runId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: traceIds
+          in: query
+          required: false
+          description: Comma-separated trace IDs to compare (up to 10).
+          schema:
+            type: string
+        - name: runIds
+          in: query
+          required: false
+          description: Comma-separated chat run IDs to compare (up to 10).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recent indexed runs, optionally with redacted discovery and invocation events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  truncated:
+                    type: boolean
+        '400':
+          description: Invalid selector or comparison limit exceeded
+        '403':
+          description: Administrator access is required
+        '404':
+          description: Tracing is disabled
+
+  /mcp-servers/slack-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Slack connection status
+      description: |
+        Returns only the availability of the organization's designated official
+        Slack MCP instance and the authenticated user's own connection state.
+        The server is identified by the official Slack endpoint, Streamable HTTP,
+        and OAuth configuration. OAuth client credentials are never returned.
+      operationId: getSlackMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Slack connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/notion-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Notion connection status
+      description: |
+        Returns only the availability of the organization's designated Notion MCP
+        instance and the authenticated user's own connection state. The instance is
+        identified by Notion's official MCP endpoint, Notion type, Streamable HTTP,
+        and OAuth configuration. OAuth client credentials are never returned.
+      operationId: getNotionMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Notion connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/miro-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Miro connection status
+      description: |
+        Returns whether the organization has a Streamable HTTP MCP instance
+        named Miro configured for user OAuth and whether the authenticated user
+        has their own saved credentials. Credentials are never returned.
+      operationId: getMiroMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Miro connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/atlassian-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Atlassian Rovo connection status
+      description: |
+        Returns only the availability of the organization's designated Atlassian
+        Rovo MCP instance and the authenticated user's own connection state.
+        The instance is identified by its official endpoint, catalog type,
+        Streamable HTTP transport, and OAuth configuration. Credentials are never returned.
+      operationId: getAtlassianMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Atlassian connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/gmail-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Gmail MCP connection status
+      description: |
+        Returns whether the organization's designated Gmail MCP instance is
+        configured and whether the authenticated user has their own saved OAuth
+        credentials. The instance must use Google's official Gmail MCP endpoint,
+        Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGmailMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Gmail connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/google-drive-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Google Drive MCP connection status
+      description: |
+        Returns whether the organization's designated Google Drive MCP instance
+        is configured and whether the authenticated user has their own saved
+        OAuth credentials. The instance must use Google's official Drive MCP
+        endpoint, Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGoogleDriveMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Google Drive connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/google-calendar-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Google Calendar MCP connection status
+      description: |
+        Returns whether the organization's designated Google Calendar MCP instance
+        is configured and whether the authenticated user has their own saved
+        OAuth credentials. The instance must use Google's official Calendar MCP
+        endpoint, Streamable HTTP, and OAuth. Credentials are never returned.
+      operationId: getGoogleCalendarMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Google Calendar connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/superhuman-docs-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Superhuman Docs connection status
+      description: |
+        Returns whether the organization's Streamable HTTP instance for
+        docs.superhuman.com/apis/mcp is configured and whether the authenticated
+        user has saved their own token. Credentials are never returned.
+      operationId: getSuperhumanDocsConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Superhuman Docs connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/instances:
+    get:
+      tags: [MCP Servers]
+      summary: List administrator-managed MCP instances
+      operationId: listMcpServerInstances
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Instance configurations, without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instances:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required; MCP must be enabled
+    post:
+      tags: [MCP Servers]
+      summary: Create an administrator-managed MCP instance
+      description: |
+        A token or header instance cannot use one shared administrator credential
+        (`useAdminAuth`); every user connects with their own access.
+      operationId: createMcpServerInstance
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerInstanceInput'
+      responses:
+        '201':
+          description: Instance configuration saved
+        '400':
+          description: Invalid transport or provider configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required; MCP must be enabled
+        '422':
+          description: Invalid request fields or timeout bounds
+        '500':
+          description: Configuration could not be saved
+
+  /mcp-servers/instances/{instanceId}:
+    get:
+      tags: [MCP Servers]
+      summary: Get one administrator-managed MCP instance
+      operationId: getMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance configuration, without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required
+        '404':
+          description: Instance not found
+    delete:
+      tags: [MCP Servers]
+      summary: Delete an administrator-managed MCP instance
+      description: Also removes every user's saved credentials and pending sign-ins for the instance.
+      operationId: deleteMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  _id:
+                    type: string
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP delete scope required, or inherited instance cannot be changed
+        '404':
+          description: Instance not found
+    put:
+      tags: [MCP Servers]
+      summary: Update an administrator-managed MCP instance
+      description: |
+        A token or header instance cannot use one shared administrator credential
+        (`useAdminAuth`); every user connects with their own access.
+      operationId: updateMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerInstanceInput'
+      responses:
+        '200':
+          description: Instance configuration saved
+        '400':
+          description: Invalid transport or provider configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required, or inherited instance cannot be changed
+        '404':
+          description: Instance not found
+        '422':
+          description: Invalid request fields or timeout bounds
+        '500':
+          description: Configuration could not be saved
+
+  /mcp-servers/instances/{instanceId}/oauth/refresh:
+    post:
+      tags: [MCP Servers]
+      summary: Refresh the authenticated user's MCP OAuth connection
+      description: |
+        Refreshes only the caller's saved grant. Concurrent refreshes are
+        coordinated across services. Temporary store, lease or persistence
+        failures do not invalidate saved authorization.
+      operationId: refreshMcpOAuthToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refreshed credentials were saved, or a newer saved grant was reused
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Connection missing, disconnected or lacking refresh configuration
+        '401':
+          description: Authentication required, or the OAuth provider permanently rejected the grant
+        '403':
+          description: Caller lacks the required MCP write scope
+        '502':
+          description: The OAuth provider could not complete the refresh
+        '503':
+          description: Temporary configuration-store, refresh-lock or persistence failure; try again shortly
+
+  /mcp-servers/instances/{instanceId}/oauth-config:
+    get:
+      tags: [MCP Servers]
+      summary: Get masked MCP OAuth application configuration
+      operationId: getMcpOAuthConfig
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuration availability and masked client fields; retained historical secrets are never returned
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required
+    put:
+      tags: [MCP Servers]
+      summary: Configure an MCP OAuth application
+      description: |
+        Administrator-only application setup, separate from employee authorization.
+        One previous client configuration is retained server-side so grants bound
+        to that client can continue refreshing. Historical secrets are not returned.
+      operationId: updateMcpOAuthConfig
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, clientSecret]
+              properties:
+                clientId:
+                  type: string
+                clientSecret:
+                  type: string
+                  writeOnly: true
+      responses:
+        '200':
+          description: Application configuration saved
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required
+        '404':
+          description: Instance not found in the caller's organization
+        '500':
+          description: Failed to save application configuration
+        '503':
+          description: Existing configuration could not be read safely; no replacement was written
+
+  /mcp-servers/oauth/callback:
+    get:
+      tags: [MCP Servers]
+      summary: Complete the current user's MCP OAuth authorization
+      operationId: handleMcpOAuthCallback
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: |
+            Authorization outcome. Success is reported only after the user-bound
+            credential is saved. A failed save returns success=false and
+            error=credential_save_failed; credentials and client secrets are not returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  error:
+                    type: string
+                  errorMessage:
+                    type: string
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller lacks the required MCP write scope
+
   # ==================== IN-APP NOTIFICATIONS ====================
   /notifications:
     get:
@@ -16368,7 +17145,7 @@ paths:
 
         **Flow:**
         1. Client redirects user to this endpoint with required parameters
-        2. If not logged in, user is redirected to PipesHub login
+        2. If not logged in, user is redirected to OddJeeves login
         3. User sees consent page with requested scopes
         4. User grants or denies consent
         5. User is redirected back to client with authorization code
@@ -18862,7 +19639,7 @@ paths:
           in: query
           required: false
           description: |
-            `desktop` for a sign-in started by the PipesHub desktop app. Needs `state`
+            `desktop` for a sign-in started by the OddJeeves desktop app. Needs `state`
             and `code_challenge`; without both it is ignored. The callback then sends
             no cookies and redirects to `/auth/sign-in/samlSso/success` with `state`
             and a single-use `code` (or `saml_error`), redeemed at `/saml/desktop/exchange`.
@@ -19013,7 +19790,7 @@ paths:
       summary: Redeem a desktop SAML handoff code
       description: |
         Exchanges the single-use code from a desktop SAML sign-in (see `client=desktop`
-        on `/saml/signIn`) for PipesHub tokens. The code expires after 2 minutes and is
+        on `/saml/signIn`) for OddJeeves tokens. The code expires after 2 minutes and is
         consumed by the first attempt, whether or not the verifier matches.
       operationId: exchangeSamlDesktopCode
       security: []
@@ -22139,11 +22916,11 @@ paths:
         - Organizations
       summary: Create organization
       description: |
-        Create a new organization and its first admin user. This is the initial setup endpoint for new PipesHub installations.
+        Create a new organization and its first admin user. This is the initial setup endpoint for new OddJeeves installations.
 
         **Overview:**
 
-        This endpoint performs the complete initial setup of a PipesHub instance, including creating the organization entity and its first administrator account. Should only be called once during initial setup.
+        This endpoint performs the complete initial setup of a OddJeeves instance, including creating the organization entity and its first administrator account. Should only be called once during initial setup.
 
         **Setup Flow:**
 
@@ -35238,7 +36015,7 @@ paths:
       summary: Get a record's full parsed content and metadata
       description: |
         Retrieve the full parsed content and metadata of a single record —
-        the same content PipesHub's own RAG/chat pipeline uses to answer
+        the same content OddJeeves's own RAG/chat pipeline uses to answer
         questions, returned directly instead of via chat.
 
         **When to use this vs. the other record endpoints:**
@@ -35526,7 +36303,7 @@ paths:
         - Connector
       summary: Resolve a URL, issue key or external ID to a Record ID
       description: |
-        Turn an external reference into the matching PipesHub record. Accepts a
+        Turn an external reference into the matching OddJeeves record. Accepts a
         pasted link, a Jira-style issue key, or a bare external system ID from
         any connected source. Repeat `identifiers` to batch-resolve up to ten
         in one call.
@@ -39264,7 +40041,7 @@ paths:
                       type: string
                 baseUrl:
                   type: string
-                  description: "PipesHub's public origin. Used only when the stored configuration has no redirectUri yet, to build one; an existing redirectUri is kept whether or not this is sent."
+                  description: "OddJeeves's public origin. Used only when the stored configuration has no redirectUri yet, to build one; an existing redirectUri is kept whether or not this is sent."
       responses:
         '200':
           description: OAuth configuration updated
@@ -39510,7 +40287,7 @@ paths:
                 summary: Local Storage
                 value:
                   storageType: local
-                  mountName: PipesHub
+                  mountName: OddJeeves
       responses:
         '200':
           description: Storage configuration saved successfully
@@ -40384,7 +41161,7 @@ paths:
         '500':
           description: |
             The health check failed for a reason other than the settings, for
-            example PipesHub cannot reach the internet to call a cloud provider.
+            example OddJeeves cannot reach the internet to call a cloud provider.
           content:
             application/json:
               schema:
@@ -41103,7 +41880,7 @@ paths:
       description: |
         Returns the server's configured public frontend URL. Unauthenticated.
 
-        The PipesHub desktop app builds its OAuth redirect URI from this value. It cannot
+        The OddJeeves desktop app builds its OAuth redirect URI from this value. It cannot
         derive it: the app knows only the API base URL the operator typed into it, and the
         two are different origins whenever the UI is served separately from the API. The
         app calls this as the sign-in screen loads, before any provider button renders.
@@ -41206,6 +41983,8 @@ paths:
         **Available Feature Flags:**
         - ENABLE_BETA_CONNECTORS: Enable beta connector integrations (default: false)
         - ENABLE_MCP: Enable MCP servers (default: false)
+        - ENABLE_PUBLIC_WEB_ACCESS: Allow public web search and public URL downloads (default: true)
+        - ENABLE_MCP_RETRIEVAL_TRACE: Enable redacted MCP retrieval trace recording (default: false; records expire after seven days)
         - ENABLE_ACTIONS: Enable toolset actions (default: true)
         - ENABLE_VECTOR_STORE_REBUILD: Enable vector store cleanup/reindex from Connectors (default: false)
         - ENABLE_SKILLS: Enable Skills — SKILL.md packages agents can load (default: true)
@@ -42483,7 +43262,7 @@ paths:
 
         <b>Overview:</b><br>
         Creates a scheduled crawling job that will sync data from the specified connector into
-        PipesHub's search index. The job is added to a BullMQ queue and will execute according
+        OddJeeves's search index. The job is added to a BullMQ queue and will execute according
         to the specified schedule configuration.<br><br>
 
         <b>Schedule Types:</b><br>

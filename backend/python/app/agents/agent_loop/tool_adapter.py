@@ -16,7 +16,6 @@ from app.modules.agents.context.tool_descriptions import _extract_parameters_fro
 from app.modules.agents.context.tool_result_extractor import ToolResultExtractor
 from app.modules.agents.qna.helpers import clean_tool_result
 
-
 if TYPE_CHECKING:
     from langchain_core.tools import StructuredTool
 
@@ -100,7 +99,10 @@ def _normalized_schema_keywords(node: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _resolve_json_refs(node: Any, defs: dict[str, Any], seen: frozenset[str] = frozenset()) -> Any:  # noqa: ANN401
+def _resolve_json_refs(
+    node: Any, defs: dict[str, Any], seen: frozenset[str] = frozenset(),  # noqa: ANN401
+    *, budget: list[int] | None = None, depth: int = 0,
+) -> Any:  # noqa: ANN401
     """Inlines every `$ref`/`$defs` indirection in `node` into a single
     self-contained schema fragment, and normalizes union spellings on the way
     through (see `_normalized_schema_keywords`).
@@ -115,6 +117,10 @@ def _resolve_json_refs(node: Any, defs: dict[str, Any], seen: frozenset[str] = f
     revisit returns a bounded placeholder instead of recursing again; every
     OTHER branch of the schema still resolves normally.
     """
+    if budget is not None:
+        budget[0] -= 1
+        if budget[0] < 0 or depth > 32:
+            raise ValueError("Provider tool schema exceeds the reference expansion budget")
     if isinstance(node, dict):
         ref = node.get("$ref")
         if ref:
@@ -124,7 +130,7 @@ def _resolve_json_refs(node: Any, defs: dict[str, Any], seen: frozenset[str] = f
                     "type": "object",
                     "description": f"(recursive reference to '{ref_name}', not expanded further)",
                 }
-            resolved = _resolve_json_refs(defs.get(ref_name, {}), defs, seen | {ref_name})
+            resolved = _resolve_json_refs(defs.get(ref_name, {}), defs, seen | {ref_name}, budget=budget, depth=depth + 1)
             # Siblings are resolved too, not copied verbatim: a `$ref` nested
             # inside one (`{"$ref": ..., "items": {"$ref": ...}}`, legal since
             # draft 2019-09) would otherwise survive to the transports, where
@@ -133,18 +139,18 @@ def _resolve_json_refs(node: Any, defs: dict[str, Any], seen: frozenset[str] = f
             # {ref_name}`) because a sibling is at the referencing node's
             # level, not inside the definition being expanded.
             siblings = {
-                key: value if key in _NON_SCHEMA_VALUE_KEYS else _resolve_json_refs(value, defs, seen)
+                key: value if key in _NON_SCHEMA_VALUE_KEYS else _resolve_json_refs(value, defs, seen, budget=budget, depth=depth + 1)
                 for key, value in node.items()
                 if key != "$ref"
             }
             return _normalized_schema_keywords({**resolved, **siblings})
         return _normalized_schema_keywords({
-            k: v if k in _NON_SCHEMA_VALUE_KEYS else _resolve_json_refs(v, defs, seen)
+            k: v if k in _NON_SCHEMA_VALUE_KEYS else _resolve_json_refs(v, defs, seen, budget=budget, depth=depth + 1)
             for k, v in node.items()
             if k != "$defs"
         })
     if isinstance(node, list):
-        return [_resolve_json_refs(item, defs, seen) for item in node]
+        return [_resolve_json_refs(item, defs, seen, budget=budget, depth=depth + 1) for item in node]
     return node
 
 
@@ -177,7 +183,7 @@ def _json_schema_dict_from_source(schema: Any) -> dict[str, Any] | None:  # noqa
     return _resolve_json_refs(raw, defs)
 
 
-def resolve_json_schema_refs(schema: dict[str, Any]) -> dict[str, Any]:
+def resolve_json_schema_refs(schema: dict[str, Any], *, max_nodes: int | None = None) -> dict[str, Any]:
     """Public entry point for `_resolve_json_refs`/`_json_schema_dict_from_source`
     — used by `MCPToolAdapter.raw_input_schema` to inline an MCP server's own
     `$ref`/`$defs` once, up front, so every transport downstream (native and
@@ -191,7 +197,11 @@ def resolve_json_schema_refs(schema: dict[str, Any]) -> dict[str, Any]:
     (`discovery.py`'s `input_schema or {}`), and that would fail every tool in
     the request, since they all go up in one API call.
     """
-    resolved = _json_schema_dict_from_source(schema)
+    if max_nodes is not None:
+        defs = schema.get("$defs") or schema.get("definitions") or {}
+        resolved = _resolve_json_refs(schema, defs, budget=[max_nodes])
+    else:
+        resolved = _json_schema_dict_from_source(schema)
     return resolved or {"type": "object", "properties": {}}
 
 

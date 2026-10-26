@@ -60,6 +60,10 @@ export interface McpServerInstancePayload {
   requiredEnv?: string[];
   env?: Record<string, string>;
 
+  /** Administrator overrides; omitted values use server defaults. */
+  connectTimeoutSeconds?: number | null;
+  callTimeoutSeconds?: number | null;
+
   // SSE / Streamable HTTP
   url?: string | null;
   headerName?: string | null;
@@ -94,6 +98,9 @@ export interface McpServerInstance {
   tokenUrl?: string | null;
   scopes: string[];
 
+  connectTimeoutSeconds?: number | null;
+  callTimeoutSeconds?: number | null;
+
   isCustom: boolean;
   createdAt: number;
   updatedAt: number;
@@ -108,6 +115,7 @@ export interface McpToolInfo {
   namespacedName: string;
   description?: string | null;
   inputSchema: Record<string, unknown>;
+  annotations?: Record<string, unknown> | null;
 }
 
 /** `GET /my-mcp-servers` entry — instance + the caller's effective auth/tool state. */
@@ -130,6 +138,76 @@ export interface McpInstancesResponse {
 
 export interface McpMyServersResponse {
   instances: McpMyServerEntry[];
+}
+
+export interface SlackConnectionStatus {
+  configured: boolean;
+  instanceId?: string;
+  isConnected: boolean;
+  hasCredentials?: boolean;
+  /** Opaque, per-user grant generation for verifying a completed reconnect. */
+  grantVersion?: string | null;
+  /** The provider rejected the saved credential; only reconnecting fixes it. */
+  needsReauth?: boolean;
+  statusDetail?: string | null;
+}
+
+export type NotionConnectionStatus = SlackConnectionStatus;
+export type MiroConnectionStatus = SlackConnectionStatus;
+export type AtlassianConnectionStatus = SlackConnectionStatus;
+export type GmailConnectionStatus = SlackConnectionStatus;
+export type GoogleDriveConnectionStatus = SlackConnectionStatus;
+export type GoogleCalendarConnectionStatus = SlackConnectionStatus;
+export type SuperhumanDocsConnectionStatus = SlackConnectionStatus;
+
+export interface McpTraceRunIndex {
+  traceId: string;
+  runId: string;
+  userId: string;
+  effectiveUserId: string;
+  orgId: string;
+  conversationId?: string | null;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export interface McpTraceEvent extends McpTraceRunIndex {
+  eventId: string;
+  eventType: 'discovery' | 'invocation';
+  recordedAt: string;
+  instanceId: string;
+  serverName?: string;
+  transport?: string;
+  authMode?: string;
+  credentialOwnerId?: string;
+  credentialExists?: boolean;
+  credentialScopes?: string[];
+  credentialExpiresAt?: string | null;
+  outcome?: string;
+  errorClass?: string | null;
+  tools?: Array<{ name: string; schemaFingerprint: string }>;
+  toolName?: string;
+  durationMs?: number;
+  error?: { class?: string; code?: string } | null;
+  arguments?: Record<string, unknown>;
+  response?: {
+    resultCount?: number;
+    returnedIds?: Array<Record<string, string | number>>;
+    oldestTimestamp?: string;
+    newestTimestamp?: string;
+    paginated?: boolean;
+    truncated?: boolean;
+    sourceMetadata?: string;
+  };
+}
+
+export interface McpTraceRun extends McpTraceRunIndex {
+  events?: McpTraceEvent[];
+}
+
+export interface McpRetrievalTraceResponse {
+  runs: McpTraceRun[];
+  truncated: boolean;
 }
 
 export interface McpToolsResponse {

@@ -24,8 +24,12 @@ from typing import TYPE_CHECKING, Literal, override
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 from app.utils.logger import create_logger
+from app.utils.outbound_http import is_proxy_denial, log_denied, proxy_refusal_status
+from app.utils.outbound_proxy import OutboundRoute, select_route
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from curl_cffi import CurlOpt
     from requests import PreparedRequest
 
@@ -68,6 +72,10 @@ class FetchError(Exception):
     def __init__(self, message: str, status_code: int = 0) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+class UnresolvableHostError(FetchError):
+    """A DNS failure, distinct from a target that violates address policy."""
 
 
 # Hostnames that must never be fetched (SSRF / metadata endpoints).
@@ -119,7 +127,7 @@ _CLOUD_METADATA_ADDRESSES = frozenset(
 )
 
 
-def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True) -> bool:
+def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True, allow_private: bool = False) -> bool:
     """True if the address must not be contacted by the generic HTTP fetcher.
 
     NAT64 well-known-prefix addresses are unwrapped to their embedded IPv4 address and
@@ -131,11 +139,19 @@ def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True) -> bool:
     flagged private either, e.g. CGNAT ``100.64.0.0/10``. Known cloud metadata addresses are
     rejected regardless of it.
     """
-    if isinstance(ip, ipaddress.IPv6Address) and ip in _NAT64_WELL_KNOWN_PREFIX:
-        embedded_ipv4 = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-        return _ip_is_blocked(embedded_ipv4, block_non_global=block_non_global)
-    if ip in _CLOUD_METADATA_ADDRESSES:
+    policy = {"block_non_global": block_non_global, "allow_private": allow_private}
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return _ip_is_blocked(ip.ipv4_mapped, **policy)
+        if ip in _NAT64_WELL_KNOWN_PREFIX:
+            return _ip_is_blocked(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF), **policy)
+        embedded = [ip.sixtofour] if ip.sixtofour is not None else list(ip.teredo or ())
+        if any(_ip_is_blocked(address, **policy) for address in embedded):
+            return True
+    if is_never_allowed_address(ip):
         return True
+    if allow_private:
+        return bool(ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
     return bool(
         ip.is_private
         or ip.is_loopback
@@ -190,16 +206,38 @@ def is_never_allowed_address(ip: IPAddress) -> bool:
     return ip.is_link_local or ip in _CLOUD_METADATA_ADDRESSES or ip == _AWS_IPV6_METADATA_ADDRESS
 
 
-def _hostname_is_blocked(hostname: str) -> bool:
+def _hostname_is_blocked(hostname: str, *, allow_private: bool = False) -> bool:
     hn = hostname.lower().removesuffix(".")
     if hn in _BLOCKED_HOSTNAMES:
         return True
-    if hn.endswith(".localhost") or hn.endswith(".local"):
+    if hn.endswith(".localhost"):
         return True
-    return False
+    return hn.endswith(".local") and not allow_private
 
 
-def resolve_public_http_target(url: str, *, block_non_global: bool = True) -> PublicTarget:
+def resolve_public_http_target(
+    url: str, *, block_non_global: bool = True, allow_private: bool = False,
+) -> PublicTarget:
+    try:
+        return _resolve_public_http_target(url, block_non_global=block_non_global, allow_private=allow_private)
+    except FetchError as e:
+        log_denied(url, _denial_reason(str(e)))
+        raise
+
+
+def _denial_reason(message: str) -> str:
+    """A short fixed label for a refusal: the message itself can name internal addresses."""
+    lowered = message.lower()
+    if lowered.startswith(("could not resolve", "no addresses resolved")):
+        return "unresolvable_host"
+    if "scheme" in lowered:
+        return "scheme_not_allowed"
+    return "blocked_address"
+
+
+def _resolve_public_http_target(
+    url: str, *, block_non_global: bool = True, allow_private: bool = False,
+) -> PublicTarget:
     """Resolve ``url`` and reject it if it could reach loopback, RFC1918, link-local,
     cloud metadata or other non-public addresses. Every resolved address must pass,
     so one private A record among public ones is enough to reject the URL.
@@ -210,35 +248,14 @@ def resolve_public_http_target(url: str, *, block_non_global: bool = True) -> Pu
     Raises:
         FetchError: if the URL's scheme/hostname/port/resolved address is disallowed.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in _DEFAULT_PORTS:
-        raise FetchError(f"Only HTTP/HTTPS URLs are allowed, got scheme {parsed.scheme!r}")
-
-    hostname = parsed.hostname
-    if not hostname:
-        raise FetchError("URL has no hostname")
-
-    try:
-        port = parsed.port or _DEFAULT_PORTS[parsed.scheme]
-    except ValueError as e:
-        raise FetchError("URL has an invalid port") from e
-
-    if _hostname_is_blocked(hostname):
-        raise FetchError(f"Blocked unsafe URL hostname: {hostname}")
-
-    try:
-        literal_ip = ipaddress.ip_address(hostname)
-    except ValueError:
-        literal_ip = None
-    if literal_ip is not None:
-        if _ip_is_blocked(literal_ip, block_non_global=block_non_global):
-            raise FetchError(f"Blocked unsafe URL address: {literal_ip}")
-        return PublicTarget(parsed.scheme, hostname, port, (literal_ip,))
+    scheme, hostname, port, address = _check_static_target(url, block_non_global=block_non_global, allow_private=allow_private)
+    if address is not None:
+        return PublicTarget(scheme, hostname, port, (address,))
 
     try:
         infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except socket.gaierror as e:
-        raise FetchError(f"Could not resolve hostname {hostname!r}: {e}") from e
+        raise UnresolvableHostError(f"Could not resolve hostname {hostname!r}: {e}") from e
 
     addresses: list[IPAddress] = []
     for info in infos:
@@ -246,14 +263,39 @@ def resolve_public_http_target(url: str, *, block_non_global: bool = True) -> Pu
             ip = ipaddress.ip_address(info[4][0])
         except ValueError:
             continue
-        if _ip_is_blocked(ip, block_non_global=block_non_global):
+        if _ip_is_blocked(ip, block_non_global=block_non_global, allow_private=allow_private):
             raise FetchError(f"Blocked unsafe URL: hostname {hostname!r} resolves to {ip}")
         if ip not in addresses:
             addresses.append(ip)
 
     if not addresses:
-        raise FetchError(f"No addresses resolved for hostname {hostname!r}")
-    return PublicTarget(parsed.scheme, hostname, port, tuple(addresses))
+        raise UnresolvableHostError(f"No addresses resolved for hostname {hostname!r}")
+    return PublicTarget(scheme, hostname, port, tuple(addresses))
+
+
+def _check_static_target(
+    url: str, *, block_non_global: bool, allow_private: bool,
+) -> tuple[str, str, int, IPAddress | None]:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or _DEFAULT_PORTS.get(parsed.scheme)
+    except ValueError as exc:
+        raise FetchError("URL has an invalid port or authority") from exc
+    if parsed.scheme not in _DEFAULT_PORTS:
+        raise FetchError(f"Only HTTP/HTTPS URLs are allowed, got scheme {parsed.scheme!r}")
+    if not hostname:
+        raise FetchError("URL has no hostname")
+    if _hostname_is_blocked(hostname, allow_private=allow_private):
+        raise FetchError(f"Blocked unsafe URL hostname: {hostname}")
+    address = literal_ip(hostname)
+    if address is not None and _ip_is_blocked(address, block_non_global=block_non_global, allow_private=allow_private):
+        raise FetchError(f"Blocked unsafe URL address: {address}")
+    return parsed.scheme, hostname, port, address
+
+
+def check_http_url_without_resolving(url: str, *, block_non_global: bool = True, allow_private: bool = False) -> None:
+    _check_static_target(url, block_non_global=block_non_global, allow_private=allow_private)
 
 
 def validate_public_http_url(url: str, *, block_non_global: bool = True) -> None:
@@ -360,6 +402,19 @@ def _pinned_requests_adapter(
                 pool_kwargs["server_hostname"] = host_params["host"].rstrip(".")  # pyright: ignore[reportGeneralTypeIssues]
             host_params["host"] = str(pin.pinned_address)
             return host_params, pool_kwargs
+
+        @override
+        def request_url(self, request: "PreparedRequest", proxies: "Mapping[str, str]") -> str:
+            url = super().request_url(request, proxies)
+            if urlsplit(url).scheme != "http" or not proxies:
+                return url
+            # A plain-HTTP request through a proxy names its target by URL, which the proxy
+            # would resolve itself; name the validated address instead.
+            parts = urlsplit(url)
+            address = pin.pinned_address
+            host = f"[{address}]" if address.version == 6 else str(address)
+            port = f":{parts.port}" if parts.port else ""
+            return urlunsplit(parts._replace(netloc=f"{host}{port}"))
 
         @override
         def add_headers(self, request: "PreparedRequest", **kwargs: object) -> None:
@@ -564,6 +619,7 @@ def _try_requests(
     *,
     follow_redirects: bool = True,
     pin: PublicTarget | None = None,
+    proxy_url: str | None = None,
 ) -> FetchResult | None:
     try:
         import requests as req
@@ -575,6 +631,9 @@ def _try_requests(
         if pin is not None:
             session.trust_env = False  # no environment proxies: a proxy would resolve the name again
             session.mount(f"{pin.scheme}://", _pinned_requests_adapter(pin))
+            if proxy_url is not None:
+                # The proxy gets the validated address (see ``_pinned_requests_adapter``), not the name.
+                session.proxies = {"http": proxy_url, "https": proxy_url}
         session.headers.update(headers)
 
         # Add a realistic User-Agent (requests doesn't set one by default)
@@ -587,6 +646,9 @@ def _try_requests(
 
         resp = session.get(url, timeout=timeout, allow_redirects=follow_redirects)
 
+        if proxy_url is not None and is_proxy_denial(resp.status_code, resp.headers):
+            _refuse_proxy_denial(url)
+
         if resp.status_code == HTTP_STATUS_OK or (
             not follow_redirects and _is_redirect_status(resp.status_code)
         ):
@@ -598,10 +660,25 @@ def _try_requests(
                 url=resp.url,
                 strategy="requests",
             )
+    except FetchError:
+        raise
+    except req.exceptions.ProxyError as e:
+        # A proxy transport failure can be transient (including CONNECT 503). The
+        # caller may try another validated address, but never falls back to direct.
+        if proxy_url is not None and proxy_refusal_status(e) is not None:
+            _refuse_proxy_denial(url)
     except Exception:
         pass
 
     return None
+
+
+def _refuse_proxy_denial(url: str) -> None:
+    """The proxy would not carry this request (e.g. a hostname allowlist that cannot match the
+    validated IP we tunnel to). There is no direct fallback: that would skip the proxy and,
+    with it, the operator's egress policy."""
+    log_denied(url, "proxy_denied")
+    raise FetchError("The outbound proxy refused this URL; it was not fetched.")
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +721,10 @@ def fetch_url(
             link-local, CGNAT, metadata-style hosts, and related SSRF-prone targets
             before any network I/O, re-validate every redirect hop (at most
             ``_MAX_REDIRECTS``), and connect each hop only to its validated address,
-            without environment proxies or the cloudscraper strategy. Set False only
+            without environment proxies or the cloudscraper strategy. When an outbound
+            proxy is configured for the hop (``app.utils.outbound_proxy``), the proxy is
+            sent the validated address instead of the hostname, only the ``requests``
+            strategy runs, and the hop is still resolved and checked locally first. Set False only
             for URLs an operator configured, never for URLs a user, a model or a
             third-party document supplied.
 
@@ -675,12 +755,21 @@ def fetch_url(
     for _ in range(_MAX_REDIRECTS + 1):
         _reject_http_userinfo(current_url)
         target = resolve_public_http_target(current_url)
-        result = _run_pinned_with_failover(run, current_url, target)
+        result = _run_pinned_with_failover(
+            run, current_url, target, proxy_url=_proxy_for_hop(current_url).proxy_url
+        )
         location = _redirect_location(result)
         if location is None:
             return result
         current_url = urljoin(current_url, location)
     raise FetchError(f"Too many redirects (more than {_MAX_REDIRECTS})")
+
+
+def _proxy_for_hop(url: str) -> OutboundRoute:
+    try:
+        return select_route(url)
+    except ValueError as e:
+        raise FetchError(f"Outbound proxy is misconfigured: {e}") from e
 
 
 def _reject_http_userinfo(url: str) -> None:
@@ -693,7 +782,7 @@ def _reject_http_userinfo(url: str) -> None:
 
 
 def _run_pinned_with_failover(
-    run: "partial[FetchResult]", url: str, target: PublicTarget
+    run: "partial[FetchResult]", url: str, target: PublicTarget, proxy_url: str | None = None
 ) -> FetchResult:
     """Run the strategy chain against each validated address until one answers.
 
@@ -705,7 +794,12 @@ def _run_pinned_with_failover(
     last_error: FetchError | None = None
     for address in target.addresses:
         try:
-            return run(url, follow_redirects=False, pin=replace(target, addresses=(address,)))
+            return run(
+                url,
+                follow_redirects=False,
+                pin=replace(target, addresses=(address,)),
+                **({} if proxy_url is None else {"proxy_url": proxy_url}),
+            )
         except FetchError as e:
             last_error = e
     raise last_error or FetchError(f"No reachable address for {url}")
@@ -723,6 +817,7 @@ def _run_strategies(
     verbose: bool,
     follow_redirects: bool,
     pin: PublicTarget | None,
+    proxy_url: str | None = None,
 ) -> FetchResult:
     req_headers = _build_headers(url, referer, headers)
     selected_profiles = [profile] if profile else None
@@ -761,7 +856,7 @@ def _run_strategies(
         "requests": (
             "requests",
             lambda: _try_requests(
-                url, req_headers, timeout, follow_redirects=follow_redirects, pin=pin
+                url, req_headers, timeout, follow_redirects=follow_redirects, pin=pin, proxy_url=proxy_url
             ),
         ),
     }
@@ -774,6 +869,12 @@ def _run_strategies(
         if strategy == "cloudscraper":
             raise FetchError("The cloudscraper strategy cannot fetch untrusted URLs")
         del strategy_map["cloudscraper"]
+    if pin is not None and proxy_url is not None:
+        # CURLOPT_RESOLVE does not bind the destination when a proxy is used: the proxy is
+        # sent the hostname and resolves it itself, which would undo the pin. requests can
+        # hand the proxy the validated address instead.
+        strategy_map = {"requests": strategy_map["requests"]}
+        strategy = "requests" if strategy is not None else None
     strategies = [strategy_map[strategy]] if strategy is not None else list(strategy_map.values())
 
     errors: list[str] = []
@@ -802,5 +903,3 @@ def _run_strategies(
     raise FetchError(
         errors[0] if errors else "No error details."
     )
-
-

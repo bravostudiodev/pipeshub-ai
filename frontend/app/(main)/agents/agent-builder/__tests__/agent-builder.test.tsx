@@ -4,7 +4,9 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import '@/lib/__tests__/test-i18n';
 import { useFeatureFlagsStore } from '@/lib/store/feature-flags-store';
 import { useToastStore } from '@/lib/store/toast-store';
+import { notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
 import type { AgentFormPayload } from '../types';
+import type { McpMyServerEntry } from '@/app/(main)/workspace/mcp-servers/types';
 import {
   agentDetail,
   apiFailure,
@@ -75,12 +77,11 @@ vi.mock('@/app/(main)/toolsets/api', async (importOriginal) => ({
 vi.mock('@/app/(main)/workspace/skills/personal/api', () => ({
   SkillsApi: { listAssignableSkills: vi.fn(async () => []) },
 }));
-vi.mock('@/app/(main)/workspace/mcp-servers/api', () => ({
-  McpServersApi: {
-    getMyMcpServers: vi.fn(async () => ({ instances: [] })),
-    getAgentMcpServers: vi.fn(async () => ({ instances: [] })),
-  },
+const mcpApi = vi.hoisted(() => ({
+  getMyMcpServers: vi.fn(async () => ({ instances: [] as McpMyServerEntry[] })),
+  getAgentMcpServers: vi.fn(async () => ({ instances: [] })),
 }));
+vi.mock('@/app/(main)/workspace/mcp-servers/api', () => ({ McpServersApi: mcpApi }));
 vi.mock('@/app/(main)/workspace/web-search/api', () => ({
   WebSearchApi: { getConfig: vi.fn(async () => ({ providers: [] })) },
 }));
@@ -185,6 +186,50 @@ async function editAgentPrompts(fields: { instructions?: string; systemPrompt?: 
 }
 
 describe('building a new agent', () => {
+  it('shows a temporary load error instead of saying no MCP servers exist', async () => {
+    useFeatureFlagsStore.setState({ flags: { ENABLE_ACTIONS: true, ENABLE_MCP: true, ENABLE_SKILLS: false } });
+    mcpApi.getMyMcpServers.mockRejectedValueOnce(new Error('temporary outage'));
+    await renderNewAgent();
+
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledOnce());
+    expect(await screen.findByText('Failed to load MCP servers')).toBeTruthy();
+
+    act(() => notifyMcpCatalogChanged());
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('Failed to load MCP servers')).toBeNull());
+  });
+
+  it('does not let an older catalog response replace a newer grant', async () => {
+    useFeatureFlagsStore.setState({ flags: { ENABLE_ACTIONS: true, ENABLE_MCP: true, ENABLE_SKILLS: false } });
+    await renderNewAgent();
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledOnce());
+    let resolveOld!: (value: { instances: McpMyServerEntry[] }) => void;
+    mcpApi.getMyMcpServers
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce({ instances: [{
+        _id: 'fresh', name: 'Fresh source', authMode: 'oauth', isAuthenticated: true,
+        tools: [], typeId: 'fresh',
+      } as McpMyServerEntry] });
+
+    act(() => notifyMcpCatalogChanged());
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledTimes(2));
+    act(() => notifyMcpCatalogChanged());
+    expect(await screen.findByText('Fresh source')).toBeTruthy();
+
+    await act(async () => { resolveOld({ instances: [] }); });
+    expect(screen.getByText('Fresh source')).toBeTruthy();
+  });
+
+  it('refreshes personal MCP tools after another surface changes the grant', async () => {
+    useFeatureFlagsStore.setState({ flags: { ENABLE_ACTIONS: true, ENABLE_MCP: true, ENABLE_SKILLS: false } });
+    await renderNewAgent();
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledOnce());
+
+    act(() => notifyMcpCatalogChanged());
+
+    await waitFor(() => expect(mcpApi.getMyMcpServers).toHaveBeenCalledTimes(2));
+  });
+
   it('starts with a chat input, the agent and a chat output, using the organization default model', async () => {
     await renderNewAgent();
 

@@ -263,6 +263,7 @@ async def run_agent_loop_stream(
     protocol: str = "legacy",
     llm_provider: str = "",
     context_length: int | None = None,
+    configured_context_window: Any = None,  # noqa: ANN401
     is_reasoning_model: bool = False,
     stage_timer: "StageTimer | None" = None,
     cancellation_registry: "RunCancellationRegistry | None" = None,
@@ -358,8 +359,10 @@ async def run_agent_loop_stream(
     context = AgentContext.from_chat_state(
         chat_state, event_sink=event_sink, protocol=protocol,
         llm_provider=llm_provider, context_length=context_length,
+        configured_context_window=configured_context_window,
         is_reasoning_model=is_reasoning_model,
         run_id=run_id, cancellation_token=cancellation_token,
+        authenticated_user_id=run_owner.user_id,
     )
 
     async def _produce() -> None:

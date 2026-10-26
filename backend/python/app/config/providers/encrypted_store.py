@@ -315,6 +315,17 @@ class EncryptedKeyValueStore(KeyValueStore[T], Generic[T]):
             except (ValueError, SyntaxError):
                 return value
 
+    async def compare_and_set(self, key: str, expected: T, value: T | None) -> bool:
+        stored = await self.store.get_key(key, raise_on_error=True)
+        if stored is None or self._decode_value(key, stored) != expected:
+            return False
+        replacement = None
+        if value is not None:
+            serialized = json.dumps(value, cls=_DatetimeSafeEncoder)
+            replacement = self.encryption_service.encrypt(serialized) if key not in UNENCRYPTED_KEYS else serialized
+        # Compare the exact ciphertext read, not a fresh encryption of the expected value.
+        return await self.store.compare_and_set(key, stored, replacement)
+
     async def delete_key(self, key: str) -> bool:
         return await self.store.delete_key(key)
 

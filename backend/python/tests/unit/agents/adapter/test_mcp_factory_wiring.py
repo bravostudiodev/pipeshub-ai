@@ -17,6 +17,8 @@ from app.agents.agent_loop.lazy_tools_wiring import CONNECTORS_PARENT, MCP_PAREN
 from app.agents.mcp.models import MCPToolInfo
 from tests.unit.agents.adapter.conftest import FakeChatModel, make_context
 
+pytestmark = pytest.mark.usefixtures("stub_mcp_discovery")
+
 
 @pytest.fixture(autouse=True)
 def _skills_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

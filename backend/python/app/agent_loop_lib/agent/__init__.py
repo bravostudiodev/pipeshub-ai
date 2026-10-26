@@ -5,10 +5,16 @@ import datetime
 import json
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel as _PydanticBaseModel
+
 from app.agent_loop_lib.agent import hook_dispatch as hooks
 from app.agent_loop_lib.agent import observability as obs
 from app.agent_loop_lib.agent import resume as agent_resume
 from app.agent_loop_lib.agent import streaming as agent_streaming
+from app.agent_loop_lib.agent.context_overflow import (
+    compact_overflow_history,
+    is_context_overflow,
+)
 from app.agent_loop_lib.agent.loops import StepOutcome
 from app.agent_loop_lib.agent.prompt import build_system_prompt
 from app.agent_loop_lib.agent.tool_loop import (
@@ -37,6 +43,7 @@ from app.agent_loop_lib.core.streaming import (
     ThinkingDeltaEvent,
     ToolCallDeltaEvent,
 )
+from app.agent_loop_lib.core.tokens import count_schema_tokens, count_text_tokens
 from app.agent_loop_lib.core.types import (
     AgentResult,
     AgentTurn,
@@ -53,7 +60,6 @@ from app.agent_loop_lib.events.base import AgentEvent, EventType
 from app.agent_loop_lib.hooks.middleware.builtin.turn_guards import install_turn_guards
 from app.agent_loop_lib.tools.executor import ToolExecutor
 from app.agent_loop_lib.tools.tags import TAG_LIFECYCLE_TERMINAL, TAG_SPAWN_BATCH
-from pydantic import BaseModel as _PydanticBaseModel
 
 if TYPE_CHECKING:
     from app.agent_loop_lib.agent.spec import AgentSpec
@@ -531,7 +537,9 @@ class Agent:
         from app.agent_loop_lib.agent.feasibility import FeasibilityChecker
         from app.agent_loop_lib.agent.goal import GoalBuilder
         from app.agent_loop_lib.agent.intent import IntentParser
-        from app.agent_loop_lib.agent.single_shot_runner import build_task_complete_runtime
+        from app.agent_loop_lib.agent.single_shot_runner import (
+            build_task_complete_runtime,
+        )
 
         if self._model is None:
             self._resolve_model()
@@ -669,16 +677,6 @@ class Agent:
 
         messages = await context.messages()
 
-        # --- Context shaping (pre_model hooks): the Phase-1 context-
-        # engineering pipeline (budget reduction -> tool-result clearing ->
-        # offload -> sliding window -> auto-compact) over what's about to be
-        # sent, plus the deterministic deadline-warning guard. Stored
-        # history in `context` is untouched — shaping is per-call.
-        budget = ContextBudget.for_model(spec.model.model)
-        messages = await hooks.dispatch_pre_model(
-            self._hooks, messages, budget, turn_index=turn_index, max_turns=spec.max_turns, scope=turn_scope,
-        )
-
         tool_schemas = tool_schemas_for_turn(self, spec, runtime)
         system_prompt = build_system_prompt(spec, runtime, goal, self._scope.todos, self._scope.extra_prompt_sections)
 
@@ -694,6 +692,21 @@ class Agent:
             )
             system_blocks = [_stable, _volatile]
 
+        # --- Context shaping (pre_model hooks): the Phase-1 context-
+        # engineering pipeline (budget reduction -> tool-result clearing ->
+        # offload -> sliding window -> auto-compact) over what's about to be
+        # sent, plus the deterministic deadline-warning guard. Stored
+        # history in `context` is untouched — shaping is per-call. The system
+        # prompt and tool schemas go on the same call, so the messages get
+        # only what they leave of the window.
+        budget = ContextBudget.for_model(
+            spec.model.model, context_window=spec.model.context_window,
+            reserved_prompt_tokens=count_text_tokens(system_prompt or "") + count_schema_tokens(tool_schemas),
+        )
+        messages = await hooks.dispatch_pre_model(
+            self._hooks, messages, budget, turn_index=turn_index, max_turns=spec.max_turns, scope=turn_scope,
+        )
+
         cut_off_parts = self._cut_off_reply_parts()
 
         llm_kwargs: dict = {}
@@ -702,7 +715,10 @@ class Agent:
         if spec.model.effort is not None:
             llm_kwargs["effort"] = spec.model.effort
 
-        async def _call_llm() -> "ModelResponse":
+        saw_stream_delta = False
+
+        async def _call_llm_once() -> "ModelResponse":
+            nonlocal saw_stream_delta
             if not self._streaming:
                 return await self._model.complete(
                     messages=messages, tools=tool_schemas or None, system=system_prompt,
@@ -744,16 +760,19 @@ class Agent:
                 **llm_kwargs,
             ):
                 if isinstance(event, ThinkingDeltaEvent):
+                    saw_stream_delta = True
                     if not reasoning_open:
                         await self.emit(EventType.REASONING_MESSAGE_START, {"turn_index": turn_index})
                         reasoning_open = True
                     await self.emit(EventType.REASONING_MESSAGE_CONTENT, {"delta": event.delta})
                 elif isinstance(event, TextDeltaEvent):
+                    saw_stream_delta = True
                     if reasoning_open:
                         await self.emit(EventType.REASONING_MESSAGE_END, {"turn_index": turn_index})
                         reasoning_open = False
                     await self.emit(EventType.TEXT_MESSAGE_CONTENT, {"delta": event.delta})
                 elif isinstance(event, ToolCallDeltaEvent):
+                    saw_stream_delta = True
                     # Route argument deltas for final_answer into TEXT_MESSAGE_CONTENT
                     # so TerminalAnswerStreamer and AG-UI receive them unchanged.
                     # For all other tools the delta is intentionally dropped here —
@@ -762,10 +781,13 @@ class Agent:
                     if idx not in _fa_extractors:
                         # First delta for this index — decide whether it is final_answer.
                         from app.agent_loop_lib.tools.builtin.planning.final_answer import (
-                            FinalAnswerTool, final_answer_enabled,
+                            FinalAnswerTool,
+                            final_answer_enabled,
                         )
                         if final_answer_enabled() and event.name == FinalAnswerTool().name:
-                            from app.agent_loop_lib.core.json_stream import StreamingJsonStringExtractor
+                            from app.agent_loop_lib.core.json_stream import (
+                                StreamingJsonStringExtractor,
+                            )
                             _fa_extractors[idx] = StreamingJsonStringExtractor("answer_markdown")
                         else:
                             _fa_extractors[idx] = None  # not a final_answer call
@@ -798,6 +820,21 @@ class Agent:
             if final_response is None:
                 raise AgentError("Model.stream() completed without a StreamCompleteEvent")
             return final_response
+
+        async def _call_llm() -> "ModelResponse":
+            nonlocal messages
+            try:
+                return await _call_llm_once()
+            except Exception as exc:
+                if not is_context_overflow(exc) or saw_stream_delta:
+                    raise
+                smaller = compact_overflow_history(messages)
+                if smaller is None:
+                    raise
+                if self._streaming:
+                    await self.emit(EventType.TEXT_MESSAGE_END, {"turn_index": turn_index})
+                messages = smaller
+                return await _call_llm_once()
 
         # --- Guarded, hook-wrapped LLM call. Parallel guardrails: input
         # guardrails race the LLM call itself via asyncio.wait(FIRST_EXCEPTION)
@@ -1086,7 +1123,9 @@ class Agent:
             await obs.write_turn_memory(self, turn, turn_index)
             await self.emit(EventType.TURN_COMPLETE, {"turn_index": turn_index})
         finally:
-            from app.agent_loop_lib.agent.spawn_scheduler import cancel_pending_spawn_tasks
+            from app.agent_loop_lib.agent.spawn_scheduler import (
+                cancel_pending_spawn_tasks,
+            )
             await cancel_pending_spawn_tasks(self._pending_spawn_tasks)
 
         if task_done:

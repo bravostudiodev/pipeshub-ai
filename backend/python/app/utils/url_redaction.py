@@ -39,6 +39,11 @@ def redact_url(url: str) -> str:
     return urlunparse((parsed.scheme, netloc, parsed.path or "", "", "", ""))
 
 
+def redact_urls_in_text(text: str) -> str:
+    """Reduce URLs embedded in SDK/provider errors before returning or logging them."""
+    return re.sub(r"https?://[^\s<>\"']+", lambda match: redact_url(match.group(0)), text)
+
+
 def _redact_pairs(segment: str) -> str:
     pairs = parse_qsl(segment, keep_blank_values=True)
     if not any(key.lower() in SENSITIVE_QUERY_PARAMS for key, _ in pairs):

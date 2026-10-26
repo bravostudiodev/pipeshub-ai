@@ -20,7 +20,7 @@ export default function PublicLayout({
 
   useEffect(() => {
     setMounted(true);
-    document.title = 'PipesHub';
+    document.title = 'OddJeeves';
     if (language) {
       import('@/lib/i18n/config').then((module) => {
         module.default.changeLanguage(language);
@@ -51,4 +51,3 @@ export default function PublicLayout({
     </html>
   );
 }
-

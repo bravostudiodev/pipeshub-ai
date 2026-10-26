@@ -234,6 +234,18 @@ export function AuthenticateTab() {
     disableCredentialEditWhenLinked,
   ]);
 
+  const docLinks = connectorSchema?.documentationLinks ?? [];
+
+  const emailVisibilityDocUrl = useMemo(() => {
+    if (!panelConnector || (panelConnector.type !== 'Confluence' && panelConnector.type !== 'Jira')) {
+      return null;
+    }
+    const fromRegistry = registryConnectors.find((c) => c.type === panelConnector.type);
+    const baseUrl = getConnectorDocumentationUrl(fromRegistry ?? panelConnector, docLinks);
+    if (!baseUrl) return null;
+    return `${baseUrl}#prerequisite-email-visibility`;
+  }, [panelConnector, registryConnectors, docLinks]);
+
   if (!connectorSchema || !panelConnector) {
     return null;
   }
@@ -255,18 +267,6 @@ export function AuthenticateTab() {
     redirectPath && typeof window !== 'undefined'
       ? `${window.location.origin.replace(/\/$/, '')}/${redirectPath.replace(/^\//, '')}`
       : null;
-
-  const docLinks = connectorSchema.documentationLinks ?? [];
-
-  const emailVisibilityDocUrl = useMemo(() => {
-    if (!panelConnector || (panelConnector.type !== 'Confluence' && panelConnector.type !== 'Jira')) {
-      return null;
-    }
-    const fromRegistry = registryConnectors.find((c) => c.type === panelConnector.type);
-    const baseUrl = getConnectorDocumentationUrl(fromRegistry ?? panelConnector, docLinks);
-    if (!baseUrl) return null;
-    return `${baseUrl}#prerequisite-email-visibility`;
-  }, [panelConnector, registryConnectors, docLinks]);
 
   const showOAuthConnectionCard =
     isOAuthType(selectedAuthType) &&

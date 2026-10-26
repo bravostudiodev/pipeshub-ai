@@ -85,8 +85,14 @@ export const useFeatureFlagsStore = create<FeatureFlagsStore>()(
 export const selectFeatureFlagsLoaded = (s: FeatureFlagsStore) => s.flags !== null;
 /** Treats "not yet loaded" as disabled so gated UI never flashes on then off. */
 export const selectMcpEnabled = (s: FeatureFlagsStore) => s.flags?.ENABLE_MCP === true;
+/** MCP retrieval diagnostics default to disabled and are only shown to administrators. */
+export const selectMcpRetrievalTraceEnabled = (s: FeatureFlagsStore) =>
+  s.flags?.ENABLE_MCP_RETRIEVAL_TRACE === true;
 /** Actions defaults to enabled, so an unloaded/absent flag must NOT read as disabled (unlike MCP). */
 export const selectActionsEnabled = (s: FeatureFlagsStore) => s.flags?.ENABLE_ACTIONS !== false;
+/** Public web tools default to enabled; admins can turn them off in Labs. */
+export const selectPublicWebAccessEnabled = (s: FeatureFlagsStore) =>
+  s.flags?.ENABLE_PUBLIC_WEB_ACCESS !== false;
 /** Vector store rebuild defaults to disabled; admins opt in from Labs. */
 export const selectVectorStoreRebuildEnabled = (s: FeatureFlagsStore) =>
   s.flags?.ENABLE_VECTOR_STORE_REBUILD === true;

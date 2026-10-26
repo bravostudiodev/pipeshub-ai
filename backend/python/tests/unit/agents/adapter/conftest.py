@@ -79,3 +79,28 @@ def make_context(**overrides: Any) -> AgentContext:
 @pytest.fixture
 def agent_context() -> AgentContext:
     return make_context()
+
+
+@pytest.fixture
+def stub_mcp_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate registration tests; actual session reuse is covered by transport tests."""
+    from app.agents.agent_loop import mcp_session, mcp_tool_loader
+    from app.agents.mcp.discovery import discover_tools
+    from app.agents.mcp.service import (
+        credentials_to_discovery_dict,
+        instance_config_from_dict,
+    )
+
+    monkeypatch.setattr(mcp_tool_loader, "discover_tools", discover_tools, raising=False)
+    monkeypatch.setattr(mcp_tool_loader, "refresh_server_credentials", mcp_session.refresh_server_credentials, raising=False)
+
+    async def discover(self, server, timeout_seconds=None) -> list:
+        config = instance_config_from_dict(server.instance)
+        credentials = credentials_to_discovery_dict(server.instance.get("authMode", ""), server.auth)
+        return await mcp_tool_loader.discover_tools(config, credentials, timeout_seconds=timeout_seconds)
+
+    async def refresh(self, server) -> None:
+        await mcp_tool_loader.refresh_server_credentials(server, self._context.config_service)
+
+    monkeypatch.setattr(mcp_session.MCPSessionManager, "discover_tools", discover)
+    monkeypatch.setattr(mcp_session.MCPSessionManager, "refresh_credentials", refresh)

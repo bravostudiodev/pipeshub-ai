@@ -108,6 +108,7 @@ from app.modules.parsers.image_parser.image_parser import ImageParser
 from app.services.notification.types import NotificationSeverity, NotificationType
 from app.utils.api_call import make_api_call
 from app.utils.jwt import generate_jwt
+from app.utils.storage_download import is_inline_file
 from app.utils.streaming import create_stream_record_response
 from app.utils.time_conversion import get_epoch_timestamp_in_ms
 
@@ -3211,8 +3212,7 @@ class WebConnector(BaseConnector):
                         headers={"Authorization": f"Bearer {token}"},
                     ) as response:
                         if response.status == HttpStatusCode.OK.value:
-                            content_type = response.headers.get("Content-Type", "")
-                            if "application/json" in content_type:
+                            if not is_inline_file(response.headers):
                                 data = await response.json()
                                 signed_url = data.get("signedUrl")
                                 if signed_url:

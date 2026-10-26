@@ -13,8 +13,11 @@ admin-shared credentials are masked); the underlying `ConfigurationService` stor
 values at rest exactly like the toolsets/connectors credential paths.
 """
 import asyncio
+import hashlib
 import logging
 import uuid
+from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -36,10 +39,28 @@ from app.agents.mcp import dcr as dcr_module
 from app.agents.mcp import oauth_client as oauth_client_module
 from app.agents.mcp import service as mcp_service
 from app.agents.mcp import token_refresh as mcp_token_refresh
-from app.agents.mcp.client import MCPConnectionError
-from app.agents.mcp.discovery import discover_tools
-from app.agents.mcp.models import DiscoveredOAuthMetadata, MCPAuthMode, MCPServerInstanceConfig, MCPTransport
+from app.agents.mcp.catalog_cache import CatalogInvalidated, get_for_owner
+from app.agents.mcp.catalog_scope import CatalogScopeError, LegacySharedAuthIneligible
+from app.agents.mcp.client import MCPClientManager, MCPConnectionError
+from app.agents.mcp.credential_status import mark_reauth_required, reauth_status
+from app.agents.mcp.discovery import (
+    build_auth_env_and_headers,
+    tool_infos_from_listing,
+)
+from app.agents.mcp.models import (
+    DiscoveredOAuthMetadata,
+    MCPAuthMode,
+    MCPServerInstanceConfig,
+    MCPTransport,
+)
 from app.agents.mcp.registry import MCPRegistry
+from app.agents.mcp.retrieval_trace import (
+    TRACE_MAX_COMPARE_RUNS,
+    TRACE_MAX_RESULTS,
+    TRACE_ROOT,
+    trace_enabled,
+)
+from app.agents.mcp.token_refresh import MCPTokenRefreshTransientError
 from app.api.middlewares.auth import require_scopes
 from app.api.middlewares.caller_role import fetch_caller_role
 from app.config.configuration_service import ConfigurationService
@@ -212,6 +233,10 @@ _get_org_instance = get_mcp_instance_resolved
 
 def _validate_instance_config(payload: MCPServerInstanceConfig, registry: MCPRegistry) -> None:
     """Cross-field validation the Pydantic model alone can't express."""
+    if payload.use_admin_auth and payload.auth_mode in (MCPAuthMode.API_TOKEN, MCPAuthMode.HEADERS):
+        raise HTTPException(
+            status_code=HttpStatusCode.BAD_REQUEST.value, detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE,
+        )
     if payload.type_id:
         template = registry.get_template(payload.type_id)
         if not template:
@@ -267,6 +292,14 @@ def _build_instance_record(
         "authorizationUrl": payload.authorization_url or (template.authorization_url if template else None),
         "tokenUrl": payload.token_url or (template.token_url if template else None),
         "scopes": payload.scopes or (template.default_scopes if template else []),
+        "connectTimeoutSeconds": (
+            payload.connect_timeout_seconds if "connect_timeout_seconds" in payload.model_fields_set or not existing
+            else existing.get("connectTimeoutSeconds")
+        ),
+        "callTimeoutSeconds": (
+            payload.call_timeout_seconds if "call_timeout_seconds" in payload.model_fields_set or not existing
+            else existing.get("callTimeoutSeconds")
+        ),
         "isCustom": payload.type_id is None,
         "createdAt": existing.get("createdAt") if existing else now_ms,
         "updatedAt": now_ms,
@@ -680,6 +713,8 @@ async def auto_authenticate_instance(request: Request, instance_id: str) -> dict
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
     if not instance.get("useAdminAuth"):
         raise HTTPException(status_code=HttpStatusCode.BAD_REQUEST.value, detail="This instance does not use a shared admin credential.")
+    if mcp_service.uses_shared_admin_credential(instance):
+        raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE)
 
     admin_record = await config_service.get_config(
         get_mcp_credentials_path(instance_id, instance.get("createdBy")), default=None, use_cache=False
@@ -1116,17 +1151,24 @@ async def handle_oauth_callback(
             "errorMessage": "Failed to exchange the authorization code for tokens. Please try connecting again.",
         }
 
+    tokens = tokens.model_copy(update={"client_id": client_id})
     now_ms = get_epoch_timestamp_in_ms()
     record = {
         "instanceId": instance_id,
         "userId": user_id,
         "orgId": state_record.get("orgId"),
+        "credentialGeneration": uuid.uuid4().hex,
+        "connectedAt": now_ms,
         "authMode": MCPAuthMode.OAUTH.value,
         "isAuthenticated": True,
         "oauthTokens": tokens.model_dump(by_alias=True, mode="json"),
         "updatedAt": now_ms,
     }
-    await config_service.set_config(get_mcp_credentials_path(instance_id, user_id), record)
+    if not await config_service.set_config(get_mcp_credentials_path(instance_id, user_id), record):
+        return {
+            "success": False, "error": "credential_save_failed",
+            "errorMessage": "Could not save the connection right now. Please try connecting again.",
+        }
 
     from app.connectors.core.base.token_service.startup_service import startup_service
 
@@ -1152,20 +1194,21 @@ async def refresh_oauth_token(request: Request, instance_id: str) -> dict[str, A
 
     try:
         await mcp_token_refresh.refresh_credential_record(instance_id, user_id, config_service)
+    except MCPTokenRefreshTransientError as e:
+        raise HTTPException(
+            status_code=HttpStatusCode.SERVICE_UNAVAILABLE.value,
+            detail="Could not refresh the connection right now. Please try again shortly.",
+        ) from e
     except mcp_token_refresh.MCPTokenRefreshError as e:
         # Covers "no credential record", "no refresh token", "no tokenUrl", and "no
         # resolvable OAuth client" — all mean the caller must re-authenticate or an admin
         # must configure OAuth, not that the token endpoint itself rejected anything.
         raise HTTPException(status_code=HttpStatusCode.BAD_REQUEST.value, detail=str(e)) from e
     except oauth_client_module.MCPRefreshTokenInvalidError as e:
-        cred_path = get_mcp_credentials_path(instance_id, user_id)
-        record = await config_service.get_config(cred_path, default=None, use_cache=False)
-        if isinstance(record, dict):
-            record["isAuthenticated"] = False
-            await config_service.set_config(cred_path, record)
-        # Both `MCPRefreshTokenInvalidError` and `MCPOAuthError` embed the token endpoint's
-        # raw response body (see `oauth_client._post_token_request`) — log it server-side
-        # only, same treatment as `/oauth/callback`'s token-exchange-failure branch above.
+        await mark_reauth_required(
+            instance_id, user_id, config_service, detail="refresh token rejected", source="manual_refresh",
+            expected_auth=e.rejected_auth,
+        )
         logger.warning(f"MCP OAuth refresh token rejected for instance {instance_id}: {e}")
         raise HTTPException(
             status_code=HttpStatusCode.UNAUTHORIZED.value,
@@ -1175,7 +1218,7 @@ async def refresh_oauth_token(request: Request, instance_id: str) -> dict[str, A
         logger.error(f"MCP OAuth token refresh failed for instance {instance_id}: {e}")
         raise HTTPException(
             status_code=HttpStatusCode.BAD_GATEWAY.value,
-            detail="Failed to refresh the OAuth token. Please try again or reconnect this MCP server.",
+            detail="Could not refresh the connection right now. Please try again shortly.",
         ) from e
 
     return {"success": True}
@@ -1234,13 +1277,25 @@ async def update_oauth_config(
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
+    client_path = get_mcp_oauth_client_config_path(instance_id)
+    try:
+        previous = await config_service.get_config(client_path, default=None, use_cache=False, raise_on_error=True)
+    except Exception as exc:
+        raise HTTPException(status_code=HttpStatusCode.SERVICE_UNAVAILABLE.value, detail="Could not read OAuth configuration.") from exc
     record = {
         "instanceId": instance_id,
         "clientId": payload.client_id,
         "clientSecret": payload.client_secret,
         "updatedAt": get_epoch_timestamp_in_ms(),
     }
-    success = await config_service.set_config(get_mcp_oauth_client_config_path(instance_id), record)
+    if isinstance(previous, dict) and previous.get("clientId"):
+        if previous["clientId"] != payload.client_id:
+            record[mcp_token_refresh.PREVIOUS_CLIENT_FIELD] = {
+                key: value for key, value in previous.items() if key != mcp_token_refresh.PREVIOUS_CLIENT_FIELD
+            }
+        elif isinstance(previous.get(mcp_token_refresh.PREVIOUS_CLIENT_FIELD), dict):
+            record[mcp_token_refresh.PREVIOUS_CLIENT_FIELD] = previous[mcp_token_refresh.PREVIOUS_CLIENT_FIELD]
+    success = await config_service.set_config(client_path, record)
     if not success:
         raise HTTPException(status_code=HttpStatusCode.INTERNAL_SERVER_ERROR.value, detail="Failed to save OAuth client configuration.")
     return {"success": True}
@@ -1251,11 +1306,33 @@ async def update_oauth_config(
 # ============================================================================
 
 
+async def _discover_catalog_for_owner(
+    instance: dict[str, Any], owner_id: str, org_id: str, config_service: ConfigurationService,
+) -> list[Any]:
+    """Shared private catalog path for workspace, builder, and project listings."""
+    async def live(scope: Any) -> Any:  # noqa: ANN401
+        config = mcp_service.instance_config_from_dict(scope.instance)
+        credentials = mcp_service.credentials_to_discovery_dict(scope.instance.get("authMode", ""), scope.auth)
+        env, headers = build_auth_env_and_headers(config, credentials)
+        manager = MCPClientManager(config, env=env, headers=headers)
+        try:
+            await manager.open()
+            return await manager.fetch_tool_listing_in_session()
+        finally:
+            await manager.aclose()
+
+    result = await get_for_owner(
+        instance["_id"], org_id, owner_id, config_service, live,
+    )
+    return tool_infos_from_listing(result.tools, mcp_service.instance_config_from_dict(result.scope.instance))
+
+
 async def _build_mcp_instance_entry(
     instance: dict[str, Any],
     owner_id: str,
     config_service: ConfigurationService,
     include_tools: bool,
+    org_id: str,
 ) -> dict[str, Any]:
     """Merge one instance's metadata with `owner_id`'s auth status (+ live tools).
 
@@ -1272,18 +1349,20 @@ async def _build_mcp_instance_entry(
     entry["isAuthenticated"] = bool(effective_auth is not None and (
         effective_auth == {} or effective_auth.get("isAuthenticated")
     ))
+    entry["needsReauth"], entry["statusDetail"] = reauth_status(effective_auth)
     entry["tools"] = []
     entry["toolsError"] = None
 
     if include_tools and entry["isAuthenticated"]:
         try:
-            credentials_dict = _credentials_to_discovery_dict(instance.get("authMode"), effective_auth or {})
             tools = await asyncio.wait_for(
-                discover_tools(_instance_config_model_from_dict(instance), credentials_dict),
+                _discover_catalog_for_owner(instance, owner_id, org_id, config_service),
                 timeout=DEFAULT_TOOLS_DISCOVERY_TIMEOUT_SECONDS,
             )
             entry["tools"] = [t.model_dump(by_alias=True) for t in tools]
         except (MCPConnectionError, asyncio.TimeoutError) as e:
+            entry["toolsError"] = str(e)
+        except LegacySharedAuthIneligible as e:
             entry["toolsError"] = str(e)
         except Exception as e:
             logger.warning(f"Unexpected error discovering tools for MCP instance {instance['_id']}: {e}")
@@ -1302,9 +1381,334 @@ async def get_my_mcp_servers(
 
     instances = await resolve_mcp_instances_with_inheritance(config_service)
     entries = await asyncio.gather(
-        *[_build_mcp_instance_entry(i, user_id, config_service, include_tools) for i in instances]
+        *[_build_mcp_instance_entry(i, user_id, config_service, include_tools, user_context["org_id"]) for i in instances if i.get("orgId") == user_context["org_id"]]
     )
     return {"instances": list(entries)}
+
+
+def _is_official_slack_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Slack-hosted MCP endpoint, never the legacy bot-token template."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.slack.com"
+        and parsed.path.rstrip("/") == "/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_official_notion_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match Notion's organization MCP instance, never a connector or API-token setup."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.notion.com"
+        and parsed.path.rstrip("/") == "/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+        and instance.get("typeId") == "notion"
+    )
+
+
+def _is_miro_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the org's custom Miro instance by its admin-set name and per-user OAuth mode."""
+    return (
+        str(instance.get("name", "")).strip().casefold() == "miro"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+        and not instance.get("useAdminAuth", False)
+    )
+
+
+def _is_atlassian_rovo_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the designated official Atlassian Rovo instance using its catalog type."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.atlassian.com"
+        and parsed.path.rstrip("/") == "/v1/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") in {"atlassian_rovo", "atlassian-rovo"}
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_gmail_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Gmail MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "gmailmcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "gmail"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_google_drive_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Google Drive MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "drivemcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "google_drive"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_google_calendar_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the official Google Calendar MCP catalog instance configured for OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "calendarmcp.googleapis.com"
+        and parsed.path.rstrip("/") == "/mcp/v1"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("typeId") == "google_calendar"
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+    )
+
+
+def _is_superhuman_docs_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the organization's Superhuman Docs MCP server configured for user tokens."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "docs.superhuman.com"
+        and parsed.path.rstrip("/") == "/apis/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.API_TOKEN.value
+        and not instance.get("useAdminAuth", False)
+    )
+
+
+async def _get_designated_mcp_connection(
+    request: Request,
+    matcher: Callable[[dict[str, Any]], bool],
+) -> dict[str, Any]:
+    config_service = _get_config_service(request)
+    user_context = _get_user_context(request)
+    instances = await resolve_mcp_instances_with_inheritance(config_service)
+    matches = [instance for instance in instances if matcher(instance)]
+
+    if len(matches) != 1:
+        if len(matches) > 1:
+            logger.error("Multiple designated MCP instances are configured for org %s", user_context["org_id"])
+        return {"configured": False, "isConnected": False}
+
+    instance = matches[0]
+    auth = await _resolve_effective_user_auth(instance, user_context["user_id"], config_service)
+    has_credentials = bool(auth is not None and auth.get("isAuthenticated"))
+    generation = auth.get("credentialGeneration") if has_credentials else None
+    grant_version = (
+        hashlib.sha256(
+            f"{user_context['org_id']}:{user_context['user_id']}:{instance['_id']}:{generation}".encode()
+        ).hexdigest()[:32]
+        if isinstance(generation, str) and 16 <= len(generation) <= 128 else None
+    )
+    needs_reauth, detail = reauth_status(auth)
+    return {
+        "configured": True,
+        "instanceId": instance["_id"],
+        # Connection UI reports the caller's saved authorization state. Tool discovery
+        # is separate and must not turn a completed OAuth flow into a connection error.
+        "isConnected": has_credentials,
+        "hasCredentials": has_credentials,
+        # Opaque, random, caller-bound grant generation: the employee popup
+        # compares it with its pre-reconnect value so an unchanged old grant
+        # cannot be mistaken for successful completion of a new callback.
+        "grantVersion": grant_version,
+        # Set when the provider rejected the saved credential (discovery, a tool call or a
+        # refresh); the card shows "Reconnect needed" instead of a plain disconnected state.
+        "needsReauth": needs_reauth,
+        "statusDetail": detail,
+    }
+
+
+@router.get("/slack-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_slack_connection(request: Request) -> dict[str, Any]:
+    """Return only Slack MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_official_slack_mcp_instance)
+
+
+@router.get("/notion-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_notion_connection(request: Request) -> dict[str, Any]:
+    """Return only Notion MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_official_notion_mcp_instance)
+
+
+@router.get("/miro-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_miro_connection(request: Request) -> dict[str, Any]:
+    """Return only Miro availability and the authenticated user's own OAuth state."""
+    return await _get_designated_mcp_connection(request, _is_miro_mcp_instance)
+
+
+@router.get("/atlassian-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_atlassian_connection(request: Request) -> dict[str, Any]:
+    """Return only Atlassian Rovo availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_atlassian_rovo_mcp_instance)
+
+
+@router.get("/gmail-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_gmail_connection(request: Request) -> dict[str, Any]:
+    """Return only Gmail MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_gmail_mcp_instance)
+
+
+@router.get("/google-drive-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_google_drive_connection(request: Request) -> dict[str, Any]:
+    """Return only Google Drive MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_google_drive_mcp_instance)
+
+
+@router.get("/google-calendar-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_google_calendar_connection(request: Request) -> dict[str, Any]:
+    """Return only Google Calendar MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_google_calendar_mcp_instance)
+
+
+@router.get("/superhuman-docs-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_superhuman_docs_connection(request: Request) -> dict[str, Any]:
+    """Return the caller's personal-token state for the organization Docs instance."""
+    return await _get_designated_mcp_connection(request, _is_superhuman_docs_mcp_instance)
+
+
+@router.get("/retrieval-traces", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_mcp_retrieval_traces(
+    request: Request,
+    trace_id: Optional[str] = Query(default=None, alias="traceId", max_length=100),
+    run_id: Optional[str] = Query(default=None, alias="runId", max_length=100),
+    trace_ids: Optional[str] = Query(default=None, alias="traceIds", max_length=1000),
+    run_ids: Optional[str] = Query(default=None, alias="runIds", max_length=1000),
+) -> dict[str, Any]:
+    """Admin-only list or comparison lookup using the organization trace index."""
+    selectors = [trace_id, run_id, trace_ids, run_ids]
+    if sum(bool(value) for value in selectors) > 1:
+        raise HTTPException(status_code=400, detail="Provide at most one trace or run selector.")
+    selected_traces = set((trace_ids or trace_id or "").split(",")) if trace_ids or trace_id else set()
+    selected_runs = set((run_ids or run_id or "").split(",")) if run_ids or run_id else set()
+    selected = selected_traces or selected_runs
+    if len(selected) > TRACE_MAX_COMPARE_RUNS or any(not item or len(item) > 100 for item in selected):
+        raise HTTPException(status_code=400, detail=f"Trace comparison accepts up to {TRACE_MAX_COMPARE_RUNS} valid IDs.")
+    config_service = _get_config_service(request)
+    caller = _get_user_context(request)
+    if not await _check_user_is_admin(caller["user_id"], request, config_service):
+        raise HTTPException(status_code=403, detail="Administrator access is required.")
+    if not await trace_enabled(config_service):
+        raise HTTPException(status_code=404, detail="MCP retrieval tracing is disabled.")
+
+    now = datetime.now(timezone.utc)
+    org_root = f"{TRACE_ROOT}/{caller['org_id']}"
+
+    async def read_index(key: str) -> dict[str, Any] | None:
+        index = await config_service.get_config(key, default=None, use_cache=False)
+        if not isinstance(index, dict):
+            return None
+        try:
+            expiry = datetime.fromisoformat(str(index.get("expiresAt", "")))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            return None
+        return index if expiry > now else None
+
+    try:
+        indexes: list[dict[str, Any]] = []
+        if not selected:
+            # The only org-wide listing is of the compact, TTL-bounded run index.
+            index_keys = await config_service.list_keys_in_directory(f"{org_root}/index/by-run/")
+            for key in index_keys:
+                index = await read_index(key)
+                if index:
+                    indexes.append(index)
+            indexes.sort(key=lambda item: str(item.get("startedAt", "")), reverse=True)
+            return {"runs": indexes[:TRACE_MAX_RESULTS], "truncated": len(indexes) > TRACE_MAX_RESULTS}
+
+        for selected_id in sorted(selected):
+            key_hash = hashlib.sha256(selected_id.encode("utf-8")).hexdigest()
+            if selected_runs:
+                index_key = f"{org_root}/index/by-run/{key_hash}"
+            else:
+                index_key = f"{org_root}/index/by-trace/{key_hash}"
+            index = await read_index(index_key)
+            if not index:
+                continue
+            expected_id = index.get("runId") if selected_runs else index.get("traceId")
+            if expected_id != selected_id:
+                continue
+            indexes.append(index)
+
+        comparisons: list[dict[str, Any]] = []
+        total_events = 0
+        truncated = False
+        for index in indexes:
+            trace = str(index["traceId"])
+            event_keys = await config_service.list_keys_in_directory(f"{org_root}/events/{trace}/")
+            events: list[dict[str, Any]] = []
+            for key in event_keys:
+                if total_events >= TRACE_MAX_RESULTS:
+                    truncated = True
+                    break
+                event = await config_service.get_config(key, default=None, use_cache=False)
+                if not isinstance(event, dict) or event.get("traceId") != trace:
+                    continue
+                try:
+                    expiry = datetime.fromisoformat(str(event.get("expiresAt", "")))
+                    if expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    continue
+                if expiry <= now:
+                    continue
+                events.append(event)
+                total_events += 1
+            events.sort(key=lambda item: str(item.get("recordedAt", "")))
+            comparisons.append({**index, "events": events})
+        return {"runs": comparisons, "truncated": truncated}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("MCP trace lookup failed for org %s (%s)", caller["org_id"], type(exc).__name__)
+        raise HTTPException(status_code=503, detail="MCP trace storage is temporarily unavailable.") from exc
 
 
 @router.get(
@@ -1317,16 +1721,19 @@ async def get_instance_tools(request: Request, instance_id: str) -> dict[str, An
     user_id = user_context["user_id"]
 
     instance = await _get_org_instance(instance_id, config_service)
-    if not instance:
+    if not instance or instance.get("orgId") != user_context["org_id"]:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
     effective_auth = await _resolve_effective_user_auth(instance, user_id, config_service)
     if effective_auth is None:
         raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail="Not authenticated for this MCP server instance.")
 
-    credentials_dict = _credentials_to_discovery_dict(instance.get("authMode"), effective_auth)
     try:
-        tools = await discover_tools(_instance_config_model_from_dict(instance), credentials_dict)
+        tools = await _discover_catalog_for_owner(instance, user_id, user_context["org_id"], config_service)
+    except LegacySharedAuthIneligible as e:
+        raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail=str(e)) from e
+    except (CatalogScopeError, CatalogInvalidated) as e:
+        raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail="This connection changed or is unavailable. Try again.") from e
     except MCPConnectionError as e:
         logger.warning("Tool discovery failed for MCP instance %s: %s", instance_id, e, exc_info=True)
         raise HTTPException(
@@ -1372,11 +1779,11 @@ async def get_agent_mcp_servers(
 
     await _resolve_agent_with_permission(agent_key, request)
     config_service = _get_config_service(request)
-    _get_user_context(request)
+    user_context = _get_user_context(request)
 
     instances = await resolve_mcp_instances_with_inheritance(config_service)
     entries = await asyncio.gather(
-        *[_build_mcp_instance_entry(i, agent_key, config_service, include_tools) for i in instances]
+        *[_build_mcp_instance_entry(i, agent_key, config_service, include_tools, user_context["org_id"]) for i in instances if i.get("orgId") == user_context["org_id"]]
     )
     return {"instances": list(entries)}
 

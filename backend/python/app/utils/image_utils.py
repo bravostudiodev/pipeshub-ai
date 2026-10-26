@@ -293,6 +293,10 @@ async def _fetch_image_as_base64(img_url: str) -> tuple[str, str] | None:
     Returns None on failure.
     """
     try:
+        from app.services.featureflag.platform_settings import is_public_web_access_enabled
+        if not await is_public_web_access_enabled():
+            logger.info("Skipping public image URL: public URL fetching is disabled")
+            return None
 
         _, mime_type = get_image_info_from_url(img_url)
 

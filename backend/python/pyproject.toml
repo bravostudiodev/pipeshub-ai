@@ -192,7 +192,7 @@ dependencies = [
     "azure-storage-file-share==12.19.0",
     "beautifulsoup4==4.12.3",
     "box-sdk-gen==1.12.0",
-    "Brotli==1.2.0",
+    "Brotli==1.2.1",
     "CairoSVG==2.9.1",
     "celery==5.4.0",
     "chardet==7.4.3",
@@ -215,7 +215,8 @@ dependencies = [
     "fastapi==0.136.3",
     # Starlette comes in through FastAPI, whose range admits releases with known advisories.
     "starlette==1.7.0",
-    "fastmcp==3.2.0",
+    "mcp==2.3.0",
+    "httpx2==2.12.0",
     "fastembed==0.5.1",
     "faster-whisper>=1.0.0",
     "feedparser>=6.0.0",

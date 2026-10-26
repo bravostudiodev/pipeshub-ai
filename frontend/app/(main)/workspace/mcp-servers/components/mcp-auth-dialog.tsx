@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Dialog, Flex, Text, TextField } from '@radix-ui/themes';
 import { toast } from '@/lib/store/toast-store';
 import { isProcessedError } from '@/lib/api';
+import { notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
 import { LoadingButton } from '@/app/components/ui/loading-button';
 import { FormField } from '../../components';
 import { McpServersApi } from '../api';
@@ -69,6 +70,7 @@ export function McpAuthDialog({ instance, open, onOpenChange, onAuthenticated }:
           ? buildMultiEnvAuthPayload(requiredEnv, optionalEnv, envValues)
           : { apiToken: apiToken.trim() };
       await McpServersApi.authenticate(instance._id, payload);
+      notifyMcpCatalogChanged();
       toast.success(t('workspace.mcpServers.toasts.authenticated'));
       onOpenChange(false);
       onAuthenticated();

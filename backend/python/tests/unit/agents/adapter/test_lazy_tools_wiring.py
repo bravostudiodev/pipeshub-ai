@@ -301,6 +301,19 @@ class TestMakeLazyToolsDecider:
         assert registry.has_toolsets() is True  # pre-registered groups untouched, just not re-parented
         assert registry.children_of("connectors") == []
 
+    def test_a_grant_over_the_schema_cap_goes_lazy_even_when_not_applied(self, monkeypatch) -> None:
+        from app.agents.agent_loop import lazy_tools_wiring as wiring
+
+        monkeypatch.setenv("PIPESHUB_ENABLE_LAZY_TOOLS", "false")
+        monkeypatch.setattr(wiring, "MAX_VISIBLE_TOOLS", 2)
+        registry = _registry_with_connectors()
+        decide = make_lazy_tools_decider(apply=False)
+
+        names, disclosure = decide(registry, ["jira_create_issue", "jira_search_issues", "slack_send_message"])
+
+        assert disclosure == "lazy"
+        assert set(META_TOOL_NAMES) <= set(names)
+
     def test_apply_true_below_threshold_passes_through_unchanged(self, monkeypatch) -> None:
         monkeypatch.setenv("PIPESHUB_ENABLE_LAZY_TOOLS", "true")
         monkeypatch.setenv("PIPESHUB_LAZY_TOOLS_THRESHOLD", "20")

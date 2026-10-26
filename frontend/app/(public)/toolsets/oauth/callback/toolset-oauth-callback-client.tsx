@@ -122,7 +122,6 @@ export function ToolsetOAuthCallbackClient() {
     minHeight: '100vh',
     width: '100%',
     padding: 'var(--space-5)',
-    background: 'linear-gradient(180deg, var(--olive-2) 0%, var(--olive-1) 100%)',
   } as const;
 
   const columnStyle = {
@@ -277,7 +276,7 @@ export function ToolsetOAuthCallbackClient() {
   }
 
   return (
-    <Flex align="center" justify="center" style={shellStyle}>
+    <Flex align="center" justify="center" className="oauth-callback-shell" style={shellStyle}>
       <Box key={status} style={columnStyle}>
         {statusPanel}
       </Box>

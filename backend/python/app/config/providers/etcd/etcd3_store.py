@@ -436,6 +436,24 @@ class Etcd3DistributedKeyValueStore(KeyValueStore[T], Generic[T]):
         except Exception as e:
             raise ConnectionError(f"Failed to delete key: {str(e)}")
 
+    async def compare_and_set(self, key: str, expected: T, value: T | None) -> bool:
+        def conditional_write(client: etcd3.Etcd3Client) -> bool:
+            current, metadata = client.get(key)
+            if current is None or self.deserializer(current) != expected:
+                return False
+            if value is None:
+                operation = client.transactions.delete(key)
+            else:
+                serialized = value if isinstance(value, str) else json.dumps(value, default=str)
+                operation = client.transactions.put(key, serialized.encode(), lease=metadata.lease_id or None)
+            changed, _ = client.transaction(
+                compare=[client.transactions.mod(key) == metadata.mod_revision],
+                success=[operation], failure=[],
+            )
+            return bool(changed)
+
+        return await self._run(conditional_write)
+
     async def get_all_keys(self) -> List[str]:
         """Get all keys from etcd."""
         logger.debug("🔍 Getting all keys from ETCD")

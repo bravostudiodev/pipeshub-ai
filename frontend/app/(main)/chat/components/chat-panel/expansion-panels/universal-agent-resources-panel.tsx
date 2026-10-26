@@ -34,6 +34,8 @@ import {
 } from '@/lib/store/feature-flags-store';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import type { McpMyServerEntry } from '@/app/(main)/workspace/mcp-servers/types';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { catalogIdentityFromToken, currentCatalogIdentity, mcpCatalogRevision, MCP_CATALOG_CHANGED_EVENT } from '@/chat/mcp-catalog-refresh';
 import { CollectionsTab } from './connectors-collections/collections-tab';
 import type { CollectionScopeSelection } from './connectors-collections/collections-tab';
 import {
@@ -251,11 +253,12 @@ const ACTIONS_PAGE_SIZE = 50;
  */
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let _actionsPageCache: {
+  identity: string | null;
   toolsets: BuilderSidebarToolset[];
   page: number;
   hasMore: boolean;
   lastFetchedAt: number;
-} = { toolsets: [], page: 0, hasMore: false, lastFetchedAt: 0 };
+} = { identity: null, toolsets: [], page: 0, hasMore: false, lastFetchedAt: 0 };
 
 /**
  * Module-level MCP cache, mirroring `_actionsPageCache`. `getMyMcpServers` isn't paginated —
@@ -263,9 +266,11 @@ let _actionsPageCache: {
  * stale prior session's data isn't served after remount.
  */
 let _mcpCache: {
+  identity: string | null;
   instances: McpMyServerEntry[];
   lastFetchedAt: number;
-} = { instances: [], lastFetchedAt: 0 };
+  revision: number;
+} = { identity: null, instances: [], lastFetchedAt: 0, revision: mcpCatalogRevision() };
 
 interface UniversalAgentResourcesPanelProps {
   onToggleView?: () => void;
@@ -307,6 +312,7 @@ export function UniversalAgentResourcesPanel({
   const setToolsLoading = useChatStore((s) => s.setUniversalAgentToolsLoading);
   const setToolsError = useChatStore((s) => s.setUniversalAgentToolsError);
 
+  const identity = useAuthStore((s) => catalogIdentityFromToken(s.accessToken));
   const mcpGroups = useChatStore((s) => s.universalAgentMcpGroups);
   const mcpCatalog = useChatStore((s) => s.universalAgentMcpCatalogFullNames);
   const mcpLoading = useChatStore((s) => s.universalAgentMcpLoading);
@@ -314,6 +320,24 @@ export function UniversalAgentResourcesPanel({
   const hydrateMcpResources = useChatStore((s) => s.hydrateUniversalAgentMcpResources);
   const setMcpLoading = useChatStore((s) => s.setUniversalAgentMcpLoading);
   const setMcpError = useChatStore((s) => s.setUniversalAgentMcpError);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    if (_actionsPageCache.identity === identity && _mcpCache.identity === identity) return;
+    _actionsPageCache = { identity, toolsets: [], page: 0, hasMore: false, lastFetchedAt: 0 };
+    _mcpCache = { identity, instances: [], lastFetchedAt: 0, revision: mcpCatalogRevision() };
+    hydrateResources(null);
+    hydrateMcpResources(null);
+    setSelectedTools(null);
+    setRefreshTick((value) => value + 1);
+  }, [identity, hydrateResources, hydrateMcpResources, setSelectedTools]);
+
+  useEffect(() => {
+    if (_mcpCache.revision === mcpCatalogRevision()) return;
+    _mcpCache = { identity, instances: [], lastFetchedAt: 0, revision: mcpCatalogRevision() };
+    hydrateMcpResources(null);
+    setRefreshTick((value) => value + 1);
+  }, [identity, hydrateMcpResources]);
 
   /** Detect whether a reasoning model is available for the assistant context. */
   const hasReasoningModel = useMemo(() => {
@@ -345,7 +369,7 @@ export function UniversalAgentResourcesPanel({
       isFetchingPageRef.current = true;
 
       if (page === 1) {
-        _actionsPageCache = { toolsets: [], page: 0, hasMore: false, lastFetchedAt: 0 };
+        _actionsPageCache = { identity, toolsets: [], page: 0, hasMore: false, lastFetchedAt: 0 };
         setToolsLoading(true);
       } else {
         setIsLoadingMore(true);
@@ -358,7 +382,9 @@ export function UniversalAgentResourcesPanel({
           authStatus: 'authenticated',
         });
 
+        if (!identity || identity !== currentCatalogIdentity()) return;
         _actionsPageCache = {
+          identity,
           toolsets: [..._actionsPageCache.toolsets, ...result.toolsets],
           page,
           hasMore: result.hasNext,
@@ -371,10 +397,13 @@ export function UniversalAgentResourcesPanel({
         hydrateResources({ toolGroups: groups, toolCatalogFullNames: catalogFullNames });
         setHasNextPage(result.hasNext);
       } catch (err) {
+        if (identity !== currentCatalogIdentity()) return;
         console.error('[UniversalAgentResourcesPanel] Failed to load my-toolsets page', page, err);
         if (page === 1) {
           // Mark cache so the initial-load effect does not retry in a tight loop on failure.
-          _actionsPageCache = { ..._actionsPageCache, lastFetchedAt: Date.now() };
+          if (identity === currentCatalogIdentity()) {
+            _actionsPageCache = { ..._actionsPageCache, lastFetchedAt: Date.now() };
+          }
           setToolsError(
             t('chat.universalAgent.toolsLoadError', {
               defaultValue: 'Failed to load available actions.',
@@ -385,9 +414,13 @@ export function UniversalAgentResourcesPanel({
       } finally {
         if (page > 1) setIsLoadingMore(false);
         isFetchingPageRef.current = false;
+        if (identity !== currentCatalogIdentity()) {
+          setToolsLoading(false);
+          setRefreshTick((value) => value + 1);
+        }
       }
     },
-    [hydrateResources, setToolsLoading, setToolsError, t]
+    [hydrateResources, setToolsLoading, setToolsError, t, identity]
   );
 
   // Initial load — skips re-fetch when the module cache has a fresh page-1 result
@@ -396,8 +429,8 @@ export function UniversalAgentResourcesPanel({
   // Actions is disabled — the tab is hidden, so there's nothing to render this
   // data into (mirrors the MCP load effect below).
   useEffect(() => {
-    if (!actionsEnabled || toolsLoading) return;
-    const lastAt = _actionsPageCache.lastFetchedAt;
+    if (!identity || !actionsEnabled || toolsLoading) return;
+    const lastAt = _actionsPageCache.identity === identity && identity ? _actionsPageCache.lastFetchedAt : 0;
     const cacheStale = lastAt <= 0 || Date.now() - lastAt > CACHE_TTL_MS;
     const hasFreshPage1 = lastAt > 0 && !cacheStale;
     if (hasFreshPage1) {
@@ -405,7 +438,7 @@ export function UniversalAgentResourcesPanel({
       return;
     }
     void loadPage(1);
-  }, [actionsEnabled, toolsLoading, loadPage]);
+  }, [actionsEnabled, toolsLoading, loadPage, identity, refreshTick]);
 
   const handleLoadMore = useCallback(() => {
     if (!hasNextPage || isLoadingMore) return;
@@ -418,38 +451,56 @@ export function UniversalAgentResourcesPanel({
   const loadMcp = useCallback(async () => {
     if (isFetchingMcpRef.current) return;
     isFetchingMcpRef.current = true;
+    const requestRevision = mcpCatalogRevision();
     setMcpLoading(true);
     try {
       const result = await McpServersApi.getMyMcpServers(true);
+      if (!identity || identity !== currentCatalogIdentity() || requestRevision !== mcpCatalogRevision()) return;
       const authenticated = (result.instances || []).filter((entry) => entry.isAuthenticated);
-      _mcpCache = { instances: authenticated, lastFetchedAt: Date.now() };
+      _mcpCache = { identity, instances: authenticated, lastFetchedAt: Date.now(), revision: requestRevision };
 
       const groups = buildCatalogMcpGroups(authenticated);
       const catalogFullNames = groups.flatMap((g) => g.fullNames);
       hydrateMcpResources({ mcpGroups: groups, mcpCatalogFullNames: catalogFullNames });
     } catch (err) {
+      if (identity !== currentCatalogIdentity() || requestRevision !== mcpCatalogRevision()) return;
       console.error('[UniversalAgentResourcesPanel] Failed to load my-mcp-servers', err);
-      _mcpCache = { ..._mcpCache, lastFetchedAt: Date.now() };
+      _mcpCache = { ..._mcpCache, identity, lastFetchedAt: Date.now(), revision: requestRevision };
       setMcpError(
         t('chat.universalAgent.mcpLoadError', { defaultValue: 'Failed to load MCP servers.' })
       );
       setMcpLoading(false);
     } finally {
       isFetchingMcpRef.current = false;
+      if (identity !== currentCatalogIdentity() || requestRevision !== mcpCatalogRevision()) {
+        setMcpLoading(false);
+        setRefreshTick((value) => value + 1);
+      }
     }
-  }, [hydrateMcpResources, setMcpLoading, setMcpError, t]);
+  }, [hydrateMcpResources, setMcpLoading, setMcpError, t, identity]);
+
+  useEffect(() => {
+    const changed = () => {
+      _mcpCache = { identity: currentCatalogIdentity(), instances: [], lastFetchedAt: 0, revision: mcpCatalogRevision() };
+      hydrateMcpResources(null);
+      setRefreshTick((value) => value + 1);
+    };
+    window.addEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+  }, [hydrateMcpResources]);
 
   // Initial load — skips re-fetch when the module cache has fresh data (including
   // "success but zero authenticated servers", where mcpGroups stay empty).
   // Skipped entirely when MCP is disabled — the tab is hidden, so there's
   // nothing to render this data into.
   useEffect(() => {
-    if (!mcpEnabled || mcpLoading) return;
-    const lastAt = _mcpCache.lastFetchedAt;
+    if (!identity || !mcpEnabled || mcpLoading) return;
+    const lastAt = _mcpCache.identity === identity && _mcpCache.revision === mcpCatalogRevision()
+      ? _mcpCache.lastFetchedAt : 0;
     const cacheStale = lastAt <= 0 || Date.now() - lastAt > CACHE_TTL_MS;
     if (!cacheStale) return;
     void loadMcp();
-  }, [mcpEnabled, mcpLoading, loadMcp]);
+  }, [mcpEnabled, mcpLoading, loadMcp, identity, refreshTick]);
 
   // ── Tool selection helpers (same semantics as AgentScopedResourcesPanel) ──
 

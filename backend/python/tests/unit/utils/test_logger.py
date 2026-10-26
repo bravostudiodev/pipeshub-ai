@@ -5,7 +5,6 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
 from app.utils.logger import (
@@ -342,6 +341,7 @@ class TestModuleLevelNeo4jBranch:
     def test_neo4j_data_store_suppresses_notifications(self):
         """When DATA_STORE=neo4j, the neo4j.notifications logger is set to ERROR."""
         import importlib
+
         import app.utils.logger as logger_mod
 
         with patch.dict(os.environ, {"DATA_STORE": "neo4j"}, clear=False):
@@ -357,6 +357,7 @@ class TestModuleLevelNeo4jBranch:
     def test_non_neo4j_data_store_skips_suppression(self):
         """When DATA_STORE is not neo4j, neo4j logger is not touched."""
         import importlib
+
         import app.utils.logger as logger_mod
 
         # Reset the neo4j logger to INFO before reloading
@@ -379,6 +380,7 @@ class TestModuleLevelWindowsBranch:
     def test_windows_platform_branch(self):
         """When sys.platform is win32, ctypes and reconfigure are called."""
         import importlib
+
         import app.utils.logger as logger_mod
 
         mock_ctypes = MagicMock()
@@ -468,9 +470,12 @@ class TestHttpxSuccessFilter:
         record.args = ("GET", "https://x", "HTTP/1.1", True, 503, "err")
         assert self.filter.filter(record) is True
 
-    def test_kept_line_carries_no_url_credentials(self):
+    @pytest.mark.parametrize("library", ["httpx", "httpx2"])
+    def test_kept_line_carries_no_url_credentials(self, library):
+        import importlib
+
         record = _httpx_record(403)
-        signed = httpx.URL("https://user:hunter2@bucket.example/pack.zip?X-Amz-Signature=SECRET")
+        signed = importlib.import_module(library).URL("https://user:hunter2@bucket.example/pack.zip?X-Amz-Signature=SECRET")
         record.args = ("GET", signed, "HTTP/1.1", 403, "Forbidden")
         assert self.filter.filter(record) is True
         message = record.getMessage()

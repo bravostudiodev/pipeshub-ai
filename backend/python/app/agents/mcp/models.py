@@ -115,6 +115,8 @@ class MCPServerInstanceConfig(MCPCamelModel):
     authorization_url: Optional[str] = None
     token_url: Optional[str] = None
     scopes: list[str] = Field(default_factory=list)
+    connect_timeout_seconds: float | None = Field(default=None, gt=0, le=45)
+    call_timeout_seconds: float | None = Field(default=None, ge=1, le=600)
 
 
 class MCPServerConfig(MCPCamelModel):
@@ -145,6 +147,8 @@ class MCPServerConfig(MCPCamelModel):
     token_url: Optional[str] = None
     scopes: list[str] = Field(default_factory=list)
 
+    connect_timeout_seconds: float | None = Field(default=None, gt=0, le=45)
+    call_timeout_seconds: float | None = Field(default=None, gt=0, le=600)
     is_custom: bool = False
     created_at: int
     updated_at: int
@@ -158,6 +162,7 @@ class OAuthTokens(MCPCamelModel):
     """
 
     access_token: str
+    client_id: str | None = None
     token_type: str = "Bearer"
     refresh_token: Optional[str] = None
     expires_in: Optional[int] = None
@@ -227,6 +232,7 @@ class MCPToolInfo(MCPCamelModel):
     namespaced_name: str
     description: Optional[str] = None
     input_schema: dict[str, Any] = Field(default_factory=dict)
+    annotations: dict[str, Any] | None = None
 
 
 def utcnow() -> datetime:

@@ -484,7 +484,7 @@ export function ReplaceFileDialog({
             disabled={!replacementFile}
             loading={isReplacing}
             loadingLabel="Saving..."
-            style={{backgroundColor: isSaveDisabled ? 'var(--slate-a3)' : 'var(--emerald-10)'}}
+            style={{backgroundColor: isSaveDisabled ? 'var(--slate-a3)' : 'var(--accent-10)'}}
           >
             Save
           </LoadingButton>

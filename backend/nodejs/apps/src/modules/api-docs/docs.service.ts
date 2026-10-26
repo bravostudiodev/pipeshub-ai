@@ -397,7 +397,7 @@ export class ApiDocsService {
       {
         id: 'internal-services',
         name: 'Internal Services',
-        description: 'Internal PipesHub microservices (requires scoped token)',
+        description: 'Internal OddJeeves microservices (requires scoped token)',
         modules: this.modules.filter(m => ['query-service', 'indexing-service', 'connector-service-internal', 'docling-service', 'embedding-service'].includes(m.id)),
       },
     ];
@@ -408,9 +408,9 @@ export class ApiDocsService {
    */
   private _buildApiInfo(): UnifiedApiDocs['info'] {
     return {
-      title: this.mergedSpec?.info?.title || 'PipesHub API',
+      title: this.mergedSpec?.info?.title || 'OddJeeves API',
       version: this.mergedSpec?.info?.version || '1.0.0',
-      description: this.mergedSpec?.info?.description || 'Unified API documentation for PipesHub services',
+      description: this.mergedSpec?.info?.description || 'Unified API documentation for OddJeeves services',
       contact: this.mergedSpec?.info?.contact || {
         name: 'API Support',
         email: 'support@pipeshub.com',
@@ -651,9 +651,9 @@ export class ApiDocsService {
     return {
       openapi: '3.0.0',
       info: this.mergedSpec?.info || {
-        title: 'PipesHub API',
+        title: 'OddJeeves API',
         version: '1.0.0',
-        description: 'Unified API documentation for PipesHub services',
+        description: 'Unified API documentation for OddJeeves services',
         contact: {
           name: 'API Support',
           email: 'support@pipeshub.com',
