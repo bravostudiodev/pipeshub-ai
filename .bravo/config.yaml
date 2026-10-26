@@ -39,22 +39,18 @@ pipeline:
               - CVE-2026-44172
               - CVE-2026-6653
               - CVE-2026-85394
-              - CVE-2026-90711
               - CVE-2026-8838
-              - CVE-2026-106445
-              - CVE-2026-106446
               - GHSA-6q48-6c7w-9gw2
               - CVE-2026-112403
               - GHSA-hq85-5cpj-mr62
               - CVE-2026-91403
-              - GHSA-9v8h-qqgm-4m35
               - CVE-2026-112393
               - CVE-2026-112398
               - CVE-2026-112900
           context: .
-          push: true #TODO
+          push: false
         tags:
-          - 0.9.1.oddyssey1-4 #TODO
+          - 0.9.1.oddyssey1
     "Image build and push":
       branch: "main"
       imageBuild:
