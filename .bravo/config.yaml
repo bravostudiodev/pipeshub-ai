@@ -49,8 +49,8 @@ pipeline:
               - CVE-2026-112900
           context: .
           push: false
-        tags:
-          - 0.9.1.oddyssey1
+          tags:
+            - 0.9.1.oddyssey1
     "Image build and push":
       branch: "main"
       imageBuild:
