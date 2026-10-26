@@ -6,6 +6,7 @@ import { Badge, Box, Button, Callout, Dialog, Flex, IconButton, Separator, Text,
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
 import { LoadingButton } from '@/app/components/ui/loading-button';
 import { isProcessedError } from '@/lib/api';
+import { notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
 import { McpServersApi } from '../../../workspace/mcp-servers/api';
 import {
   buildMultiEnvAuthPayload,
@@ -75,6 +76,7 @@ export function McpCredentialsDialog({
   const { startOAuthPopup, status: oauthStatus } = useMcpOAuthPopup({
     verifyAuthenticated,
     onVerified: () => {
+      if (!isAgentScoped) notifyMcpCatalogChanged();
       setIsAuthenticated(true);
       onNotify?.(t('agentBuilder.mcpAuthUpdatedNotify'));
       void Promise.resolve(onSuccess()).catch(() => undefined);
@@ -120,6 +122,7 @@ export function McpCredentialsDialog({
       } else {
         await McpServersApi.authenticate(instance._id, payload);
       }
+      if (!isAgentScoped) notifyMcpCatalogChanged();
       setIsAuthenticated(true);
       onNotify?.(t('agentBuilder.mcpAuthUpdatedNotify'));
       await Promise.resolve(onSuccess()).catch(() => undefined);
@@ -141,6 +144,7 @@ export function McpCredentialsDialog({
       } else {
         await McpServersApi.removeCredentials(instance._id);
       }
+      if (!isAgentScoped) notifyMcpCatalogChanged();
       setIsAuthenticated(false);
       onNotify?.(t('agentBuilder.mcpAuthUpdatedNotify'));
       await Promise.resolve(onSuccess()).catch(() => undefined);

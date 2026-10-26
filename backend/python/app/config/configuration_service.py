@@ -50,7 +50,9 @@ class ConfigurationService:
         self.logger.debug("📦 Initialized LRU cache with max size 1000")
 
         self.store = key_value_store
-        from app.services.featureflag.platform_settings import register_public_web_config_service
+        from app.services.featureflag.platform_settings import (
+            register_public_web_config_service,
+        )
         register_public_web_config_service(self)
 
         # Event loop the watch thread runs on (any backend).
@@ -349,7 +351,7 @@ class ConfigurationService:
                 success = False
 
             if success:
-                # TTL values must not outlive their backend key in this process cache.
+                # Do not pre-seed a local copy; TTL consumers must read with use_cache=False.
                 if ttl is None:
                     self.cache[key] = value
                 else:
@@ -368,7 +370,7 @@ class ConfigurationService:
             return False
 
     async def create_config_if_absent(
-        self, key: str, value: str | int | float | bool | dict | list
+        self, key: str, value: str | int | float | bool | dict | list, *, ttl_seconds: int | None = None,
     ) -> bool:
         """Atomically create ``key`` only if it does not already exist.
 
@@ -379,10 +381,20 @@ class ConfigurationService:
         ``False`` is what makes a transient outage look like a fresh install —
         and overwrite a deployment-critical setting with a default.
         """
-        created = await self.store.create_key(key, value, overwrite=False)
+        if ttl_seconds is None:
+            created = await self.store.create_key(key, value, overwrite=False)
+        else:
+            if ttl_seconds <= 0:
+                raise ValueError("TTL must be positive")
+            created = await self.store.create_key(key, value, overwrite=False, ttl=ttl_seconds)
         if created:
-            self.cache[key] = value
-            self.logger.info("✅ Created config key %s (was absent)", key)
+            if ttl_seconds is None:
+                self.cache[key] = value
+                self.logger.info("✅ Created config key %s (was absent)", key)
+            else:
+                # Expiring keys are leases and markers, created on every use: not worth INFO.
+                self.cache.pop(key, None)
+                self.logger.debug("Created expiring config key %s", key)
             await self._publish_cache_invalidation(key)
         else:
             # Someone else owns the value; drop any cached guess so the caller's
@@ -390,6 +402,20 @@ class ConfigurationService:
             self.cache.pop(key, None)
             self.logger.debug("Config key %s already exists; leaving it untouched", key)
         return created
+
+    async def compare_and_set_config(
+        self, key: str, expected: str | int | float | bool | dict | list,
+        value: str | int | float | bool | dict | list | None,
+    ) -> bool:
+        """Replace/delete only the matching saved value; storage failures propagate."""
+        try:
+            changed = await self.store.compare_and_set(key, expected, value)
+        finally:
+            # Conditional writes may preserve a TTL; never keep an unbounded cache copy.
+            self.cache.pop(key, None)
+        if changed:
+            await self._publish_cache_invalidation(key)
+        return changed
 
     async def update_config(self, key: str, value: str | int | float | bool | dict | list) -> bool:
         """Update configuration value with optional encryption"""

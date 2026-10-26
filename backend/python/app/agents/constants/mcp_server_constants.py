@@ -50,6 +50,11 @@ def get_mcp_instance_credentials_prefix(instance_id: str) -> str:
     return f"{MCP_ROOT}/credentials/{instance_id}/"
 
 
+def get_mcp_refresh_lock_path(instance_id: str, owner_id: str) -> str:
+    """Shared refresh lease; outside credential listings and their cleanup prefix."""
+    return f"{MCP_ROOT}/refresh-locks/{instance_id}/{owner_id}"
+
+
 def get_mcp_oauth_tokens_path(instance_id: str, user_id: str) -> str:
     """OAuth token set: /services/mcp/credentials/{instanceId}/{userId}/oauth-tokens"""
     return f"{get_mcp_credentials_path(instance_id, user_id)}/oauth-tokens"

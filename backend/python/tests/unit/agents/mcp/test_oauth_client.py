@@ -10,6 +10,13 @@ from app.agents.mcp.oauth_client import (
     exchange_code_for_token,
     refresh_access_token,
 )
+from app.agents.mcp.oauth_client import _check_token_url as _real_check_token_url
+
+
+@pytest.fixture(autouse=True)
+def _allow_token_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Address policy is covered by the url_guard tests; these exercise response handling."""
+    monkeypatch.setattr("app.agents.mcp.oauth_client._check_token_url", AsyncMock())
 
 
 def _mock_async_client(inner: MagicMock):
@@ -303,3 +310,43 @@ class TestRefreshAccessToken:
         sent_data = inner.post.await_args.kwargs["data"]
         assert "client_secret" not in sent_data
         assert sent_data["client_id"] == "cid"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status, body, permanent", [
+        (200, {"error": "invalid_grant"}, True),
+        (503, {"error": "invalid_grant"}, False),
+        (400, {"error": "server_error", "error_description": "upstream invalid_grant"}, False),
+    ])
+    async def test_only_structured_provider_rejection_is_permanent(self, status, body, permanent) -> None:
+        inner = MagicMock()
+        inner.post = AsyncMock(return_value=_json_response(status, body))
+        with _mock_async_client(inner), pytest.raises(MCPOAuthError) as raised:
+            await refresh_access_token("https://example.com/token", "cid", None, "refresh")
+        assert isinstance(raised.value, MCPRefreshTokenInvalidError) is permanent
+
+    @pytest.mark.asyncio
+    async def test_proxy_error_cannot_invalidate_refresh_token(self) -> None:
+        response = _json_response(401, {"error": "invalid_grant"})
+        response.headers["x-squid-error"] = "ERR_ACCESS_DENIED"
+        inner = MagicMock()
+        inner.post = AsyncMock(return_value=response)
+        with _mock_async_client(inner), pytest.raises(MCPOAuthError) as raised:
+            await refresh_access_token("https://example.com/token", "cid", None, "refresh")
+        assert not isinstance(raised.value, MCPRefreshTokenInvalidError)
+
+
+@pytest.mark.asyncio
+async def test_a_token_url_on_a_blocked_address_is_refused_before_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.agents.mcp import oauth_client
+    from app.agents.mcp.errors import MCPUrlBlockedError
+
+    async def blocked(url: str, *, allow_private: bool) -> None:
+        raise MCPUrlBlockedError("blocked")
+
+    monkeypatch.setattr(oauth_client, "_check_token_url", _real_check_token_url)
+    monkeypatch.setattr("app.agents.mcp.url_guard.check_mcp_url", blocked)
+    client = MagicMock()
+    client.post = AsyncMock()
+    with _mock_async_client(client), pytest.raises(MCPOAuthError, match="network policy"):
+        await oauth_client._post_token_request("http://169.254.169.254/token", {"grant_type": "refresh_token"})
+    client.post.assert_not_called()

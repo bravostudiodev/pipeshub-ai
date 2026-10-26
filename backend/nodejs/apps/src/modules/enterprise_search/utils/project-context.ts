@@ -87,8 +87,8 @@ function narrowToProjectScope(requested: string[] | undefined, projectSet: strin
  *    (Python) to return *no* records for an empty effective scope instead
  *    of falling back to "search everything the user can access" (see
  *    `ChatQuery.strictScope` in chatbot.py/agent.py).
- *  - `tools` — `requested ∩ project.tools`, same empty-means-whole-set
- *    fallback. Agent mode only; `chatbot.py`'s `ChatQuery` has no `tools`
+ *  - `tools` — `requested ∩ project.tools`; omitted means the whole project
+ *    set, explicit `[]` means none. Agent mode only; `chatbot.py`'s `ChatQuery` has no `tools`
  *    field so plain chat mode silently ignores it.
  *
  * No-ops when `project` is undefined, so call sites can call this
@@ -132,20 +132,35 @@ export function applyProjectScope(
   };
   aiPayload.strictScope = true;
 
-  aiPayload.tools = narrowToProjectScope(
-    readIdArray(aiPayload.tools)?.map(bareToolFullName),
-    Array.from(new Set((context.tools ?? []).map(bareToolFullName))),
-  );
+  // MCP keys carry the instance ID. Never reduce a scoped request to a
+  // bare project grant: a project's permission to use instance A must not
+  // authorize an identically named tool on instance B.
+  const projectTools = Array.from(new Set((context.tools ?? []).map(normalizeProjectToolKey)));
+  const requestedTools = readIdArray(aiPayload.tools);
+  // Absent = project defaults; an explicitly empty list means no tools.
+  // Never turn the caller's explicit [] into the whole project grant.
+  const allowedTools = new Set(projectTools);
+  aiPayload.tools = requestedTools === undefined
+    ? projectTools
+    : requestedTools.map(normalizeProjectToolKey).filter((name) => allowedTools.has(name));
 }
 
 /**
  * The composer keys tools as `${instanceId}:${fullName}` for per-instance selection but
- * ships the bare `fullName`, which is also what Python matches on. Older projects persisted
- * the prefixed key; normalising both sides keeps them comparable.
+ * previously shipped bare `fullName`s. Native toolset keys keep that format;
+ * MCP keys now retain their instance ID. An old bare MCP grant can authorize
+ * only an old bare request (Python resolves duplicate types to their first
+ * instance); it cannot authorize a newly scoped selection for another server.
+ * Stored bare grants are not rewritten here: they become scoped only when the
+ * project's tools are next saved from its settings.
  */
 export function bareToolFullName(key: string): string {
   const colon = key.indexOf(':');
   return colon >= 0 ? key.slice(colon + 1) : key;
+}
+
+function normalizeProjectToolKey(key: string): string {
+  return bareToolFullName(key).startsWith('mcp_') ? key : bareToolFullName(key);
 }
 
 /**

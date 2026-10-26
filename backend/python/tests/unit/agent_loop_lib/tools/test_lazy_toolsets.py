@@ -127,6 +127,17 @@ class TestFetchToolsGrantCeiling:
         assert agent.visible_tools == {"jira_create_issue", "jira_search_issues"}
         assert "denied" not in result.content
 
+    async def test_unknown_toolset_tells_the_model_so(self) -> None:
+        registry = _registry_with_jira_and_slack()
+        agent = _FakeAgent(_spec(tool_names=[]))
+        ctx = _FakeRouteContext(agent=agent, spec=agent.spec)
+
+        result = await FetchToolsTool(registry).handle(
+            ToolCall(id="c1", name="fetch_tools", arguments={"toolset": "confluence"}), ctx,
+        )
+
+        assert result.content["error"] == "Unknown toolset: confluence"
+
     async def test_lazy_grant_ceiling_drops_ungranted_tools_from_response(self) -> None:
         registry = _registry_with_jira_and_slack()
         # Ceiling only grants one of the two Jira tools.

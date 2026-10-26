@@ -11,11 +11,30 @@ export interface CatalogToolGroupRow extends ScopedToolGroupRow {
 /**
  * Composer-internal tool keys are `${instanceId}:${fullName}` so two instances of the same
  * toolset stay independently selectable. The wire format (and anything persisted for the
- * server to intersect against, e.g. `project.tools`) is the bare `fullName`.
+ * server to intersect against is bare for native tools, instance-scoped for MCP.
  */
 export function bareToolFullName(key: string): string {
   const colon = key.indexOf(':');
   return colon >= 0 ? key.slice(colon + 1) : key;
+}
+
+/** An `${instanceId}:mcp_…` key: MCP tool names always carry the `mcp_` namespace. */
+function isScopedMcpKey(key: string): boolean {
+  return key.includes(':') && bareToolFullName(key).startsWith('mcp_');
+}
+
+/**
+ * Only MCP selection keys retain instance identity on the chat wire. Recognised by shape too,
+ * not only by catalog membership: while the catalog reloads, or after an instance is
+ * disconnected, a bare name would be re-owned by another instance of the same type.
+ * A scoped key for an unknown instance matches nothing server-side, so it fails closed.
+ */
+export function encodeToolSelectionForWire(
+  keys: readonly string[],
+  mcpGroups: readonly Pick<ScopedToolGroupRow, 'fullNames'>[]
+): string[] {
+  const mcpKeys = new Set(mcpGroups.flatMap((group) => group.fullNames));
+  return [...new Set(keys.map((key) => mcpKeys.has(key) || isScopedMcpKey(key) ? key : bareToolFullName(key)))];
 }
 
 /**
@@ -102,13 +121,45 @@ export function buildCatalogMcpGroups(instances: McpMyServerEntry[]): CatalogToo
  * Keep only the tools whose bare `fullName` is in `allowedBare`; drop groups left empty.
  * Used to project a catalog onto a project's persisted `tools` allow-list.
  */
+export function resolveProjectToolKeys(
+  stored: readonly string[],
+  mcpGroups: readonly Pick<CatalogToolGroupRow, 'instanceId' | 'fullNames'>[]
+): { keys: Set<string>; legacyMcpKeys: Set<string> } {
+  const firstByBare = new Map<string, string>();
+  const mcpKeys = new Set<string>();
+  for (const group of [...mcpGroups].sort((a, b) => a.instanceId < b.instanceId ? -1 : a.instanceId > b.instanceId ? 1 : 0)) {
+    for (const key of group.fullNames) {
+      mcpKeys.add(key);
+      if (!firstByBare.has(bareToolFullName(key))) firstByBare.set(bareToolFullName(key), key);
+    }
+  }
+  const keys = new Set<string>();
+  const legacyMcpKeys = new Set<string>();
+  for (const storedKey of stored) {
+    if (mcpKeys.has(storedKey)) {
+      keys.add(storedKey);
+    } else if (storedKey.includes(':') && bareToolFullName(storedKey).startsWith('mcp_')) {
+      // Stale instance-scoped grant: never silently redirect to a different instance.
+      continue;
+    } else if (storedKey.startsWith('mcp_') && firstByBare.has(storedKey)) {
+      const firstKey = firstByBare.get(storedKey)!;
+      keys.add(firstKey);
+      legacyMcpKeys.add(firstKey);
+    } else if (!storedKey.startsWith('mcp_')) {
+      keys.add(bareToolFullName(storedKey));
+    }
+  }
+  return { keys, legacyMcpKeys };
+}
+
 export function restrictGroupsToBareNames<T extends ScopedToolGroupRow>(
   groups: T[],
-  allowedBare: ReadonlySet<string>
+  allowedBare: ReadonlySet<string>,
+  exact = false
 ): T[] {
   return groups
     .map((g) => {
-      const fullNames = g.fullNames.filter((fn) => allowedBare.has(bareToolFullName(fn)));
+      const fullNames = g.fullNames.filter((fn) => allowedBare.has(exact ? fn : bareToolFullName(fn)));
       if (fullNames.length === g.fullNames.length) return g;
       const toolDescriptions = g.toolDescriptions
         ? Object.fromEntries(

@@ -5,6 +5,7 @@ import { Theme } from '@radix-ui/themes';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import { ConnectorsApi } from '@/app/(main)/workspace/connectors/api';
 import { startConnectorSync } from '@/app/(main)/workspace/connectors/utils/connector-sync-actions';
+import { useAuthStore } from '@/lib/store/auth-store';
 import {
   JiraConnectionCard,
   MiroConnectionCard,
@@ -47,7 +48,7 @@ vi.mock('@/app/(main)/workspace/connectors/utils/connector-sync-actions', () => 
 }));
 
 vi.mock('@/app/(main)/workspace/mcp-servers/hooks/use-mcp-oauth-popup', () => ({
-  useMcpOAuthPopup: () => ({ startOAuthPopup: vi.fn(), status: 'idle' }),
+  useMcpOAuthPopup: () => ({ startOAuthPopup: vi.fn(), status: 'idle', cancel: vi.fn() }),
 }));
 
 const getStatus = vi.mocked(McpServersApi.getSlackConnection);
@@ -61,7 +62,11 @@ function renderCard() {
   render(<Theme><SlackConnectionCard /></Theme>);
 }
 
+// Cards load only for a signed-in identity (the token's userId/orgId claims).
+const signedInToken = `h.${btoa(JSON.stringify({ userId: 'user-1', orgId: 'org-1' }))}.s`;
+
 beforeEach(() => {
+  useAuthStore.setState({ accessToken: signedInToken });
   getStatus.mockReset();
   getMiroStatus.mockReset();
   getAtlassianStatus.mockReset();

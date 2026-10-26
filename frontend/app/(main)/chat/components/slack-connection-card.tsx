@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, DropdownMenu, Flex, IconButton, Text, TextField, Tooltip } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
@@ -10,6 +10,8 @@ import { ConnectorsApi } from '@/app/(main)/workspace/connectors/api';
 import { startConnectorSync } from '@/app/(main)/workspace/connectors/utils/connector-sync-actions';
 import type { SlackConnectionStatus } from '@/app/(main)/workspace/mcp-servers/types';
 import { useMcpOAuthPopup } from '@/app/(main)/workspace/mcp-servers/hooks/use-mcp-oauth-popup';
+import { catalogIdentityFromToken, notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
+import { useAuthStore } from '@/lib/store/auth-store';
 
 const initialStatus: SlackConnectionStatus = { configured: false, isConnected: false };
 type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'superhuman';
@@ -47,12 +49,14 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             : provider === 'google-calendar'
               ? McpServersApi.getGoogleCalendarConnection
               : McpServersApi.getSuperhumanDocsConnection;
+  const identity = useAuthStore((s) => catalogIdentityFromToken(s.accessToken));
   const [connection, setConnection] = useState<SlackConnectionStatus>(initialStatus);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [tokenEntryOpen, setTokenEntryOpen] = useState(false);
   const [personalToken, setPersonalToken] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const previousGrantVersionRef = useRef<string | null>(null);
 
   const refreshStatus = useCallback(async (): Promise<SlackConnectionStatus> => {
     const next = await statusRequest();
@@ -62,15 +66,18 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
 
   const verifyConnected = useCallback(async () => {
     try {
-      return (await refreshStatus()).isConnected;
+      const next = await refreshStatus();
+      return Boolean(next.isConnected && next.grantVersion &&
+        next.grantVersion !== previousGrantVersionRef.current);
     } catch {
       return false;
     }
   }, [refreshStatus]);
 
-  const { startOAuthPopup, status: oauthStatus } = useMcpOAuthPopup({
+  const { startOAuthPopup, status: oauthStatus, cancel: cancelOAuthPopup } = useMcpOAuthPopup({
     verifyAuthenticated: verifyConnected,
     onVerified: () => {
+      notifyMcpCatalogChanged();
       setWorking(false);
       setError(null);
     },
@@ -82,19 +89,42 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
     },
   });
 
+  const activeIdentityRef = useRef(identity);
+  useEffect(() => {
+    if (activeIdentityRef.current !== identity) {
+      cancelOAuthPopup();
+      setWorking(false);
+      setTokenEntryOpen(false);
+      setPersonalToken('');
+      previousGrantVersionRef.current = null;
+      activeIdentityRef.current = identity;
+    }
+  }, [identity, cancelOAuthPopup]);
+
+  // Read through a ref: a new `t` must not reset and refetch the card, only a new identity.
+  const statusErrorRef = useRef('');
+  statusErrorRef.current = t(`${i18nPrefix}.statusError`, { defaultValue: `Could not check ${name} right now.` });
+
   useEffect(() => {
     let active = true;
+    setConnection(initialStatus);
+    setLoading(true);
+    if (!identity) {
+      setLoading(false);
+      return () => { active = false; };
+    }
     void statusRequest()
       .then((next) => { if (active) setConnection(next); })
       .catch(() => {
-        if (active) setError(t(`${i18nPrefix}.statusError`, { defaultValue: `Could not check ${name} right now.` }));
+        if (active) setError(statusErrorRef.current);
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [statusRequest, t, i18nPrefix, name]);
+  }, [statusRequest, identity]);
 
   const connect = async () => {
     if (!connection.instanceId || working) return;
+    previousGrantVersionRef.current = connection.grantVersion ?? null;
     setError(null);
     if (provider === 'superhuman') {
       setTokenEntryOpen(true);
@@ -106,6 +136,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
 
   const startOver = () => {
     if (!connection.instanceId || provider === 'superhuman') return;
+    previousGrantVersionRef.current = connection.grantVersion ?? null;
     setError(null);
     setWorking(true);
     // The shared hook closes the previous popup and requests a fresh OAuth state.
@@ -118,6 +149,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
     setError(null);
     try {
       await McpServersApi.authenticate(connection.instanceId, { apiToken: personalToken.trim() });
+      notifyMcpCatalogChanged();
       setPersonalToken('');
       setTokenEntryOpen(false);
       await refreshStatus();
@@ -136,6 +168,7 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
     setError(null);
     try {
       await McpServersApi.removeCredentials(connection.instanceId);
+      notifyMcpCatalogChanged();
       await refreshStatus();
     } catch {
       setError(t(`${i18nPrefix}.disconnectError`, { defaultValue: `${name} could not be disconnected. Please try again.` }));

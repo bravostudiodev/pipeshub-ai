@@ -12,14 +12,23 @@ production turn guards; only the LLM is scripted.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.agent import Agent
+from app.agent_loop_lib.agent.context_overflow import compact_overflow_history
 from app.agent_loop_lib.agent.loops import ReActLoop
 from app.agent_loop_lib.agent.spec import AgentSpec, ModelSpec
+from app.agent_loop_lib.context.manager import ContextManager
 from app.agent_loop_lib.core.context import CancellationToken
-from app.agent_loop_lib.core.messages import AssistantMessage, ToolCall, UserMessage
+from app.agent_loop_lib.core.exceptions import TransportError
+from app.agent_loop_lib.core.messages import (
+    AssistantMessage,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
 from app.agent_loop_lib.core.responses import ModelResponse, StopReason, TokenUsage
+from app.agent_loop_lib.core.streaming import StreamEvent, TextDeltaEvent
 from app.agent_loop_lib.core.types import Goal
 from app.agent_loop_lib.events.base import AgentEvent, EventEmitter, EventType
 from app.agent_loop_lib.hooks.events import HookEvent
@@ -32,6 +41,9 @@ from tests.unit.agents.adapter.support.scripted_transport import (
     ScriptedStep,
     ScriptedTransport,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 _GOAL = Goal(description="What changed this week?")
 
@@ -292,6 +304,112 @@ class TestModelFailures:
 
         assert result.error == "LLM call failed: bad request"
         assert guard_cancelled.is_set()
+
+
+class TestContextOverflowRecovery:
+    def test_preserves_current_tool_call_pair_and_latest_question(self) -> None:
+        call = ToolCall(id="current", name="fetch", arguments={})
+        messages = [
+            UserMessage(content="old question " + "long " * 500),
+            AssistantMessage(content="old answer " + "long " * 500),
+            UserMessage(content="current question"),
+            AssistantMessage(tool_calls=[call]),
+            ToolMessage(tool_call_id="current", content="citation [ref1]", name="fetch"),
+        ]
+
+        retry = compact_overflow_history(messages)
+
+        assert retry is not None
+        assert retry[-3:] == messages[-3:]
+        assert retry[0].injected is True
+
+    async def test_old_history_compacted_once_without_changing_saved_conversation(self) -> None:
+        overflow = TransportError("maximum context length exceeded", status_code=400)
+        transport = ScriptedTransport().add_error(overflow).add_text("answer")
+        agent, _ = _build(transport)
+        agent._context = ContextManager()
+        await agent._context.add(UserMessage(content="prior question " + "long " * 500))
+        await agent._context.add(AssistantMessage(content="prior answer " + "long " * 500))
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is True
+        assert len(transport.calls) == 2
+        assert transport.calls[1]["messages"][-1].content == _GOAL.description
+        assert len(str(transport.calls[1]["messages"])) < len(str(transport.calls[0]["messages"]))
+        assert (await agent.context.messages())[0].content.startswith("prior question")
+
+    async def test_second_rejection_is_not_retried_again(self) -> None:
+        overflow = TransportError("context_length_exceeded", status_code=400)
+        transport = ScriptedTransport().add_error(overflow).add_error(overflow).add_text("should not appear")
+        agent, _ = _build(transport)
+        agent._context = ContextManager()
+        await agent._context.add(UserMessage(content="prior " + "long " * 500))
+        await agent._context.add(AssistantMessage(content="prior answer " + "long " * 500))
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is False
+        assert len(transport.calls) == 2
+
+    async def test_stream_failure_before_output_closes_first_attempt(self) -> None:
+        transport = ScriptedTransport().add_error(
+            TransportError("maximum context length exceeded", status_code=400),
+        ).add_text("answer")
+        agent, recorder = _build(transport)
+        agent.streaming = True
+        agent._context = ContextManager()
+        await agent._context.add(UserMessage(content="prior " + "long " * 500))
+        await agent._context.add(AssistantMessage(content="prior answer " + "long " * 500))
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is True
+        assert len(transport.calls) == 2
+        assert recorder.types().count(EventType.TEXT_MESSAGE_START) == 2
+        assert recorder.types().count(EventType.TEXT_MESSAGE_END) == 2
+
+    async def test_stream_failure_after_output_does_not_replay_text(self) -> None:
+        class PartialTransport(ScriptedTransport):
+            async def stream(self, messages, tools=None, system=None, model=None, **kwargs) -> AsyncIterator[StreamEvent]:
+                self.calls.append({"messages": messages})
+                yield TextDeltaEvent(delta="already shown")
+                raise TransportError("maximum context length exceeded", status_code=400)
+
+        transport = PartialTransport()
+        agent, _ = _build(transport)
+        agent.streaming = True
+        agent._context = ContextManager()
+        await agent._context.add(UserMessage(content="prior " + "long " * 500))
+        await agent._context.add(AssistantMessage(content="prior answer " + "long " * 500))
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is False
+        assert len(transport.calls) == 1
+
+    async def test_no_retry_when_current_question_is_the_whole_history(self) -> None:
+        transport = ScriptedTransport().add_error(
+            TransportError("maximum context length exceeded", status_code=400),
+        )
+        agent, _ = _build(transport)
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is False
+        assert len(transport.calls) == 1
+
+    async def test_unrelated_provider_rejection_does_not_retry(self) -> None:
+        transport = ScriptedTransport().add_error(TransportError("payload too large", status_code=413))
+        agent, _ = _build(transport)
+        agent._context = ContextManager()
+        await agent._context.add(UserMessage(content="prior " + "long " * 500))
+        await agent._context.add(AssistantMessage(content="prior answer " + "long " * 500))
+
+        result = await agent.run(_GOAL)
+
+        assert result.success is False
+        assert len(transport.calls) == 1
 
 
 class TestOutputLimitRecovery:

@@ -18,7 +18,6 @@ from typing import Any
 
 from app.modules.agents.tool_domain import derive_tool_domain
 
-
 # ---------------------------------------------------------------------------
 # Connector filter fetch (route handlers only — filters only, not full config)
 # ---------------------------------------------------------------------------
@@ -288,6 +287,11 @@ def _build_mcp_failures_section(state: dict[str, Any], *, parts: list[str]) -> N
             parts.append(
                 f"- {name}: its saved credential was rejected by the provider. The user must "
                 "reconnect it from the source card in chat; retrying will not help."
+            )
+        elif failure.get("reason") == "shared_credentials_unsupported":
+            parts.append(
+                f"- {name}: an administrator set it up with one shared credential, which is not "
+                "used. An administrator must switch it to per-user sign-in; retrying will not help."
             )
         else:
             parts.append(f"- {name}: temporarily unreachable (connection or timeout); it may work on a retry.")

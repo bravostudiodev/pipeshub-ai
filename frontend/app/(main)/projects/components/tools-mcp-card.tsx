@@ -6,13 +6,15 @@ import { useTranslation } from 'react-i18next';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
 import { ConnectorIcon, resolveConnectorType } from '@/app/components/ui/ConnectorIcon';
 import { fetchToolCatalog } from '@/chat/hooks/use-project-scope-hydration';
-import { bareToolFullName, type CatalogToolGroupRow } from '@/chat/tool-groups';
+import { bareToolFullName, resolveProjectToolKeys, type CatalogToolGroupRow } from '@/chat/tool-groups';
 import { useFeatureFlagsStore, selectMcpEnabled } from '@/lib/store/feature-flags-store';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { catalogIdentityFromToken, mcpCatalogRevision, MCP_CATALOG_CHANGED_EVENT } from '@/chat/mcp-catalog-refresh';
 
 interface ToolGroupRow {
   key: string;
   label: string;
-  /** Bare `fullName`s — the wire format `applyProjectScope` intersects against. */
+  /** Native bare names or instance-scoped MCP keys. */
   fullNames: string[];
   icon: React.ReactNode;
 }
@@ -21,7 +23,7 @@ function toCardRows(groups: CatalogToolGroupRow[], kind: 'toolset' | 'mcp'): Too
   return groups.map((g) => ({
     key: `${kind}:${g.instanceId}`,
     label: g.label,
-    fullNames: Array.from(new Set(g.fullNames.map(bareToolFullName))),
+    fullNames: Array.from(new Set(kind === 'mcp' ? g.fullNames : g.fullNames.map(bareToolFullName))),
     icon:
       kind === 'mcp' ? (
         <MaterialIcon name="hub" size={16} color="var(--gray-11)" />
@@ -39,19 +41,27 @@ interface ToolsMcpCardProps {
 
 /**
  * Project Tools & MCP picker over the same catalog the composer uses
- * (`fetchToolCatalog`). Persists bare `fullName`s: the server compares
- * `project.tools` against the bare names on the wire, so a stored
- * `instanceId:` prefix would never match.
+ * (`fetchToolCatalog`). Persists exact instance-scoped MCP selections;
+ * native toolset keys remain bare for backward compatibility.
  */
 export function ToolsMcpCard({ selectedTools, canEdit, onChange }: ToolsMcpCardProps) {
   const { t } = useTranslation();
   const mcpEnabled = useFeatureFlagsStore(selectMcpEnabled);
+  const identity = useAuthStore((s) => catalogIdentityFromToken(s.accessToken));
+  const [revision, setRevision] = useState(mcpCatalogRevision);
   const [groups, setGroups] = useState<ToolGroupRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    const changed = () => setRevision(mcpCatalogRevision());
+    window.addEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(MCP_CATALOG_CHANGED_EVENT, changed);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
+    setGroups([]);
     async function load() {
       setIsLoading(true);
       setLoadError(false);
@@ -69,10 +79,16 @@ export function ToolsMcpCard({ selectedTools, canEdit, onChange }: ToolsMcpCardP
     return () => {
       cancelled = true;
     };
-  }, [mcpEnabled]);
+  }, [mcpEnabled, identity, revision]);
 
-  // Tolerate legacy `instanceId:`-prefixed entries already persisted on a project.
-  const selectedSet = useMemo(() => new Set(selectedTools.map(bareToolFullName)), [selectedTools]);
+  // Bare legacy MCP grants map only to the first instance, not every
+  // same-name server. Any edit persists the explicit instance-scoped keys.
+  const selectedSet = useMemo(() => resolveProjectToolKeys(
+    selectedTools,
+    groups.filter((g) => g.key.startsWith('mcp:')).map((g) => ({
+      instanceId: g.key.slice(4), fullNames: g.fullNames,
+    }))
+  ).keys, [selectedTools, groups]);
 
   const groupCheckState = useCallback(
     (fullNames: string[]): boolean | 'indeterminate' => {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/store/toast-store';
 import { isProcessedError } from '@/lib/api';
+import { notifyMcpCatalogChanged } from '@/chat/mcp-catalog-refresh';
 import { ServiceGate } from '@/app/components/ui/service-gate';
 import {
   useFeatureFlagsStore,
@@ -57,6 +58,7 @@ export default function PersonalMcpServersPage() {
       return Boolean(target?.isAuthenticated);
     },
     onVerified: () => {
+      notifyMcpCatalogChanged();
       setBusyInstanceId(null);
       void loadData();
       toast.success(t('workspace.mcpServers.toasts.authenticated'));
@@ -95,6 +97,7 @@ export default function PersonalMcpServersPage() {
       setBusyInstanceId(instance._id);
       try {
         await McpServersApi.removeCredentials(instance._id);
+        notifyMcpCatalogChanged();
         toast.success(t('workspace.mcpServers.toasts.disconnected'));
         await loadData();
       } catch (error) {

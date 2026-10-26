@@ -6,6 +6,7 @@ agent-key routes) with the same mock-request style used there.
 """
 from __future__ import annotations
 
+import hashlib
 import sys
 import types
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -28,6 +29,11 @@ from app.api.routes.mcp_servers import (
     _check_user_is_admin,
     _filter_stdio_env,
     _get_configured_frontend_base_url,
+    _is_atlassian_rovo_mcp_instance,
+    _is_gmail_mcp_instance,
+    _is_google_drive_mcp_instance,
+    _is_miro_mcp_instance,
+    _is_official_slack_mcp_instance,
     _sweep_expired_oauth_states,
     authenticate_agent_instance,
     authenticate_instance,
@@ -37,21 +43,16 @@ from app.api.routes.mcp_servers import (
     get_agent_mcp_servers,
     get_agent_oauth_authorization_url,
     get_atlassian_connection,
+    get_catalog_template,
     get_gmail_connection,
     get_google_drive_connection,
-    get_miro_connection,
-    get_catalog_template,
     get_instance,
     get_instance_tools,
+    get_miro_connection,
     get_my_mcp_servers,
-    get_slack_connection,
-    _is_atlassian_rovo_mcp_instance,
-    _is_gmail_mcp_instance,
-    _is_google_drive_mcp_instance,
-    _is_miro_mcp_instance,
-    _is_official_slack_mcp_instance,
     get_oauth_authorization_url,
     get_oauth_config,
+    get_slack_connection,
     list_catalog,
     list_instances,
     reauthenticate_agent_instance,
@@ -502,16 +503,18 @@ class TestAuthHandlers:
         assert exc.value.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_auto_authenticate_ok(self) -> None:
+    async def test_auto_authenticate_refuses_a_shared_admin_credential(self) -> None:
         config_service = MagicMock()
         config_service.get_config = AsyncMock(return_value={"isAuthenticated": True})
         request = _admin_request(config_service=config_service)
         with patch(
             "app.api.routes.mcp_servers._get_org_instance",
             new=AsyncMock(return_value=_api_token_instance(useAdminAuth=True, createdBy="admin-1")),
-        ):
-            result = await auto_authenticate_instance(request, "inst-1")
-        assert result == {"success": True, "isAuthenticated": True}
+        ), pytest.raises(HTTPException) as raised:
+            await auto_authenticate_instance(request, "inst-1")
+        assert raised.value.status_code == 409
+        assert "per-user sign-in" in raised.value.detail
+        config_service.get_config.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_reauthenticate_clears_credentials_and_dcr(self) -> None:
@@ -619,6 +622,7 @@ class TestOauthRouteWrappers:
     async def test_update_oauth_config_ok(self) -> None:
         config_service = MagicMock()
         config_service.set_config = AsyncMock(return_value=True)
+        config_service.get_config = AsyncMock(return_value=None)
         request = _admin_request(config_service=config_service)
         with (
             patch("app.api.routes.mcp_servers._check_user_is_admin", new=AsyncMock(return_value=True)),
@@ -667,8 +671,8 @@ class TestDiscoveryHandlers:
         )
         with (
             patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
-            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})) as resolve_auth,
-            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock()) as discover_tools_mock,
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True, "credentialGeneration": "caller-grant-v1a"})) as resolve_auth,
+            patch("app.api.routes.mcp_servers._discover_catalog_for_owner", new=AsyncMock()) as discover_tools_mock,
         ):
             result = await get_slack_connection(request)
 
@@ -679,6 +683,7 @@ class TestDiscoveryHandlers:
             "instanceId": "org-slack-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "grantVersion": hashlib.sha256(b"org-1:admin-1:org-slack-instance:caller-grant-v1a").hexdigest()[:32],
             "needsReauth": False,
             "statusDetail": None,
         }
@@ -707,6 +712,7 @@ class TestDiscoveryHandlers:
             "instanceId": "org-slack-instance",
             "isConnected": False,
             "hasCredentials": False,
+            "grantVersion": None,
             "needsReauth": True,
             "statusDetail": "401 Unauthorized",
         }
@@ -724,7 +730,7 @@ class TestDiscoveryHandlers:
         with (
             patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
             patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})),
-            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock()) as discover_tools_mock,
+            patch("app.api.routes.mcp_servers._discover_catalog_for_owner", new=AsyncMock()) as discover_tools_mock,
         ):
             result = await get_slack_connection(request)
         assert result["isConnected"] is True
@@ -784,6 +790,7 @@ class TestDiscoveryHandlers:
             "instanceId": "org-miro-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "grantVersion": None,
             "needsReauth": False,
             "statusDetail": None,
         }
@@ -822,6 +829,7 @@ class TestDiscoveryHandlers:
             "instanceId": "org-atlassian-instance",
             "isConnected": True,
             "hasCredentials": True,
+            "grantVersion": None,
             "needsReauth": False,
             "statusDetail": None,
         }
@@ -902,7 +910,7 @@ class TestDiscoveryHandlers:
                 new=AsyncMock(return_value=[_api_token_instance()]),
             ),
             patch(
-                "app.api.routes.mcp_servers.discover_tools",
+                "app.api.routes.mcp_servers._discover_catalog_for_owner",
                 new=AsyncMock(side_effect=MCPConnectionError("refused")),
             ),
         ):
@@ -931,7 +939,7 @@ class TestDiscoveryHandlers:
                 "app.api.routes.mcp_servers._resolve_effective_user_auth",
                 new=AsyncMock(return_value={"isAuthenticated": True, "credentials": {"apiToken": "t"}}),
             ),
-            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock(return_value=[tool])),
+            patch("app.api.routes.mcp_servers._discover_catalog_for_owner", new=AsyncMock(return_value=[tool])),
         ):
             result = await get_instance_tools(request, "inst-1")
         assert result["tools"][0]["namespacedName"] == "mcp_brave_search_search"
@@ -946,7 +954,7 @@ class TestDiscoveryHandlers:
                 new=AsyncMock(return_value={"isAuthenticated": True, "credentials": {"apiToken": "t"}}),
             ),
             patch(
-                "app.api.routes.mcp_servers.discover_tools",
+                "app.api.routes.mcp_servers._discover_catalog_for_owner",
                 new=AsyncMock(side_effect=MCPConnectionError("down")),
             ),
         ):
@@ -966,7 +974,7 @@ class TestDiscoveryHandlers:
                 "app.api.routes.mcp_servers._resolve_effective_user_auth",
                 new=AsyncMock(return_value={"isAuthenticated": True, "credentials": {"apiToken": "t"}}),
             ),
-            patch("app.api.routes.mcp_servers.discover_tools", new=AsyncMock(side_effect=error)),
+            patch("app.api.routes.mcp_servers._discover_catalog_for_owner", new=AsyncMock(side_effect=error)),
             patch("app.api.routes.mcp_servers.logger") as mock_logger,
         ):
             with pytest.raises(HTTPException) as exc:

@@ -11,6 +11,10 @@ from app.agent_loop_lib.agent import hook_dispatch as hooks
 from app.agent_loop_lib.agent import observability as obs
 from app.agent_loop_lib.agent import resume as agent_resume
 from app.agent_loop_lib.agent import streaming as agent_streaming
+from app.agent_loop_lib.agent.context_overflow import (
+    compact_overflow_history,
+    is_context_overflow,
+)
 from app.agent_loop_lib.agent.loops import StepOutcome
 from app.agent_loop_lib.agent.prompt import build_system_prompt
 from app.agent_loop_lib.agent.tool_loop import (
@@ -711,7 +715,10 @@ class Agent:
         if spec.model.effort is not None:
             llm_kwargs["effort"] = spec.model.effort
 
-        async def _call_llm() -> "ModelResponse":
+        saw_stream_delta = False
+
+        async def _call_llm_once() -> "ModelResponse":
+            nonlocal saw_stream_delta
             if not self._streaming:
                 return await self._model.complete(
                     messages=messages, tools=tool_schemas or None, system=system_prompt,
@@ -753,16 +760,19 @@ class Agent:
                 **llm_kwargs,
             ):
                 if isinstance(event, ThinkingDeltaEvent):
+                    saw_stream_delta = True
                     if not reasoning_open:
                         await self.emit(EventType.REASONING_MESSAGE_START, {"turn_index": turn_index})
                         reasoning_open = True
                     await self.emit(EventType.REASONING_MESSAGE_CONTENT, {"delta": event.delta})
                 elif isinstance(event, TextDeltaEvent):
+                    saw_stream_delta = True
                     if reasoning_open:
                         await self.emit(EventType.REASONING_MESSAGE_END, {"turn_index": turn_index})
                         reasoning_open = False
                     await self.emit(EventType.TEXT_MESSAGE_CONTENT, {"delta": event.delta})
                 elif isinstance(event, ToolCallDeltaEvent):
+                    saw_stream_delta = True
                     # Route argument deltas for final_answer into TEXT_MESSAGE_CONTENT
                     # so TerminalAnswerStreamer and AG-UI receive them unchanged.
                     # For all other tools the delta is intentionally dropped here —
@@ -810,6 +820,21 @@ class Agent:
             if final_response is None:
                 raise AgentError("Model.stream() completed without a StreamCompleteEvent")
             return final_response
+
+        async def _call_llm() -> "ModelResponse":
+            nonlocal messages
+            try:
+                return await _call_llm_once()
+            except Exception as exc:
+                if not is_context_overflow(exc) or saw_stream_delta:
+                    raise
+                smaller = compact_overflow_history(messages)
+                if smaller is None:
+                    raise
+                if self._streaming:
+                    await self.emit(EventType.TEXT_MESSAGE_END, {"turn_index": turn_index})
+                messages = smaller
+                return await _call_llm_once()
 
         # --- Guarded, hook-wrapped LLM call. Parallel guardrails: input
         # guardrails race the LLM call itself via asyncio.wait(FIRST_EXCEPTION)

@@ -105,6 +105,8 @@ export interface ProjectChatScope {
   mcpGroups: ScopedToolGroupRow[];
   /** Every selectable tool key (`instanceId:fullName`), across toolsets and MCP. */
   toolCatalogFullNames: string[];
+  /** Bare legacy MCP grants may reach only the first same-name instance. */
+  legacyMcpKeys?: string[];
 }
 
 /**
@@ -1195,8 +1197,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
       }
       if (sameProject && state.projectStreamTools) {
-        const catalog = new Set(scope.toolCatalogFullNames);
-        projectStreamTools = state.projectStreamTools.filter((fn) => catalog.has(fn));
+        if (scope.toolCatalogFullNames.length === 0) {
+          // Scope is republished before its catalog loads; an empty catalog says nothing yet.
+          projectStreamTools = state.projectStreamTools;
+        } else {
+          const catalog = new Set(scope.toolCatalogFullNames);
+          const kept = state.projectStreamTools.filter((fn) => catalog.has(fn));
+          // An explicit [] sends no tools; a narrowing that lost every tool falls back to the project set.
+          projectStreamTools = kept.length > 0 || state.projectStreamTools.length === 0 ? kept : null;
+        }
       }
       return {
         projectScope: scope,

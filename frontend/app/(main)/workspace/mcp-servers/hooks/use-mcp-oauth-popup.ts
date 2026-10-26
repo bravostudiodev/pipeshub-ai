@@ -243,7 +243,22 @@ export function useMcpOAuthPopup({
     [clearPoll]
   );
 
+  const cancel = useCallback(() => {
+    // Invalidate URL fetches and verification before closing the popup.
+    // Used when the signed-in identity changes mid-authorization.
+    attemptRef.current += 1;
+    verifyAbortRef.current = true;
+    clearPoll();
+    const popup = popupRef.current;
+    popupRef.current = null;
+    if (popup && !popup.closed) {
+      try { popup.close(); } catch { /* popup may already be gone */ }
+    }
+    completionHandledRef.current = false;
+    setStatus('idle');
+  }, [clearPoll]);
+
   const reset = useCallback(() => setStatus('idle'), []);
 
-  return { startOAuthPopup, status, reset };
+  return { startOAuthPopup, status, reset, cancel };
 }

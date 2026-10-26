@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from app.agent_loop_lib.agent.spec import AgentSpec
 
 
+# Keep the OpenAI-compatible gateway's per-request tool declaration count bounded.
+# The meta-tools remain available so a model can narrow a large catalog.
+MAX_VISIBLE_TOOLS = 96
+
+
 def _grant_set(spec: "AgentSpec") -> set[str] | None:
     """`None` means "no ceiling" (`spec.tool_names` empty — the common,
     non-PipesHub case where a role's tools ARE the whole registry). A
@@ -144,12 +149,27 @@ class FetchToolsTool(Tool):
         denied = [n for n in names if grant is not None and n not in grant]
         await obs.write_state(agent, ctx.goal, "running_tool", turn_index=ctx.turn_index, started_at=ctx.started_at, current_tool="fetch_tools")
         await obs.append_timeline(agent, "tool_call", "Calling tool: fetch_tools", "running_tool", {"tool": "fetch_tools", "args": call.arguments})
-        # `execute()` materializes every tool in the toolset (see below) —
-        # run it BEFORE growing `agent.visible_tools`, since the turn loop
-        # resolves a visible tool's schema synchronously next turn and has
-        # no opportunity to await materialization at that point.
-        result = await self.execute(**call.arguments)
-        if allowed:
+        current = agent.visible_tools or set()
+        remaining = MAX_VISIBLE_TOOLS - len(current)
+        new_names = [name for name in allowed if name not in current]
+        if len(new_names) > remaining:
+            result = ToolOutput(success=True, data={
+                "toolset": toolset_name, "tools": [],
+                "message": "This toolset exceeds the remaining tool budget. Use search_tools with a specific capability instead.",
+                "remaining": max(0, remaining),
+            })
+            allowed = []
+        else:
+            # Materialize only authorized names before exposing their schemas; an unknown
+            # toolset goes through without names so the model gets the "Unknown toolset" hint.
+            result = await (self.execute(toolset=toolset_name, names=allowed) if names else self.execute(toolset=toolset_name))
+        if allowed and result.success and len((agent.visible_tools or set()) | set(allowed)) > MAX_VISIBLE_TOOLS:
+            result = ToolOutput(success=True, data={
+                "toolset": toolset_name, "tools": [],
+                "message": "Tool budget full. Use search_tools with a specific capability in a focused request.",
+            })
+            allowed = []
+        if allowed and result.success:
             # `|=` (grow in place) rather than `= stale_snapshot | allowed`
             # — a concurrent `search_tools`/`fetch_tools` call in the same
             # gathered turn could otherwise read `agent.visible_tools`
@@ -179,15 +199,18 @@ class FetchToolsTool(Tool):
 
     async def execute(self, **kwargs: Any) -> ToolOutput:
         toolset: str = kwargs["toolset"]
-        names = self._registry.tools_in_toolset(toolset)
+        names = kwargs.get("names")
+        if names is None:
+            names = self._registry.tools_in_toolset(toolset)
+            if not names:
+                return ToolOutput(success=True, data={"error": f"Unknown toolset: {toolset}", "tools": []})
         if not names:
-            return ToolOutput(success=True, data={"error": f"Unknown toolset: {toolset}", "tools": []})
-        # No-op for already-materialized/plain tools; builds the real Tool
-        # for any provider-backed (e.g. future MCP) name in this toolset —
-        # see tools/provider.py. Materializes every name in the toolset,
-        # not just the eventually-granted ones (handle() doesn't know the
-        # grant until after this returns) — an acceptable trade-off since
-        # provider-backed toolsets are the exception, not the common case.
+            return ToolOutput(success=True, data={"toolset": toolset, "tools": []})
+        if len(names) > MAX_VISIBLE_TOOLS:
+            return ToolOutput(success=True, data={
+                "toolset": toolset, "tools": [],
+                "message": "Too many tools to load at once. Use search_tools with a specific capability.",
+            })
         await self._registry.materialize_many(names)
         schemas = [schema.model_dump(exclude_none=True) for schema in self._registry.schemas(names)]
         return ToolOutput(success=True, data={"toolset": toolset, "tools": schemas})
@@ -239,7 +262,8 @@ class SearchToolsTool(Tool):
     def description(self) -> str:
         return (
             "Search across every registered tool (regardless of toolset) by "
-            "describing what you need, e.g. 'edit a file' or 'search the web'. "
+            "using concise app names and capabilities, not the entire user question. "
+            "For cross-source work, name each app and the capability needed from it. "
             "Results are ranked by relevance and, by default, made callable "
             "immediately — no separate fetch_tools call needed. Use this when "
             "you don't know which toolset (see list_toolsets) has what you need."
@@ -280,7 +304,9 @@ class SearchToolsTool(Tool):
         grant = _grant_set(ctx.spec)
         await obs.write_state(agent, ctx.goal, "running_tool", turn_index=ctx.turn_index, started_at=ctx.started_at, current_tool="search_tools")
         await obs.append_timeline(agent, "tool_call", "Calling tool: search_tools", "running_tool", {"tool": "search_tools", "args": call.arguments})
-        result = await self.execute(**call.arguments)
+        requested = dict(call.arguments)
+        requested["limit"] = min(max(1, int(requested.get("limit") or 5)), MAX_VISIBLE_TOOLS)
+        result = await self.execute(**requested)
 
         made_visible: list[str] = []
         denied: list[str] = []
@@ -296,13 +322,21 @@ class SearchToolsTool(Tool):
                 # provider-backed match must be materialized before it's
                 # added to visible_tools, since the next turn resolves
                 # schemas synchronously.
-                await self._registry.materialize_many(names)
+                current = agent.visible_tools or set()
+                remaining = max(0, MAX_VISIBLE_TOOLS - len(current))
+                new_names = [n for n in names if n not in current][:remaining]
+                await self._registry.materialize_many(new_names)
+                names = [n for n in names if n in current or n in new_names]
                 # Same `|=`-not-stale-snapshot rationale as `FetchToolsTool.
                 # handle()` above.
                 agent.visible_tools = agent.visible_tools or set()
                 made_visible = [n for n in names if n not in agent.visible_tools]
                 agent.visible_tools |= set(names)
+            if make_visible:
+                matches = [m for m in matches if m["name"] in (agent.visible_tools or set())]
             content = {**result.data, "matches": matches, "made_visible": made_visible}
+            if make_visible and not matches and result.data["matches"]:
+                content["message"] = "Tool budget full. Use an already visible tool or start a focused request."
             if denied:
                 content["denied"] = {"reason": "not_granted_to_this_agent", "tools": denied}
             unavailable = result.data.get("unavailable")
@@ -321,7 +355,7 @@ class SearchToolsTool(Tool):
 
     async def execute(self, **kwargs: Any) -> ToolOutput:
         query: str = kwargs["query"]
-        limit: int = int(kwargs.get("limit") or 5)
+        limit: int = max(0, min(int(kwargs.get("limit") or 5), MAX_VISIBLE_TOOLS))
         matches = await self._index.search(self._registry, query, limit)
         if not matches:
             unavailable = await self._search_global_fallback(query, limit)
@@ -338,7 +372,7 @@ class SearchToolsTool(Tool):
                     "exists — see `unavailable` for what to tell the user."
                 ),
             })
-        return ToolOutput(success=True, data={
+        data: dict[str, Any] = {
             "matches": [
                 {
                     "name": m.summary.name,
@@ -349,7 +383,21 @@ class SearchToolsTool(Tool):
                 }
                 for m in matches
             ],
-        })
+        }
+        # Optional host diagnostics: a match in one app must not hide an explicitly
+        # requested source that failed discovery. These are never made callable.
+        unavailable_search = getattr(self._global_fallback, "search_unavailable", None)
+        if callable(unavailable_search):
+            try:
+                unavailable = await unavailable_search(query, limit)
+            except Exception:
+                unavailable = []  # Optional diagnostics must not erase usable matches.
+            if unavailable:
+                data["unavailable"] = [
+                    {"name": hit.name, "toolset": hit.toolset, "description": hit.description, "reason": hit.reason}
+                    for hit in unavailable
+                ]
+        return ToolOutput(success=True, data=data)
 
     async def _search_global_fallback(self, query: str, limit: int) -> list[dict[str, Any]]:
         if self._global_fallback is None:

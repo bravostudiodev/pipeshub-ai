@@ -89,6 +89,7 @@ export function AgentBuilder({ agentKey }: { agentKey: string | null }) {
     configuredConnectors,
     toolsets,
     mcpServers,
+    mcpLoadError,
     loading,
     loadedAgent,
     error,
@@ -957,6 +958,7 @@ export function AgentBuilder({ agentKey }: { agentKey: string | null }) {
             toolsetMergeCheckNodes={nodes as ToolsetTypeKeyFlowNode[]}
             refreshToolsets={refreshToolsets}
             mcpServers={mcpServers}
+            mcpLoadError={mcpLoadError}
             mcpMergeCheckNodes={nodes as McpInstanceIdFlowNode[]}
             refreshMcpServers={() => refreshMcpServers(effectiveAgentKey, isServiceAccount)}
             onNotify={setBanner}

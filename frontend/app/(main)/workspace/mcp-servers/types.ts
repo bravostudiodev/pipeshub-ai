@@ -60,6 +60,10 @@ export interface McpServerInstancePayload {
   requiredEnv?: string[];
   env?: Record<string, string>;
 
+  /** Administrator overrides; omitted values use server defaults. */
+  connectTimeoutSeconds?: number | null;
+  callTimeoutSeconds?: number | null;
+
   // SSE / Streamable HTTP
   url?: string | null;
   headerName?: string | null;
@@ -94,6 +98,9 @@ export interface McpServerInstance {
   tokenUrl?: string | null;
   scopes: string[];
 
+  connectTimeoutSeconds?: number | null;
+  callTimeoutSeconds?: number | null;
+
   isCustom: boolean;
   createdAt: number;
   updatedAt: number;
@@ -108,6 +115,7 @@ export interface McpToolInfo {
   namespacedName: string;
   description?: string | null;
   inputSchema: Record<string, unknown>;
+  annotations?: Record<string, unknown> | null;
 }
 
 /** `GET /my-mcp-servers` entry — instance + the caller's effective auth/tool state. */
@@ -137,6 +145,8 @@ export interface SlackConnectionStatus {
   instanceId?: string;
   isConnected: boolean;
   hasCredentials?: boolean;
+  /** Opaque, per-user grant generation for verifying a completed reconnect. */
+  grantVersion?: string | null;
   /** The provider rejected the saved credential; only reconnecting fixes it. */
   needsReauth?: boolean;
   statusDetail?: string | null;

@@ -22,6 +22,8 @@ def mock_config_service() -> MagicMock:
     svc = MagicMock()
     svc.get_config = AsyncMock(return_value=None)
     svc.set_config = AsyncMock(return_value=True)
+    svc.create_config_if_absent = AsyncMock(return_value=True)
+    svc.compare_and_set_config = AsyncMock(return_value=True)
     svc.delete_config = AsyncMock(return_value=True)
     svc.list_keys_in_directory = AsyncMock(return_value=[])
     return svc
@@ -120,7 +122,9 @@ class TestPerformTokenRefresh:
     ) -> None:
         record = {"oauthTokens": _oauth_token_dict(token_url="https://custom.example.com/token")}
 
-        async def _get_config_side_effect(path, default=None, use_cache=False):
+        async def _get_config_side_effect(path, default=None, use_cache=False, *, raise_on_error=False):
+            if "/refresh-locks/" in path:
+                return mock_config_service.create_config_if_absent.await_args.args[1]
             if path == CONFIG_PATH:
                 return record
             if path.endswith("/dcr-client"):
@@ -138,7 +142,7 @@ class TestPerformTokenRefresh:
         call_kwargs = mock_refresh.await_args.kwargs
         assert call_kwargs["token_url"] == "https://custom.example.com/token"
         assert call_kwargs["client_id"] == "dcr-cid"
-        mock_config_service.set_config.assert_awaited_once()
+        assert mock_config_service.compare_and_set_config.await_args_list[0].args[0] == CONFIG_PATH
 
     @pytest.mark.asyncio
     async def test_missing_token_url_raises(self, service: MCPTokenRefreshService, mock_config_service: MagicMock) -> None:
@@ -160,7 +164,9 @@ class TestPerformTokenRefresh:
     ) -> None:
         record = {"oauthTokens": _oauth_token_dict()}
 
-        async def _get_config_side_effect(path, default=None, use_cache=False):
+        async def _get_config_side_effect(path, default=None, use_cache=False, *, raise_on_error=False):
+            if "/refresh-locks/" in path:
+                return mock_config_service.create_config_if_absent.await_args.args[1]
             if path == CONFIG_PATH:
                 return record
             if "dcr-client" in path:
@@ -183,6 +189,7 @@ class TestHandleRefreshTokenInvalid:
         self, service: MCPTokenRefreshService, mock_config_service: MagicMock
     ) -> None:
         error = oauth_client_module.MCPRefreshTokenInvalidError("refresh_token is invalid")
+        error.rejected_auth = {"isAuthenticated": True}
 
         for _ in range(MAX_REFRESH_TOKEN_INVALID_FAILURES - 1):
             await service._handle_refresh_token_invalid(CONFIG_PATH, error)
@@ -190,14 +197,16 @@ class TestHandleRefreshTokenInvalid:
         mock_config_service.set_config.assert_not_awaited()
         assert service._invalid_refresh_failures[CONFIG_PATH] == MAX_REFRESH_TOKEN_INVALID_FAILURES - 1
 
+        error.rejected_auth = {"isAuthenticated": True}
         mock_config_service.get_config = AsyncMock(return_value={"isAuthenticated": True})
         await service._handle_refresh_token_invalid(CONFIG_PATH, error)
 
-        mock_config_service.set_config.assert_awaited_once()
-        path, record = mock_config_service.set_config.await_args.args
+        mock_config_service.compare_and_set_config.assert_awaited_once()
+        path, expected, record = mock_config_service.compare_and_set_config.await_args.args
+        assert expected == error.rejected_auth
         assert path == CONFIG_PATH
         assert record["isAuthenticated"] is False
-        assert record["deauthReason"] == "refresh_token_invalid"
+        assert record["deauthReason"] == "credential_rejected"
         assert CONFIG_PATH not in service._invalid_refresh_failures
 
     @pytest.mark.asyncio
@@ -499,13 +508,14 @@ class TestHandleRefreshTokenInvalidPersistenceError:
         self, service: MCPTokenRefreshService, mock_config_service: MagicMock,
     ) -> None:
         error = oauth_client_module.MCPRefreshTokenInvalidError("invalid_grant")
+        error.rejected_auth = {"isAuthenticated": True}
         mock_config_service.get_config = AsyncMock(return_value={"isAuthenticated": True})
-        mock_config_service.set_config = AsyncMock(side_effect=RuntimeError("write failed"))
+        mock_config_service.compare_and_set_config = AsyncMock(side_effect=RuntimeError("write failed"))
 
         for _ in range(MAX_REFRESH_TOKEN_INVALID_FAILURES):
             await service._handle_refresh_token_invalid(CONFIG_PATH, error)
 
-        mock_config_service.set_config.assert_awaited()
+        mock_config_service.compare_and_set_config.assert_awaited()
 
 
 class TestDelayedRefreshAndPeriodicLoops:

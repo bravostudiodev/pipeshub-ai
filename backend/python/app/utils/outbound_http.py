@@ -124,11 +124,20 @@ def emit(
     logger.log(level, "outbound_http %s", json.dumps(payload, separators=(",", ":")))
 
 
+def _squid_error(headers: "Mapping[str, str]") -> str:
+    return next((v for k, v in headers.items() if k.lower() == "x-squid-error"), "")
+
+
+def is_proxy_generated(headers: "Mapping[str, str]") -> bool:
+    """Whether the proxy wrote this response itself (any Squid error page), so it says
+    nothing about what the origin would have answered."""
+    return bool(_squid_error(headers))
+
+
 def is_proxy_denial(status: int, headers: "Mapping[str, str]") -> bool:
     """Whether the proxy itself, not the origin, refused a request: 407, or a Squid
     access-control error page."""
-    squid_error = next((v for k, v in headers.items() if k.lower() == "x-squid-error"), "")
-    return status == 407 or "ACCESS_DENIED" in squid_error.upper()
+    return status == 407 or "ACCESS_DENIED" in _squid_error(headers).upper()
 
 
 def proxy_refusal_status(exc: BaseException) -> int | None:

@@ -353,11 +353,16 @@ async def test_install_is_idempotent_and_logs_each_request_once(events: _Capture
 
 
 async def test_mcp_client_factory_requests_are_categorised_and_proxied(
-    events: _Capture, proxy: FakeServer
+    events: _Capture, proxy: FakeServer, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.agents.mcp.client import _LastHttpResponse
+    from unittest.mock import AsyncMock
 
-    client = _LastHttpResponse().httpx_client_factory(headers={"Authorization": "Bearer sk-live-key"})
+    from app.agents.mcp import url_guard
+
+    monkeypatch.setattr(url_guard, "check_mcp_url", AsyncMock())
+    client = url_guard.guarded_mcp_http_client(
+        f"http://{EXTERNAL}/mcp", allow_private=False, headers={"Authorization": "Bearer sk-live-key"},
+    )
     async with client:
         await client.post(f"http://{EXTERNAL}/mcp?token=s3cr3t-token", json={"jsonrpc": "2.0"})
 
@@ -369,11 +374,17 @@ async def test_mcp_client_factory_requests_are_categorised_and_proxied(
 
 
 async def test_mcp_client_to_an_in_cluster_server_is_direct(
-    events: _Capture, proxy: FakeServer, service: FakeServer
+    events: _Capture, proxy: FakeServer, service: FakeServer, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.agents.mcp.client import _LastHttpResponse
+    import ipaddress
+    from unittest.mock import AsyncMock
 
-    async with _LastHttpResponse().httpx_client_factory() as client:
+    from app.agents.mcp import url_guard
+    from app.utils.url_fetcher import PublicTarget
+
+    target = PublicTarget("http", "127.0.0.1", service.port, (ipaddress.ip_address("127.0.0.1"),))
+    monkeypatch.setattr(url_guard, "assert_mcp_url_allowed", AsyncMock(return_value=target))
+    async with url_guard.guarded_mcp_http_client(f"{service.url}/mcp", allow_private=True) as client:
         await client.get(f"{service.url}/mcp")
     assert proxy.request_lines == []
     assert _only(events, dest_port=service.port)["category"] == "mcp"
@@ -382,7 +393,10 @@ async def test_mcp_client_to_an_in_cluster_server_is_direct(
 async def test_oauth_token_exchange_goes_through_the_proxy_without_logging_secrets(
     events: _Capture, proxy: FakeServer
 ) -> None:
-    from app.agents.mcp.oauth_client import exchange_code_for_token, refresh_access_token
+    from app.agents.mcp.oauth_client import (
+        exchange_code_for_token,
+        refresh_access_token,
+    )
 
     proxy._body, proxy._content_type = b'{"access_token":"at","expires_in":60}', "application/json"
     tokens = await exchange_code_for_token(
@@ -401,9 +415,16 @@ async def test_oauth_token_exchange_goes_through_the_proxy_without_logging_secre
 
 
 async def test_oauth_token_endpoint_inside_the_cluster_is_direct(
-    events: _Capture, proxy: FakeServer, service: FakeServer
+    events: _Capture, proxy: FakeServer, service: FakeServer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from unittest.mock import AsyncMock
+
+    from app.agents.mcp import oauth_client
     from app.agents.mcp.oauth_client import exchange_code_for_token
+
+    # The fake server listens on loopback, which the token URL policy refuses; a real
+    # in-cluster endpoint is a private address. This test is about routing, not that policy.
+    monkeypatch.setattr(oauth_client, "_check_token_url", AsyncMock())
 
     service._body, service._content_type = b'{"access_token":"at"}', "application/json"
     await exchange_code_for_token(f"{service.url}/token", "id", None, "code", "https://app/cb")

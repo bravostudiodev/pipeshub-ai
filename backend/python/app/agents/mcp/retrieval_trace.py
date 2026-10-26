@@ -382,10 +382,12 @@ def invocation_fields(
     error: Exception | None = None,
     tool_succeeded: bool | None = None,
 ) -> dict[str, Any]:
-    success = error is None and not bool(getattr(result, "is_error", False))
+    success = error is None and not bool(getattr(result, "is_error", getattr(result, "isError", False)))
     if tool_succeeded is not None:
         success = success and tool_succeeded
     data = getattr(result, "data", None)
+    if data is None:
+        data = getattr(result, "structured_content", None)
     if data is None:
         data = getattr(result, "structuredContent", None)
     if data is None:

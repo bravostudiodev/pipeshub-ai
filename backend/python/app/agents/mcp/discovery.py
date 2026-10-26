@@ -7,8 +7,17 @@ import asyncio
 import logging
 from typing import Any
 
-from app.agents.mcp.client import MCPClientManager, MCPConnectionError
-from app.agents.mcp.models import MCPAuthMode, MCPServerConfig, MCPToolInfo, MCPTransport
+from app.agents.mcp.client import (
+    MCPClientManager,
+    MCPConnectionError,
+    discovery_timeout,
+)
+from app.agents.mcp.models import (
+    MCPAuthMode,
+    MCPServerConfig,
+    MCPToolInfo,
+    MCPTransport,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +25,13 @@ DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 30.0
 DEFAULT_ENV_VAR_NAME = "API_TOKEN"
 
 
+def normalize_mcp_type(server_type: str) -> str:
+    return server_type.lower().strip().replace(" ", "_").replace("-", "_")
+
+
 def build_namespaced_tool_name(server_type: str, tool_name: str) -> str:
     """`mcp_{server_type}_{tool}` — keeps MCP tools distinguishable from native tools."""
-    normalized_type = server_type.lower().strip().replace(" ", "_").replace("-", "_")
-    return f"mcp_{normalized_type}_{tool_name}"
+    return f"mcp_{normalize_mcp_type(server_type)}_{tool_name}"
 
 
 def _allowed_stdio_env_names(config: MCPServerConfig) -> set[str]:
@@ -80,7 +92,7 @@ def build_auth_env_and_headers(
 async def discover_tools(
     config: MCPServerConfig,
     credentials: dict[str, Any],
-    timeout_seconds: float = DEFAULT_DISCOVERY_TIMEOUT_SECONDS,
+    timeout_seconds: float | None = None,
 ) -> list[MCPToolInfo]:
     """Connect to `config`, list its tools, and return them namespaced for the agent loop.
 
@@ -90,6 +102,7 @@ async def discover_tools(
     env, headers = build_auth_env_and_headers(config, credentials)
     manager = MCPClientManager(config, env=env, headers=headers)
 
+    timeout_seconds = timeout_seconds if timeout_seconds is not None else discovery_timeout(config)
     try:
         raw_tools = await asyncio.wait_for(manager.list_tools(), timeout=timeout_seconds)
     except asyncio.TimeoutError as e:
@@ -97,6 +110,10 @@ async def discover_tools(
             f"Timed out discovering tools for MCP instance {config.id} after {timeout_seconds}s"
         ) from e
 
+    return tool_infos_from_listing(raw_tools, config)
+
+
+def tool_infos_from_listing(raw_tools: list[Any], config: MCPServerConfig) -> list[MCPToolInfo]:
     server_type = config.type_id or config.name
     tools: list[MCPToolInfo] = []
     for tool in raw_tools:
@@ -110,16 +127,22 @@ async def discover_tools(
         if description is None and isinstance(tool, dict):
             description = tool.get("description")
 
-        input_schema = getattr(tool, "inputSchema", None)
+        input_schema = getattr(tool, "input_schema", None)
+        if input_schema is None:
+            input_schema = getattr(tool, "inputSchema", None)
         if input_schema is None and isinstance(tool, dict):
             input_schema = tool.get("inputSchema")
 
+        annotations = tool.get("annotations") if isinstance(tool, dict) else getattr(tool, "annotations", None)
+        if hasattr(annotations, "model_dump"):
+            annotations = annotations.model_dump(by_alias=True, exclude_none=True)
         tools.append(
             MCPToolInfo(
                 name=name,
                 namespaced_name=build_namespaced_tool_name(server_type, name),
                 description=description,
                 input_schema=input_schema or {},
+                annotations=annotations if isinstance(annotations, dict) else None,
             )
         )
     return tools

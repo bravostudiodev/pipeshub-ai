@@ -512,6 +512,73 @@ components:
             crawl:write: Create and manage crawling jobs
 
   schemas:
+    McpServerInstanceInput:
+      type: object
+      required: [name, transport, authMode]
+      properties:
+        name:
+          type: string
+        typeId:
+          type: string
+          nullable: true
+        transport:
+          type: string
+          enum: [stdio, sse, streamable_http]
+        authMode:
+          type: string
+          enum: [none, api_token, oauth, headers]
+        useAdminAuth:
+          type: boolean
+          default: false
+          description: Legacy instance setting; employee source cards use their own credentials.
+        description:
+          type: string
+          nullable: true
+        command:
+          type: string
+          nullable: true
+        args:
+          type: array
+          items:
+            type: string
+        requiredEnv:
+          type: array
+          items:
+            type: string
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          description: Administrator-configured, allowlisted STDIO environment only.
+        url:
+          type: string
+          nullable: true
+        headerName:
+          type: string
+          nullable: true
+        authorizationUrl:
+          type: string
+          nullable: true
+        tokenUrl:
+          type: string
+          nullable: true
+        scopes:
+          type: array
+          items:
+            type: string
+        connectTimeoutSeconds:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 45
+          nullable: true
+          description: Optional administrator connection budget. Omission on update preserves the current override; null restores the environment default.
+        callTimeoutSeconds:
+          type: number
+          minimum: 1
+          maximum: 600
+          nullable: true
+          description: Optional administrator idle call budget. Progress restarts this deadline, never the absolute maximum. Omission preserves the current override; null restores the environment default.
     StoragePurgeResult:
       type: object
       required:
@@ -8539,9 +8606,11 @@ components:
           items:
             type: string
           description: |
-            Tool fullNames (toolset + MCP tools, same format as the
-            composer's `agentStreamTools`) this project's agent-mode chats
-            may use. Empty means no tools beyond the project's own files.
+            Allowed tool names for this project's agent-mode chats. Native
+            toolset names remain bare; MCP names use `instanceId:fullName` to
+            distinguish duplicate provider instances. Legacy bare MCP grants
+            match at most one instance. Empty means no tools beyond the
+            project's own files.
         linkedKnowledgeBaseId:
           type: string
           nullable: true
@@ -16030,6 +16099,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16071,6 +16144,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16111,6 +16188,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16152,6 +16233,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16193,6 +16278,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16234,6 +16323,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16275,6 +16368,10 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
@@ -16315,10 +16412,309 @@ paths:
                   statusDetail:
                     type: string
                     nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
         '401':
           description: Authentication required
         '403':
           description: Caller is not permitted to use this API
+
+  /mcp-servers/instances:
+    get:
+      tags: [MCP Servers]
+      summary: List administrator-managed MCP instances
+      operationId: listMcpServerInstances
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Instance configurations, without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instances:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required; MCP must be enabled
+    post:
+      tags: [MCP Servers]
+      summary: Create an administrator-managed MCP instance
+      description: |
+        A token or header instance cannot use one shared administrator credential
+        (`useAdminAuth`); every user connects with their own access.
+      operationId: createMcpServerInstance
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerInstanceInput'
+      responses:
+        '201':
+          description: Instance configuration saved
+        '400':
+          description: Invalid transport or provider configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required; MCP must be enabled
+        '422':
+          description: Invalid request fields or timeout bounds
+        '500':
+          description: Configuration could not be saved
+
+  /mcp-servers/instances/{instanceId}:
+    get:
+      tags: [MCP Servers]
+      summary: Get one administrator-managed MCP instance
+      operationId: getMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance configuration, without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required
+        '404':
+          description: Instance not found
+    delete:
+      tags: [MCP Servers]
+      summary: Delete an administrator-managed MCP instance
+      description: Also removes every user's saved credentials and pending sign-ins for the instance.
+      operationId: deleteMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  _id:
+                    type: string
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP delete scope required, or inherited instance cannot be changed
+        '404':
+          description: Instance not found
+    put:
+      tags: [MCP Servers]
+      summary: Update an administrator-managed MCP instance
+      description: |
+        A token or header instance cannot use one shared administrator credential
+        (`useAdminAuth`); every user connects with their own access.
+      operationId: updateMcpServerInstance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpServerInstanceInput'
+      responses:
+        '200':
+          description: Instance configuration saved
+        '400':
+          description: Invalid transport or provider configuration
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required, or inherited instance cannot be changed
+        '404':
+          description: Instance not found
+        '422':
+          description: Invalid request fields or timeout bounds
+        '500':
+          description: Configuration could not be saved
+
+  /mcp-servers/instances/{instanceId}/oauth/refresh:
+    post:
+      tags: [MCP Servers]
+      summary: Refresh the authenticated user's MCP OAuth connection
+      description: |
+        Refreshes only the caller's saved grant. Concurrent refreshes are
+        coordinated across services. Temporary store, lease or persistence
+        failures do not invalidate saved authorization.
+      operationId: refreshMcpOAuthToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refreshed credentials were saved, or a newer saved grant was reused
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Connection missing, disconnected or lacking refresh configuration
+        '401':
+          description: Authentication required, or the OAuth provider permanently rejected the grant
+        '403':
+          description: Caller lacks the required MCP write scope
+        '502':
+          description: The OAuth provider could not complete the refresh
+        '503':
+          description: Temporary configuration-store, refresh-lock or persistence failure; try again shortly
+
+  /mcp-servers/instances/{instanceId}/oauth-config:
+    get:
+      tags: [MCP Servers]
+      summary: Get masked MCP OAuth application configuration
+      operationId: getMcpOAuthConfig
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuration availability and masked client fields; retained historical secrets are never returned
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP read scope required
+    put:
+      tags: [MCP Servers]
+      summary: Configure an MCP OAuth application
+      description: |
+        Administrator-only application setup, separate from employee authorization.
+        One previous client configuration is retained server-side so grants bound
+        to that client can continue refreshing. Historical secrets are not returned.
+      operationId: updateMcpOAuthConfig
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, clientSecret]
+              properties:
+                clientId:
+                  type: string
+                clientSecret:
+                  type: string
+                  writeOnly: true
+      responses:
+        '200':
+          description: Application configuration saved
+        '401':
+          description: Authentication required
+        '403':
+          description: Administrator access and MCP write scope required
+        '404':
+          description: Instance not found in the caller's organization
+        '500':
+          description: Failed to save application configuration
+        '503':
+          description: Existing configuration could not be read safely; no replacement was written
+
+  /mcp-servers/oauth/callback:
+    get:
+      tags: [MCP Servers]
+      summary: Complete the current user's MCP OAuth authorization
+      operationId: handleMcpOAuthCallback
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: |
+            Authorization outcome. Success is reported only after the user-bound
+            credential is saved. A failed save returns success=false and
+            error=credential_save_failed; credentials and client secrets are not returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  error:
+                    type: string
+                  errorMessage:
+                    type: string
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller lacks the required MCP write scope
 
   # ==================== IN-APP NOTIFICATIONS ====================
   /notifications:

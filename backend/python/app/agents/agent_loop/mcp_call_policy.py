@@ -11,12 +11,21 @@ from dataclasses import dataclass
 from enum import Enum
 
 import httpx
-from fastmcp.exceptions import ToolError
+from mcp.shared.exceptions import MCPError
 
-from app.agents.mcp.client import MCPConnectionError, MCPProviderRejectedError
+from app.agents.mcp.errors import (
+    MCPConnectionError,
+    MCPRequestNotSentError,
+    MCPSessionExpiredError,
+    MCPUrlBlockedError,
+)
 from app.agents.mcp.models import MCPAuthMode
 from app.agents.mcp.oauth_client import MCPOAuthError, MCPRefreshTokenInvalidError
-from app.agents.mcp.token_refresh import MCPTokenRefreshError
+from app.agents.mcp.token_refresh import (
+    MCPTokenRefreshError,
+    MCPTokenRefreshTransientError,
+)
+from app.utils.outbound_http import is_proxy_denial
 
 __all__ = [
     "MAX_TOTAL_BACKOFF_SECONDS",
@@ -31,8 +40,10 @@ __all__ = [
 
 class Outcome(str, Enum):
     TOOL_ERROR = "tool_error"            # server ran the tool and reported a failure (bad arguments etc.)
-    AUTH_EXPIRED = "auth_expired"        # 401 or expiry-looking message on an OAuth instance
-    REAUTH_REQUIRED = "reauth_required"  # credentials can't be refreshed; the user must reconnect
+    AUTH_EXPIRED = "auth_expired"        # HTTP 401 on an OAuth instance
+    REAUTH_REQUIRED = "reauth_required"  # provider permanently rejected the refresh token
+    REFRESH_UNAVAILABLE = "refresh_unavailable"  # missing/incomplete configuration, not rejected credentials
+    REQUEST_NOT_SENT = "request_not_sent"
     DEAD_SESSION = "dead_session"        # client closed by an earlier failure this turn
     TRANSIENT = "transient"              # network, timeout, 429, 5xx
     REJECTED = "rejected"                # other 4xx: retrying the same call can't succeed
@@ -59,8 +70,11 @@ POLICY: dict[Outcome, Rule] = {
     Outcome.TOOL_ERROR: Rule(Action.NONE, ()),
     Outcome.AUTH_EXPIRED: Rule(Action.REFRESH, (0.0,)),
     Outcome.REAUTH_REQUIRED: Rule(Action.NONE, ()),
+    Outcome.REFRESH_UNAVAILABLE: Rule(Action.NONE, ()),
     Outcome.DEAD_SESSION: Rule(Action.REOPEN, (0.0,)),
-    Outcome.TRANSIENT: Rule(Action.REOPEN, (0.5, 1.5)),
+    Outcome.REQUEST_NOT_SENT: Rule(Action.NONE, (0.5, 1.5)),
+    # A transient failure after sending a call does not prove it never ran.
+    Outcome.TRANSIENT: Rule(Action.NONE, ()),
     Outcome.REJECTED: Rule(Action.NONE, ()),
     Outcome.UNKNOWN: Rule(Action.NONE, ()),
 }
@@ -70,46 +84,44 @@ POLICY: dict[Outcome, Rule] = {
 MAX_TOTAL_BACKOFF_SECONDS = 6.0
 _RETRY_AFTER_CAP_SECONDS = 5.0
 
-# MCP SDKs surface token expiry as a 401 or a JSON-RPC error with one of these in the
-# message, not as a typed exception.
-_EXPIRY_MARKERS = ("401", "unauthorized", "invalid_token", "invalid token", "token expired", "expired")
-
 
 def classify(exc: BaseException, *, auth_mode: str | None, last_status: int | None) -> Outcome:
-    if isinstance(exc, (MCPRefreshTokenInvalidError, MCPTokenRefreshError)):
+    # last_status is diagnostic only: it may belong to a listener or another call.
+    if isinstance(exc, MCPRefreshTokenInvalidError):
         return Outcome.REAUTH_REQUIRED
-    if isinstance(exc, ToolError):
-        return Outcome.TOOL_ERROR
-    if isinstance(exc, RuntimeError) and "not connected" in str(exc).lower():
+    if isinstance(exc, MCPTokenRefreshTransientError):
+        return Outcome.TRANSIENT
+    if isinstance(exc, MCPTokenRefreshError):
+        return Outcome.REFRESH_UNAVAILABLE
+    if isinstance(exc, MCPUrlBlockedError):
+        return Outcome.REJECTED
+    if isinstance(exc, MCPSessionExpiredError):
         return Outcome.DEAD_SESSION
+    if isinstance(exc, MCPRequestNotSentError):
+        return Outcome.REQUEST_NOT_SENT
+    if isinstance(exc, MCPError):
+        return Outcome.TOOL_ERROR
     if isinstance(exc, (httpx.TransportError, asyncio.TimeoutError, TimeoutError)):
         return Outcome.TRANSIENT
 
-    status = exc.status_code if isinstance(exc, MCPProviderRejectedError) else None
+    status = exc.status_code if isinstance(exc, MCPConnectionError) else None
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
-    if status is None and isinstance(exc, MCPConnectionError):
-        status = last_status
+        if is_proxy_denial(status, exc.response.headers):
+            return Outcome.REJECTED
     if status is not None:
-        if status == 401 or (status == 403 and auth_mode == MCPAuthMode.OAUTH.value):
-            return _auth_outcome(auth_mode)
-        if status == 429 or status >= 500:
+        if status == 401 and auth_mode == MCPAuthMode.OAUTH.value:
+            return Outcome.AUTH_EXPIRED
+        if status in (408, 429) or status >= 500:
             return Outcome.TRANSIENT
         if 400 <= status < 500:
             return Outcome.REJECTED
 
     if isinstance(exc, MCPOAuthError):
         return Outcome.TRANSIENT  # token endpoint unreachable; the credential itself is still good
-    if any(marker in str(exc).lower() for marker in _EXPIRY_MARKERS):
-        return _auth_outcome(auth_mode)
     if isinstance(exc, MCPConnectionError):
         return Outcome.TRANSIENT
     return Outcome.UNKNOWN
-
-
-def _auth_outcome(auth_mode: str | None) -> Outcome:
-    # Only OAuth credentials can be refreshed without the user; anything else needs a reconnect.
-    return Outcome.AUTH_EXPIRED if auth_mode == MCPAuthMode.OAUTH.value else Outcome.REAUTH_REQUIRED
 
 
 def retry_after_seconds(exc: BaseException) -> float | None:

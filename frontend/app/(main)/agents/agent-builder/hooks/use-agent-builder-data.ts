@@ -9,6 +9,8 @@ import {
 import type { Connector } from '@/app/(main)/workspace/connectors/types';
 import { getConnectorIconConfig } from '@/app/components/ui/ConnectorIcon';
 import { ChatApi } from '@/chat/api';
+import { catalogIdentityFromToken, currentCatalogIdentity, mcpCatalogRevision } from '@/chat/mcp-catalog-refresh';
+import { useAuthStore } from '@/lib/store/auth-store';
 import type { AvailableLlmModel } from '@/chat/types';
 import type { AgentDetail, KnowledgeHubAppNode } from '../../types';
 import { ToolsetsApi, type BuilderSidebarToolset } from '@/app/(main)/toolsets/api';
@@ -157,14 +159,16 @@ async function fetchAgentAndToolsets(editingAgentKey: string | null) {
   const agentDetails = editingAgentKey
     ? await AgentsApi.getAgent(editingAgentKey).then((r) => r.agent).catch(() => null)
     : null;
+  let mcpLoadFailed = false;
   const [allToolsets, mcpServers] = await Promise.all([
     loadToolsetsForAgentContext(agentDetails, editingAgentKey),
     loadMcpServersForAgentContext(agentDetails, editingAgentKey).catch((err) => {
       console.error('Failed to fetch MCP servers:', err);
+      mcpLoadFailed = true;
       return [] as McpMyServerEntry[];
     }),
   ]);
-  return { agentDetails, allToolsets, mcpServers };
+  return { agentDetails, allToolsets, mcpServers, mcpLoadFailed };
 }
 
 export function useAgentBuilderData(editingAgentKey: string | null) {
@@ -177,12 +181,16 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
   const [configuredConnectors, setConfiguredConnectors] = useState<Connector[]>([]);
   const [toolsets, setToolsets] = useState<BuilderSidebarToolset[]>([]);
   const [mcpServers, setMcpServers] = useState<McpMyServerEntry[]>([]);
+  const [mcpLoadError, setMcpLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadedAgent, setLoadedAgent] = useState<AgentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toolsetsSearchRef = useRef('');
   const staticResourcesLoadedRef = useRef(false);
+  const mcpRequestVersion = useRef(0);
+  const catalogIdentity = useAuthStore((state) => catalogIdentityFromToken(state.accessToken));
+  const previousIdentity = useRef(catalogIdentity);
 
   const refreshToolsets = useCallback(
     async (agentKey?: string | null, isServiceAccount?: boolean, search?: string) => {
@@ -212,8 +220,12 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
 
   const refreshMcpServers = useCallback(
     async (agentKey?: string | null, isServiceAccount?: boolean) => {
+      const version = ++mcpRequestVersion.current;
+      const identity = currentCatalogIdentity();
+      const revision = mcpCatalogRevision();
       if (!isMcpEnabledNow()) {
         setMcpServers([]);
+        setMcpLoadError(false);
         return;
       }
       const svc = Boolean(isServiceAccount) && Boolean(agentKey);
@@ -221,14 +233,28 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
         const { instances } = svc
           ? await McpServersApi.getAgentMcpServers(agentKey!, true)
           : await McpServersApi.getMyMcpServers(true);
-        setMcpServers(instances);
+        if (
+          version === mcpRequestVersion.current &&
+          identity === currentCatalogIdentity() &&
+          revision === mcpCatalogRevision()
+        ) {
+          setMcpServers(instances);
+          setMcpLoadError(false);
+        }
       } catch (err) {
         // Matches loadMcpServersForAgentContext's callers: this is awaited inside
         // Promise.all in refreshAgent (a rejection here would otherwise also discard the
-        // sibling toolset refresh) and fired as `void refreshMcpServers()` from the OAuth
-        // message listener, where a rejection would be silently unhandled either way.
+        // sibling toolset refresh) and fired from catalog-change listeners, where
+        // a rejection would otherwise be silently unhandled.
         console.error('Failed to refresh MCP servers:', err);
-        setMcpServers([]);
+        if (
+          version === mcpRequestVersion.current &&
+          identity === currentCatalogIdentity() &&
+          revision === mcpCatalogRevision()
+        ) {
+          setMcpServers([]);
+          setMcpLoadError(true);
+        }
       }
     },
     []
@@ -248,6 +274,14 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
 
   useEffect(() => {
     let cancelled = false;
+    const version = ++mcpRequestVersion.current;
+    const revision = mcpCatalogRevision();
+    setMcpServers([]);
+    setMcpLoadError(false);
+    if (previousIdentity.current !== catalogIdentity) {
+      staticResourcesLoadedRef.current = false;
+      previousIdentity.current = catalogIdentity;
+    }
 
     const run = async () => {
       try {
@@ -270,11 +304,13 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
           setConfiguredConnectors(staticRes.configuredConnectors);
 
           toolsetsSearchRef.current = '';
+          let mcpLoadFailed = false;
 
           const [allToolsets, mcpServerEntries] = await Promise.all([
             loadToolsetsForAgentContext(agentPromise, editingAgentKey),
             loadMcpServersForAgentContext(agentPromise, editingAgentKey).catch((err) => {
               console.error('Failed to fetch MCP servers:', err);
+              mcpLoadFailed = true;
               return [] as McpMyServerEntry[];
             }),
           ]);
@@ -283,12 +319,19 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
 
           setLoadedAgent(agentPromise ?? null);
           setToolsets(allToolsets);
-          setMcpServers(mcpServerEntries);
+          if (
+            version === mcpRequestVersion.current &&
+            revision === mcpCatalogRevision() &&
+            catalogIdentity === currentCatalogIdentity()
+          ) {
+            setMcpServers(mcpServerEntries);
+            setMcpLoadError(mcpLoadFailed);
+          }
           staticResourcesLoadedRef.current = true;
         } else {
           toolsetsSearchRef.current = '';
 
-          const { agentDetails, allToolsets, mcpServers: mcpServerEntries } = await fetchAgentAndToolsets(
+          const { agentDetails, allToolsets, mcpServers: mcpServerEntries, mcpLoadFailed } = await fetchAgentAndToolsets(
             editingAgentKey
           );
 
@@ -296,7 +339,14 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
 
           setLoadedAgent(agentDetails);
           setToolsets(allToolsets);
-          setMcpServers(mcpServerEntries);
+          if (
+            version === mcpRequestVersion.current &&
+            revision === mcpCatalogRevision() &&
+            catalogIdentity === currentCatalogIdentity()
+          ) {
+            setMcpServers(mcpServerEntries);
+            setMcpLoadError(mcpLoadFailed);
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -315,7 +365,7 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [editingAgentKey]);
+  }, [editingAgentKey, catalogIdentity]);
 
   useEffect(() => {
     setAvailableTools(mergeToolsFromAgentDetail(loadedAgent, buildToolsCatalogFromToolsets(toolsets)));
@@ -330,6 +380,7 @@ export function useAgentBuilderData(editingAgentKey: string | null) {
     configuredConnectors,
     toolsets,
     mcpServers,
+    mcpLoadError,
     loading,
     loadedAgent,
     error,

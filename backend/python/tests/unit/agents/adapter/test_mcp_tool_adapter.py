@@ -7,6 +7,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from mcp.types import (
+    CallToolResult,
+    EmbeddedResource,
+    TextContent,
+    TextResourceContents,
+)
 
 from app.agent_loop_lib.core.types import ToolCall
 from app.agent_loop_lib.tools.errors import ToolValidationError
@@ -46,11 +52,6 @@ class _FakeCallResult:
     is_error: bool = False
     data: Any = None
     content: list[Any] = field(default_factory=list)
-
-
-@dataclass
-class _TextBlock:
-    text: str
 
 
 class _FakeSessionManager:
@@ -356,8 +357,31 @@ class TestValidationBlocksExecutionViaToolExecutor:
 
 
 class TestExecuteSuccess:
-    async def test_uses_data_field_when_present(self) -> None:
-        result = _FakeCallResult(is_error=False, data={"issues": ["PA-1"]})
+    async def test_native_structured_source_fields_do_not_override_protocol_success(self) -> None:
+        data = {"success": False, "error": "an incident report", "data": {"issues": ["PA-1"]}}
+        result = CallToolResult(content=[], structured_content=data)
+        output = await _make_adapter(_FakeSessionManager(result=result)).execute(query="PA")
+        assert output.success is True
+        assert output.data == data
+
+    async def test_mixed_text_and_resource_blocks_are_preserved(self) -> None:
+        result = CallToolResult(content=[
+            TextContent(type="text", text="A source"),
+            EmbeddedResource(type="resource", resource=TextResourceContents(uri="file:///note", text="Authorized content")),
+        ])
+        output = await _make_adapter(_FakeSessionManager(result=result)).execute(query="PA")
+        assert output.success is True
+        assert output.data == "A source\n[resource file:///note]\nAuthorized content"
+
+    async def test_large_native_output_is_explicitly_bounded(self) -> None:
+        result = CallToolResult(content=[TextContent(type="text", text="a" * 200_001)])
+        output = await _make_adapter(_FakeSessionManager(result=result)).execute(query="PA")
+        assert output.success is True
+        assert len(output.data) <= 200_000
+        assert "[MCP tool output cut:" in output.data
+
+    async def test_uses_structured_content_when_present(self) -> None:
+        result = CallToolResult(content=[], structured_content={"issues": ["PA-1"]})
         adapter = _make_adapter(_FakeSessionManager(result=result))
 
         output = await adapter.execute(query="PA")
@@ -365,8 +389,8 @@ class TestExecuteSuccess:
         assert output.success is True
         assert output.data == {"issues": ["PA-1"]}
 
-    async def test_falls_back_to_content_text_blocks_when_no_data(self) -> None:
-        result = _FakeCallResult(is_error=False, data=None, content=[_TextBlock("hello"), _TextBlock("world")])
+    async def test_joins_text_blocks_without_structured_content(self) -> None:
+        result = CallToolResult(content=[TextContent(type="text", text="hello"), TextContent(type="text", text="world")])
         adapter = _make_adapter(_FakeSessionManager(result=result))
 
         output = await adapter.execute(query="PA")
@@ -385,7 +409,7 @@ class TestExecuteSuccess:
 
 class TestExecuteFailure:
     async def test_is_error_result_returns_failed_output(self) -> None:
-        result = _FakeCallResult(is_error=True, data="tool exploded")
+        result = CallToolResult(is_error=True, content=[TextContent(type="text", text="tool exploded")])
         adapter = _make_adapter(_FakeSessionManager(result=result))
 
         output = await adapter.execute(query="PA")

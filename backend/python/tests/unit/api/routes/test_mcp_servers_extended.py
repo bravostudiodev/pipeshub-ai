@@ -293,7 +293,9 @@ class TestRefreshOAuthToken:
         from app.api.routes.mcp_servers import refresh_oauth_token
 
         mock_config = AsyncMock()
-        mock_config.get_config = AsyncMock(return_value={"isAuthenticated": True, "instanceId": "inst-1"})
+        rejected = MCPRefreshTokenInvalidError("token rejected")
+        rejected.rejected_auth = {"isAuthenticated": True, "instanceId": "inst-1"}
+        mock_config.get_config = AsyncMock(return_value=dict(rejected.rejected_auth))
         mock_config.set_config = AsyncMock(return_value=True)
 
         request = _mock_request(
@@ -309,15 +311,14 @@ class TestRefreshOAuthToken:
             mock_refresh.MCPTokenRefreshError = ValueError
             mock_oauth.MCPRefreshTokenInvalidError = MCPRefreshTokenInvalidError
             mock_oauth.MCPOAuthError = Exception
-            mock_refresh.refresh_credential_record = AsyncMock(
-                side_effect=MCPRefreshTokenInvalidError("token rejected"))
+            mock_refresh.refresh_credential_record = AsyncMock(side_effect=rejected)
 
             with pytest.raises(HTTPException) as exc_info:
                 await refresh_oauth_token(request, "inst-1")
             assert exc_info.value.status_code == 401
 
-        mock_config.set_config.assert_awaited_once()
-        saved_record = mock_config.set_config.call_args[0][1]
+        mock_config.compare_and_set_config.assert_awaited_once()
+        saved_record = mock_config.compare_and_set_config.call_args[0][2]
         assert saved_record["isAuthenticated"] is False
 
     @pytest.mark.asyncio

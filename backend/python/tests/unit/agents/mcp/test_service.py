@@ -11,6 +11,7 @@ from app.agents.mcp.service import (
     instance_config_from_dict,
     is_effective_auth_authenticated,
     is_mcp_enabled,
+    legacy_mcp_selection_owners,
     load_org_instances,
     match_enabled_tools_for_mcp_server,
     resolve_effective_user_auth,
@@ -178,7 +179,8 @@ class TestGetAuthenticatedMcpServers:
         assert [r["instanceId"] for r in result] == ["inst-1"]
 
     @pytest.mark.asyncio
-    async def test_dedupes_by_type_key_keeping_first(self) -> None:
+    async def test_keeps_every_instance_of_a_shared_type(self) -> None:
+        # Same-type instances are kept; the agent loop gives later ones collision-safe names.
         first = _instance(_id="inst-1", typeId="brave_search", name="Brave A")
         second = _instance(_id="inst-2", typeId="brave_search", name="Brave B")
         cfg = MagicMock()
@@ -197,8 +199,7 @@ class TestGetAuthenticatedMcpServers:
 
         cfg.get_config = AsyncMock(side_effect=_get_config_side_effect)
         result = await get_authenticated_mcp_servers("user-1", cfg)
-        assert len(result) == 1
-        assert result[0]["instanceId"] == "inst-1"
+        assert [server["instanceId"] for server in result] == ["inst-1", "inst-2"]
 
     @pytest.mark.asyncio
     async def test_no_instances_returns_empty(self) -> None:
@@ -330,3 +331,24 @@ class TestIsMcpEnabled:
             side_effect=RuntimeError("unwired"),
         ):
             assert await is_mcp_enabled(None) is False
+
+
+class TestLegacyMcpSelectionOwners:
+    def test_longest_type_prefix_owns_a_bare_name(self) -> None:
+        servers = [
+            {"instanceId": "a", "typeId": "slack", "name": "Slack"},
+            {"instanceId": "b", "typeId": "slack_bar", "name": "Slack Bar"},
+        ]
+        assert legacy_mcp_selection_owners(servers, {"mcp_slack_bar_search"}) == {"mcp_slack_bar_search": "b"}
+        assert legacy_mcp_selection_owners(servers, {"mcp_slack_post"}) == {"mcp_slack_post": "a"}
+
+    def test_an_exact_tool_list_wins_over_a_prefix(self) -> None:
+        servers = [
+            {"instanceId": "a", "typeId": "notion", "name": "Notion"},
+            {"instanceId": "b", "typeId": "notion", "name": "Notion 2", "tools": [{"fullName": "mcp_notion_search"}]},
+        ]
+        assert legacy_mcp_selection_owners(servers, {"mcp_notion_search"}) == {"mcp_notion_search": "b"}
+
+    def test_scoped_selections_are_not_reassigned(self) -> None:
+        servers = [{"instanceId": "a", "typeId": "notion", "name": "Notion"}]
+        assert legacy_mcp_selection_owners(servers, {"b:mcp_notion_search"}) == {}

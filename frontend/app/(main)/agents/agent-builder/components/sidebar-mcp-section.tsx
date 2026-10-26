@@ -17,10 +17,11 @@ import type { McpInstanceIdFlowNode } from '../sidebar-mcp-utils';
 import { SidebarCategoryRow } from './sidebar-category-row';
 import { AgentBuilderPaletteSkeletonList } from './agent-builder-palette-skeleton';
 import { McpCredentialsDialog } from './agent-mcp-credentials-dialog';
-import { isMcpOAuthSuccessMessageType } from '../../../workspace/mcp-servers/oauth/mcp-oauth-window-messages';
+import { MCP_CATALOG_CHANGED_EVENT } from '@/chat/mcp-catalog-refresh';
 
 export function AgentBuilderMcpSection(props: {
   mcpServers: McpMyServerEntry[];
+  mcpLoadError?: boolean;
   loading: boolean;
   refreshMcpServers: () => Promise<void>;
   mcpMergeCheckNodes: McpInstanceIdFlowNode[];
@@ -33,6 +34,7 @@ export function AgentBuilderMcpSection(props: {
 }) {
   const {
     mcpServers,
+    mcpLoadError = false,
     loading,
     refreshMcpServers,
     mcpMergeCheckNodes,
@@ -77,23 +79,20 @@ export function AgentBuilderMcpSection(props: {
   );
 
   useEffect(() => {
-    const onOAuthMessage = (event: MessageEvent) => {
-      if (typeof window !== 'undefined' && event.origin !== window.location.origin) return;
-      if (!isMcpOAuthSuccessMessageType(event.data?.type)) return;
-      void refreshMcpServers();
-    };
-    window.addEventListener('message', onOAuthMessage);
-    return () => window.removeEventListener('message', onOAuthMessage);
-  }, [refreshMcpServers]);
+    if (isServiceAccount) return;
+    const refresh = () => { void refreshMcpServers(); };
+    window.addEventListener(MCP_CATALOG_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(MCP_CATALOG_CHANGED_EVENT, refresh);
+  }, [isServiceAccount, refreshMcpServers]);
 
   if (loading) {
     return <AgentBuilderPaletteSkeletonList count={3} />;
   }
 
-  if (mcpServers.length === 0) {
+  if (mcpLoadError || mcpServers.length === 0) {
     return (
       <Text size="1" style={{ color: 'var(--slate-11)', fontStyle: 'italic', padding: '4px 8px' }}>
-        {t('agentBuilder.noMcpServersAvailable')}
+        {mcpLoadError ? t('workspace.mcpServers.toasts.loadError') : t('agentBuilder.noMcpServersAvailable')}
       </Text>
     );
   }

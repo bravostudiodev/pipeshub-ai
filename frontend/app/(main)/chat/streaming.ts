@@ -21,6 +21,7 @@ import { buildChatArtifact } from './utils/build-chat-artifact';
 import { appendResumeParts } from './utils/tool-display';
 import { debugLog } from './debug-logger';
 import { loadHistoricalMessages, getThreadMessagePlainText, isUsableFollowUpText } from './runtime';
+import { bareToolFullName, encodeToolSelectionForWire } from './tool-groups';
 import {
   hasUnansweredQuestions,
   mergeAskUserQuestionPayloads,
@@ -1506,12 +1507,6 @@ export async function streamRegenerateForSlot(
     if (threadAgentId && slotAgentId !== threadAgentId) {
       useChatStore.getState().updateSlot(slotId, { threadAgentId });
     }
-    /** Strip `instanceId:` prefix added for UI multi-instance isolation. */
-    const stripInstancePrefix = (key: string) => {
-      const colon = key.indexOf(':');
-      return colon >= 0 ? key.slice(colon + 1) : key;
-    };
-
     if (threadAgentId) {
       const { chatMode } = buildStreamRequestModeFields(store.settings, true);
       const agentApiChatMode = streamChatModeToAgentApiChatMode(chatMode);
@@ -1525,7 +1520,7 @@ export async function streamRegenerateForSlot(
       // cap on agents with many multi-action toolsets.
       const regenTools = agentToolsSel === null
         ? undefined
-        : [...new Set(agentToolsSel.map(stripInstancePrefix))];
+        : encodeToolSelectionForWire(agentToolsSel, store.agentChatMcpGroups);
       const scopedCaps = useChatStore.getState().scopedAgentCapabilities[threadAgentId]
         ?? { internalSearch: true, webSearch: true };
       const agentRegenReasoningEffortOverride = useChatStore.getState().settings.reasoningEffort[regenCtxKey] ?? null;
@@ -1554,13 +1549,17 @@ export async function streamRegenerateForSlot(
       const { chatMode } = buildStreamRequestModeFields(store.settings, false);
       // Universal agent mode: read current tool selection at regen time
       const isUniversalAgent = store.settings.queryMode === 'agent';
-      const universalToolsSel = useChatStore.getState().universalAgentStreamTools;
-      // null → no filter: omit the field so the backend attaches every authenticated toolset
-      // and MCP server. Sending only the toolset catalog would make it drop all MCP servers.
-      const regenStreamTools =
-        isUniversalAgent && universalToolsSel !== null
-          ? [...new Set(universalToolsSel.map(stripInstancePrefix))]
-          : undefined;
+      const current = useChatStore.getState();
+      const projectScope = current.projectScope;
+      const toolsSel = projectScope ? current.projectStreamTools : current.universalAgentStreamTools;
+      const mcpGroups = projectScope ? projectScope.mcpGroups : current.universalAgentMcpGroups;
+      // null → no filter: the project policy is still enforced by Node.
+      const encoded = isUniversalAgent && toolsSel !== null
+        ? encodeToolSelectionForWire(toolsSel, mcpGroups) : undefined;
+      const legacyProjectKeys = new Set(projectScope?.legacyMcpKeys ?? []);
+      const regenStreamTools = encoded?.map((key) =>
+        legacyProjectKeys.has(key) ? bareToolFullName(key) : key
+      );
       // Left unset when the user chose nothing, so the backend applies the model's default.
       const assistantRegenReasoningEffort =
         useChatStore.getState().settings.reasoningEffort[regenCtxKey] ?? null;

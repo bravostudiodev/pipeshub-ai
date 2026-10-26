@@ -562,6 +562,10 @@ class AnswerFinalizer:
 
     async def _emit_error_response(self, error_msg: str, *, event_sink: EventSink) -> dict[str, Any]:
         error_code, user_message = classify_error(error_msg)
+        # The user sees a fixed message; the provider's own text is only here.
+        (self._context.logger or logger).warning(
+            "Agent run failed: error_code=%s provider_error=%s", error_code, error_msg[:4000],
+        )
         error_response = {
             "answer": user_message,
             "citations": [],

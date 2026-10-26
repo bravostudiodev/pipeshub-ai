@@ -74,6 +74,10 @@ class FetchError(Exception):
         self.status_code = status_code
 
 
+class UnresolvableHostError(FetchError):
+    """A DNS failure, distinct from a target that violates address policy."""
+
+
 # Hostnames that must never be fetched (SSRF / metadata endpoints).
 _BLOCKED_HOSTNAMES = frozenset(
     {
@@ -123,7 +127,7 @@ _CLOUD_METADATA_ADDRESSES = frozenset(
 )
 
 
-def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True) -> bool:
+def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True, allow_private: bool = False) -> bool:
     """True if the address must not be contacted by the generic HTTP fetcher.
 
     NAT64 well-known-prefix addresses are unwrapped to their embedded IPv4 address and
@@ -135,11 +139,19 @@ def _ip_is_blocked(ip: IPAddress, *, block_non_global: bool = True) -> bool:
     flagged private either, e.g. CGNAT ``100.64.0.0/10``. Known cloud metadata addresses are
     rejected regardless of it.
     """
-    if isinstance(ip, ipaddress.IPv6Address) and ip in _NAT64_WELL_KNOWN_PREFIX:
-        embedded_ipv4 = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-        return _ip_is_blocked(embedded_ipv4, block_non_global=block_non_global)
-    if ip in _CLOUD_METADATA_ADDRESSES:
+    policy = {"block_non_global": block_non_global, "allow_private": allow_private}
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return _ip_is_blocked(ip.ipv4_mapped, **policy)
+        if ip in _NAT64_WELL_KNOWN_PREFIX:
+            return _ip_is_blocked(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF), **policy)
+        embedded = [ip.sixtofour] if ip.sixtofour is not None else list(ip.teredo or ())
+        if any(_ip_is_blocked(address, **policy) for address in embedded):
+            return True
+    if is_never_allowed_address(ip):
         return True
+    if allow_private:
+        return bool(ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
     return bool(
         ip.is_private
         or ip.is_loopback
@@ -194,18 +206,20 @@ def is_never_allowed_address(ip: IPAddress) -> bool:
     return ip.is_link_local or ip in _CLOUD_METADATA_ADDRESSES or ip == _AWS_IPV6_METADATA_ADDRESS
 
 
-def _hostname_is_blocked(hostname: str) -> bool:
+def _hostname_is_blocked(hostname: str, *, allow_private: bool = False) -> bool:
     hn = hostname.lower().removesuffix(".")
     if hn in _BLOCKED_HOSTNAMES:
         return True
-    if hn.endswith(".localhost") or hn.endswith(".local"):
+    if hn.endswith(".localhost"):
         return True
-    return False
+    return hn.endswith(".local") and not allow_private
 
 
-def resolve_public_http_target(url: str, *, block_non_global: bool = True) -> PublicTarget:
+def resolve_public_http_target(
+    url: str, *, block_non_global: bool = True, allow_private: bool = False,
+) -> PublicTarget:
     try:
-        return _resolve_public_http_target(url, block_non_global=block_non_global)
+        return _resolve_public_http_target(url, block_non_global=block_non_global, allow_private=allow_private)
     except FetchError as e:
         log_denied(url, _denial_reason(str(e)))
         raise
@@ -221,7 +235,9 @@ def _denial_reason(message: str) -> str:
     return "blocked_address"
 
 
-def _resolve_public_http_target(url: str, *, block_non_global: bool = True) -> PublicTarget:
+def _resolve_public_http_target(
+    url: str, *, block_non_global: bool = True, allow_private: bool = False,
+) -> PublicTarget:
     """Resolve ``url`` and reject it if it could reach loopback, RFC1918, link-local,
     cloud metadata or other non-public addresses. Every resolved address must pass,
     so one private A record among public ones is enough to reject the URL.
@@ -232,35 +248,14 @@ def _resolve_public_http_target(url: str, *, block_non_global: bool = True) -> P
     Raises:
         FetchError: if the URL's scheme/hostname/port/resolved address is disallowed.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in _DEFAULT_PORTS:
-        raise FetchError(f"Only HTTP/HTTPS URLs are allowed, got scheme {parsed.scheme!r}")
-
-    hostname = parsed.hostname
-    if not hostname:
-        raise FetchError("URL has no hostname")
-
-    try:
-        port = parsed.port or _DEFAULT_PORTS[parsed.scheme]
-    except ValueError as e:
-        raise FetchError("URL has an invalid port") from e
-
-    if _hostname_is_blocked(hostname):
-        raise FetchError(f"Blocked unsafe URL hostname: {hostname}")
-
-    try:
-        literal_ip = ipaddress.ip_address(hostname)
-    except ValueError:
-        literal_ip = None
-    if literal_ip is not None:
-        if _ip_is_blocked(literal_ip, block_non_global=block_non_global):
-            raise FetchError(f"Blocked unsafe URL address: {literal_ip}")
-        return PublicTarget(parsed.scheme, hostname, port, (literal_ip,))
+    scheme, hostname, port, address = _check_static_target(url, block_non_global=block_non_global, allow_private=allow_private)
+    if address is not None:
+        return PublicTarget(scheme, hostname, port, (address,))
 
     try:
         infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except socket.gaierror as e:
-        raise FetchError(f"Could not resolve hostname {hostname!r}: {e}") from e
+        raise UnresolvableHostError(f"Could not resolve hostname {hostname!r}: {e}") from e
 
     addresses: list[IPAddress] = []
     for info in infos:
@@ -268,14 +263,39 @@ def _resolve_public_http_target(url: str, *, block_non_global: bool = True) -> P
             ip = ipaddress.ip_address(info[4][0])
         except ValueError:
             continue
-        if _ip_is_blocked(ip, block_non_global=block_non_global):
+        if _ip_is_blocked(ip, block_non_global=block_non_global, allow_private=allow_private):
             raise FetchError(f"Blocked unsafe URL: hostname {hostname!r} resolves to {ip}")
         if ip not in addresses:
             addresses.append(ip)
 
     if not addresses:
-        raise FetchError(f"No addresses resolved for hostname {hostname!r}")
-    return PublicTarget(parsed.scheme, hostname, port, tuple(addresses))
+        raise UnresolvableHostError(f"No addresses resolved for hostname {hostname!r}")
+    return PublicTarget(scheme, hostname, port, tuple(addresses))
+
+
+def _check_static_target(
+    url: str, *, block_non_global: bool, allow_private: bool,
+) -> tuple[str, str, int, IPAddress | None]:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or _DEFAULT_PORTS.get(parsed.scheme)
+    except ValueError as exc:
+        raise FetchError("URL has an invalid port or authority") from exc
+    if parsed.scheme not in _DEFAULT_PORTS:
+        raise FetchError(f"Only HTTP/HTTPS URLs are allowed, got scheme {parsed.scheme!r}")
+    if not hostname:
+        raise FetchError("URL has no hostname")
+    if _hostname_is_blocked(hostname, allow_private=allow_private):
+        raise FetchError(f"Blocked unsafe URL hostname: {hostname}")
+    address = literal_ip(hostname)
+    if address is not None and _ip_is_blocked(address, block_non_global=block_non_global, allow_private=allow_private):
+        raise FetchError(f"Blocked unsafe URL address: {address}")
+    return parsed.scheme, hostname, port, address
+
+
+def check_http_url_without_resolving(url: str, *, block_non_global: bool = True, allow_private: bool = False) -> None:
+    _check_static_target(url, block_non_global=block_non_global, allow_private=allow_private)
 
 
 def validate_public_http_url(url: str, *, block_non_global: bool = True) -> None:

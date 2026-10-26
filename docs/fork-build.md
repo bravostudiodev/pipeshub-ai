@@ -40,6 +40,27 @@ it. A normal application code change should only rebuild the application
 image. The default Python base omits the large local BGE dense embedding model;
 see `BUNDLE_BGE_EMBEDDING` in `Dockerfile.base` when local embedding is needed.
 
+## MCP SDK dependency checkpoint
+
+The MCP runtime now requires `mcp==2.3.0` and `httpx2==2.12.0` rather than
+FastMCP. Rebuild/publish `python-deps` from the changed manifest before building
+the application image. Rebuilding only application code against the old base
+will not install these packages. The runtime OS base does not need a rebuild
+for this dependency change. Ensure the application build pulls the newly
+published dependency image rather than reusing a cached older tag.
+
+Verify the dependency image, then verify the same versions in the resulting
+application image:
+
+```bash
+docker run --rm --entrypoint python doc.lan.dc11.us/platform/pipeshubai-base:python-deps -c 'from importlib.metadata import version; from mcp import Client; import httpx2; assert version("mcp") == "2.3.0"; assert version("httpx2") == "2.12.0"; print("MCP SDK dependencies verified")'
+```
+
+Local SDK/HTTP/SSE/STDIO regressions have been exercised with those versions;
+base-image builds and real-provider/proxy smoke checks have not yet been run.
+Normal deployment remains the intended path after those checks; no separate
+canary or traffic-splitting process is required.
+
 ## Bravo stages
 
 [`../.bravo/config.yaml`](../.bravo/config.yaml) runs **App build** with

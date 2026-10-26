@@ -5,6 +5,7 @@ import sys
 from collections.abc import Callable
 
 from httpx import URL
+from httpx2 import URL as McpURL
 
 from app.utils.request_context import NO_CONTEXT, current_display_id, get_context
 from app.utils.url_redaction import redact_sensitive_query_params, redact_url
@@ -113,7 +114,7 @@ class HttpxSuccessFilter(logging.Filter):
                     return False
                 break
         record.args = tuple(
-            redact_url(str(arg)) if isinstance(arg, URL) else arg for arg in record.args
+            redact_url(str(arg)) if isinstance(arg, (URL, McpURL)) else arg for arg in record.args
         )
         return True
 
@@ -192,6 +193,7 @@ logging.getLogger("uvicorn.access").addFilter(AccessLogRedactionFilter())
 
 # httpx logs every outbound request at INFO. Keep the failures, drop the 2xx.
 logging.getLogger("httpx").addFilter(HttpxSuccessFilter())
+logging.getLogger("httpx2").addFilter(HttpxSuccessFilter())
 
 
 def create_logger(service_name: str) -> logging.Logger:

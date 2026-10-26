@@ -139,6 +139,11 @@ def test_invalid_request_without_extractable_message_uses_canned_text() -> None:
 
 # -- request_too_large (413 / context-length) --
 
+_TOO_LARGE = (
+        "This request was too large for the selected model. Try a narrower "
+        "question, or start a new conversation."
+    )
+
 
 def test_request_too_large_wins_over_rate_limit_hints() -> None:
     """Groq returns 413 with `code: rate_limit_exceeded` and "rate limit" in
@@ -155,11 +160,11 @@ def test_request_too_large_wins_over_rate_limit_hints() -> None:
     )
     error_code, message = classify_error(raw)
     assert error_code == "request_too_large"
-    assert "Limit 7000" in message
+    assert message == _TOO_LARGE
     assert "rate limited" not in message.lower()
 
 
-def test_request_too_large_surfaces_provider_message() -> None:
+def test_request_too_large_keeps_provider_text_out_of_the_answer() -> None:
     raw = (
         "LangChain transport error (stream): Error code: 413 - "
         "{'error': {'message': 'Request too large for model `qwen/qwen3.8-27b`', "
@@ -167,8 +172,7 @@ def test_request_too_large_surfaces_provider_message() -> None:
     )
     error_code, message = classify_error(raw)
     assert error_code == "request_too_large"
-    assert "Request too large" in message
-    assert "LangChain transport error" not in message
+    assert message == _TOO_LARGE
 
 
 def test_request_too_large_context_length_exceeded() -> None:
@@ -181,17 +185,14 @@ def test_request_too_large_context_length_exceeded() -> None:
     )
     error_code, message = classify_error(raw)
     assert error_code == "request_too_large"
-    assert "128000" in message
+    assert message == _TOO_LARGE
 
 
 def test_request_too_large_without_extractable_message_uses_canned_text() -> None:
     raw = "something about payload too large without structured body"
     error_code, message = classify_error(raw)
     assert error_code == "request_too_large"
-    assert message == (
-        "This conversation is too long for the selected model. Shorten your "
-        "message or start a new conversation."
-    )
+    assert message == _TOO_LARGE
 
 
 def test_provider_account_metadata_is_redacted_from_surfaced_messages() -> None:

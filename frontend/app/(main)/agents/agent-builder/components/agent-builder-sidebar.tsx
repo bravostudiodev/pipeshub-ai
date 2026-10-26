@@ -124,6 +124,7 @@ export function AgentBuilderSidebar(props: {
     search?: string
   ) => Promise<void>;
   mcpServers: McpMyServerEntry[];
+  mcpLoadError: boolean;
   mcpMergeCheckNodes: McpInstanceIdFlowNode[];
   refreshMcpServers: () => Promise<void>;
   onNotify: (message: string) => void;
@@ -151,6 +152,7 @@ export function AgentBuilderSidebar(props: {
     toolsetMergeCheckNodes,
     refreshToolsets,
     mcpServers,
+    mcpLoadError,
     mcpMergeCheckNodes,
     refreshMcpServers,
     onNotify,
@@ -574,6 +576,7 @@ export function AgentBuilderSidebar(props: {
                 <Box className="agent-builder-palette-nest" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <AgentBuilderMcpSection
                     mcpServers={mcpServers}
+                    mcpLoadError={mcpLoadError}
                     loading={loading}
                     refreshMcpServers={refreshMcpServers}
                     mcpMergeCheckNodes={mcpMergeCheckNodes}

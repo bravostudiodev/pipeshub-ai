@@ -20,6 +20,8 @@ from app.agents.mcp.client import MCPConnectionError
 from app.agents.mcp.models import MCPToolInfo
 from tests.unit.agents.adapter.conftest import make_context
 
+pytestmark = pytest.mark.usefixtures("stub_mcp_discovery")
+
 
 def _instance(instance_id: str = "inst-1", *, type_id: str = "jira_mcp") -> dict[str, Any]:
     return {
@@ -44,6 +46,33 @@ def _context_with_server(
     )
 
 
+def _existing_tool(name: str) -> Any:  # noqa: ANN401
+    from app.agent_loop_lib.tools.base import ToolOutput, ToolParameter
+
+    class _Existing:
+        short_description = "existing"
+        description = "existing"
+        parameters: list[ToolParameter] = []
+
+        async def execute(self, **kwargs: Any) -> ToolOutput:
+            return ToolOutput(success=True, data="existing")
+
+    tool = _Existing()
+    tool.name = name
+    tool.path = f"/existing/{name}"
+    return tool
+
+
+def _alias(instance_id: str, tool_name: str) -> str:
+    from app.agents.agent_loop.mcp_access import ResolvedMCPServer, model_mcp_tool_name
+
+    server = ResolvedMCPServer(
+        instance_id=instance_id, name="JiraMCP", display_name="JiraMCP",
+        instance=_instance(instance_id), auth={}, owner_id="user-1", attached_tools=None,
+    )
+    return model_mcp_tool_name(server, tool_name, force_alias=True)
+
+
 async def _discover_ok(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
     return [MCPToolInfo(
         name="search", namespaced_name=f"mcp_{config.name.lower()}_search",
@@ -60,7 +89,7 @@ async def _discover_401(config: Any, credentials: dict, timeout_seconds: float =
 
 
 class TestLoadInto:
-    async def test_rejected_credential_marks_reauth_and_records_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_non_oauth_http_rejection_does_not_deauthenticate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         marked: list[dict[str, Any]] = []
 
         async def _fake_mark(instance_id: str, owner_id: str, config_service: Any, *, detail: str, source: str) -> bool:
@@ -77,9 +106,9 @@ class TestLoadInto:
 
         assert registry.names() == []
         assert context.mcp_tool_load_failures == [
-            {"instanceId": "inst-1", "name": "JiraMCP", "reason": "reauth_required"},
+            {"instanceId": "inst-1", "name": "JiraMCP", "reason": "discovery_failed"},
         ]
-        assert marked == [{"instance_id": "inst-1", "owner_id": "user-1", "source": "discovery"}]
+        assert marked == []
 
     async def test_expired_oauth_token_is_refreshed_once_before_discovery_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
         attempts = 0
@@ -104,7 +133,7 @@ class TestLoadInto:
 
         assert attempts == 2
         assert context.mcp_tool_load_failures == []
-        assert "mcp_jiramcp_search" in registry.names()
+        assert "mcp_jira_mcp_search" in registry.names()
 
     async def test_registers_discovered_tool_and_group(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover_ok)
@@ -113,8 +142,8 @@ class TestLoadInto:
 
         await MCPToolProvider().load_into(registry, context)
 
-        assert registry.has("mcp_jiramcp_search")
-        assert registry.tools_in_toolset(MCP_PARENT) == ["mcp_jiramcp_search"]
+        assert registry.has("mcp_jira_mcp_search")
+        assert registry.tools_in_toolset(MCP_PARENT) == ["mcp_jira_mcp_search"]
         group = next(g for g in registry.toolsets() if g.name == "mcp_jiramcp")
         assert group.parent == MCP_PARENT
         assert context.mcp_tool_load_failures == []
@@ -186,7 +215,7 @@ class TestLoadInto:
     async def test_two_instances_load_independently(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _discover(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
             if config.id == "inst-1":
-                return [MCPToolInfo(name="search", namespaced_name="mcp_jira_search", input_schema={})]
+                return [MCPToolInfo(name="search", namespaced_name="mcp_jira_mcp_search", input_schema={})]
             raise RuntimeError("down")
 
         monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover)
@@ -204,66 +233,42 @@ class TestLoadInto:
 
         await MCPToolProvider().load_into(registry, context)
 
-        assert registry.has("mcp_jira_search")
+        assert registry.has("mcp_jira_mcp_search")
         assert context.mcp_tool_load_failures == [
             {"instanceId": "inst-2", "name": "SlackMCP", "reason": "discovery_failed"},
         ]
         assert any(g.name == MCP_PARENT for g in registry.toolsets())
 
-    async def test_colliding_tool_name_is_skipped_but_group_still_registers_survivors(
+    async def test_colliding_tool_name_gets_an_instance_alias(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         async def _discover(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
             return [
-                MCPToolInfo(name="search", namespaced_name="mcp_jira_search", input_schema={}),
-                MCPToolInfo(name="create", namespaced_name="mcp_jira_create", input_schema={}),
+                MCPToolInfo(name="search", namespaced_name="mcp_jira_mcp_search", input_schema={}),
+                MCPToolInfo(name="create", namespaced_name="mcp_jira_mcp_create", input_schema={}),
             ]
 
         monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover)
         registry = ToolRegistry()
-        # Pre-register a colliding name to force one of the two discovered
-        # tools to be skipped as a duplicate.
-        from app.agent_loop_lib.tools.base import ToolOutput, ToolParameter
-
-        class _Existing:
-            name = "mcp_jira_search"
-            short_description = "existing"
-            description = "existing"
-            path = "/existing/mcp_jira_search"
-            parameters: list[ToolParameter] = []
-
-            async def execute(self, **kwargs: Any) -> ToolOutput:
-                return ToolOutput(success=True, data="existing")
-
-        registry.register_tool(_Existing())
+        registry.register_tool(_existing_tool("mcp_jira_mcp_search"))
         context = _context_with_server()
 
         await MCPToolProvider().load_into(registry, context)
 
-        assert registry.has("mcp_jira_create")
-        assert registry.path_for_name("mcp_jira_search") == "/existing/mcp_jira_search"
+        assert registry.has("mcp_jira_mcp_create")
+        assert registry.path_for_name("mcp_jira_mcp_search") == "/existing/mcp_jira_mcp_search"
+        assert registry.has(_alias("inst-1", "search"))
         assert context.mcp_tool_load_failures == []
 
     async def test_all_discovered_tools_colliding_records_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _discover(config: Any, credentials: dict, timeout_seconds: float = 10.0) -> list[MCPToolInfo]:
-            return [MCPToolInfo(name="search", namespaced_name="mcp_jira_search", input_schema={})]
+            return [MCPToolInfo(name="search", namespaced_name="mcp_jira_mcp_search", input_schema={})]
 
         monkeypatch.setattr(mcp_tool_loader_module, "discover_tools", _discover)
         registry = ToolRegistry()
-
-        from app.agent_loop_lib.tools.base import ToolOutput, ToolParameter
-
-        class _Existing:
-            name = "mcp_jira_search"
-            short_description = "existing"
-            description = "existing"
-            path = "/existing/mcp_jira_search"
-            parameters: list[ToolParameter] = []
-
-            async def execute(self, **kwargs: Any) -> ToolOutput:
-                return ToolOutput(success=True, data="existing")
-
-        registry.register_tool(_Existing())
+        # Both the legacy name and its per-instance alias are taken.
+        registry.register_tool(_existing_tool("mcp_jira_mcp_search"))
+        registry.register_tool(_existing_tool(_alias("inst-1", "search")))
         context = _context_with_server()
 
         await MCPToolProvider().load_into(registry, context)
