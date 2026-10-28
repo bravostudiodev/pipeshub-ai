@@ -29,28 +29,27 @@ pipeline:
           - ~/.npm
     "Image build":
       branch: "!main"
-      imageBuild:
-        <<: &imageBuild
-          name: platform/pipeshubai
-          securityScan:
-            failSeverity: CRITICAL
-            issueAllowlist:
-              - CVE-2026-49261
-              - CVE-2026-44172
-              - CVE-2026-6653
-              - CVE-2026-85394
-              - CVE-2026-8838
-              - GHSA-6q48-6c7w-9gw2
-              - CVE-2026-112403
-              - GHSA-hq85-5cpj-mr62
-              - CVE-2026-91403
-              - CVE-2026-112393
-              - CVE-2026-112398
-              - CVE-2026-112900
-          context: .
-          push: false
-          tags:
-            - 0.9.1.oddyssey1
+      imageBuild: &imageBuild
+        name: platform/pipeshubai
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+            - CVE-2026-8838
+            - GHSA-6q48-6c7w-9gw2
+            - CVE-2026-112403
+            - GHSA-hq85-5cpj-mr62
+            - CVE-2026-91403
+            - CVE-2026-112393
+            - CVE-2026-112398
+            - CVE-2026-112900
+        context: .
+        push: false
+        tags:
+          - 0.9.1.oddyssey1
     "Image build and push":
       branch: "main"
       imageBuild:
@@ -58,13 +57,12 @@ pipeline:
         push: true
     "Sandbox image build":
       branch: "!main"
-      imageBuild:
-        <<: &sandboxImageBuild
-          name: platform/pipeshubai-sandbox
-          context: deployment/sandbox
-          push: true # todo set to false
-          tags:
-            - 0.9.1.oddyssey1-1 # todo finalize
+      imageBuild: &sandboxImageBuild
+        name: platform/pipeshubai-sandbox
+        context: deployment/sandbox
+        push: true # todo set to false
+        tags:
+          - 0.9.1.oddyssey1-1 # todo finalize
     "Sandbox image build and push":
       branch: "main"
       imageBuild:
