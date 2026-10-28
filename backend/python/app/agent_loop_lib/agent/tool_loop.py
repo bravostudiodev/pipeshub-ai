@@ -215,7 +215,7 @@ def tool_schemas_for_turn(agent, spec: "AgentSpec", runtime: "AgentRuntime") -> 
         # gateway more declarations than it accepts.
         # Order of what survives the cut: discovery controls, then pinned
         # (essential) toolsets, then the rest by name.
-        meta = [n for n in ("list_toolsets", "search_tools", "fetch_tools") if n in names]
+        meta = [n for n in ("list_toolsets", "search_tools", "fetch_tools", "analyze_image") if n in names]
         pinned = {tool for group in spec.pinned_toolsets for tool in registry.tools_in_toolset(group)}
         rest = sorted(set(names) - set(meta), key=lambda n: (n not in pinned, n))
         kept = meta + rest[:MAX_VISIBLE_TOOLS - len(meta)]

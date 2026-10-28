@@ -276,6 +276,47 @@ sidebar. Old in-flight builder listings cannot replace newer grant or identity
 results, and a failed listing shows a load error instead of "no servers".
 Remaining Phase 6 OAuth/status integration and live UI verification are pending.
 
+## Chat source lookup
+
+Chat does not prefetch or grant indexed knowledge search, even if an old
+client requests it. The agent uses connected live service tools for company
+questions; MCP authentication remains per user. The Internal Search toggle is
+removed from chat. Graph storage remains in use for identity, permissions,
+attachments and other product functions. Connector sync and indexing features
+are unchanged and existing indexed data is not deleted. Public web search
+retains its existing separate Labs setting and user toggle. Attachment history
+is still rehydrated, but the indexed full-record fetch tool is not exposed when
+knowledge is disabled; missing attachment content requires reattachment.
+See `live-mcp-only-plan.md` for scope and verification.
+
+## Chat image analysis
+
+Chat agent runs register a built-in `analyze_image` tool. Image attachment
+references are presented to the text model as hints; execution checks the
+persisted conversation through Node's scoped `conversation:image-membership`
+service endpoint and independently checks the authenticated caller's record
+access before loading the image. The current membership endpoint permits only
+caller-owned conversations; shared conversations and service-account uploads
+without a human caller's access fail closed. Supplied history is never treated
+as membership authority.
+
+The analyzer accepts one PNG, JPEG or WebP stored image per call, at most 5 MiB
+and 20 million pixels, and rejects animated images and URLs. It selects the
+existing AI Models configuration whose exact model name is
+`IMAGE_ANALYSIS_MODEL_NAME` (default `qwen3-vl-32b-instruct`), through the
+existing model factory and the configuration's endpoint and credentials.
+The model must be marked multimodal and its name must be unique. There is no
+fallback to the chat, indexing, or default model. The vision call receives only the image and a fixed description instruction,
+not the user's question or chat history. Images are proportionally downscaled
+without upscaling to `IMAGE_ANALYSIS_MAX_DIMENSION` (default 1280, allowed
+256–2048) before the call. Calls have a 45-second timeout and bounded text
+output. `image_analysis` logs record the instruction, model, gateway hostname,
+image dimensions and byte counts, outcome, safe error type/status and available
+token usage; they never include images, conversation text, credentials, URL
+paths or provider responses. HTML and PPTX rendering and visual QA are not provided by this tool and are deferred to
+the coding sandbox. See `chat-image-analysis-plan.md` for implementation notes
+and remaining verification.
+
 ## Agent context budget and tool exposure
 
 The agent's context budget uses the context length an administrator sets for the

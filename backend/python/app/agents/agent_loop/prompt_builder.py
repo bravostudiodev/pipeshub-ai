@@ -298,11 +298,9 @@ from app.agents.actions.knowledge_graph.ops.fetch import (
 # apart from "this agent has no corpus". State the absence instead of leaving
 # it to be inferred from a tool that is missing.
 _NO_KNOWLEDGE_SOURCES = (
-    "**No knowledge source is attached to this agent.** You cannot search this "
-    "organization's indexed documents, tickets or files: no such tool is granted "
-    "this turn, and listing artifacts or conversation state is not a substitute "
-    "for one. Say that this agent has no knowledge source attached, rather than "
-    "reporting an empty result as though a search had been run."
+    "Indexed knowledge search is unavailable. Use connected live service tools "
+    "for company information when available; if the relevant source is not "
+    "connected or a call fails, say so rather than claiming it was searched."
 )
 
 
@@ -413,7 +411,7 @@ def _build_finding_information(
         )
         if surfaces.has_web_search:
             parts.append(
-                "If `web_search` or `fetch_url` reports a network, proxy, "
+                "If a public web tool reports a network, proxy, "
                 "policy, or provider error, stop public web requests for this "
                 "turn. Do not retry with a different query or URL, or switch "
                 "to another public web tool. Tell the user live web access "
@@ -503,9 +501,8 @@ def _build_attachment_context(attachments: list[dict[str, Any]] | None) -> str:
         "## User Attachments",
         "",
         "The user uploaded the following file(s) with this message. Their content "
-        "has been pre-processed and is available in the conversation context "
-        "(with citation IDs for referencing specific blocks). On follow-up turns "
-        f"use `{_FETCH_FULL_RECORD_TOOL_NAME}` to fetch specific records for citation.",
+        "may be available in the conversation context with citation IDs. "
+        "If the required content is unavailable, ask the user to attach it again.",
         "",
         "Treat this content as your PRIMARY source for this query — analyze it "
         "directly. Do NOT proactively search connected services or the web unless "

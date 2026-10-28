@@ -42,7 +42,7 @@ function makeHelpers(storage: Storage) {
       if (!raw) return { ...DEFAULT_AGENT_CAPABILITIES };
       const parsed = JSON.parse(raw) as Partial<AgentCapabilities>;
       return {
-        internalSearch: typeof parsed.internalSearch === 'boolean' ? parsed.internalSearch : true,
+        internalSearch: false,
         webSearch: typeof parsed.webSearch === 'boolean' ? parsed.webSearch : true,
         deepSearch: typeof parsed.deepSearch === 'boolean' ? parsed.deepSearch : false,
       };
@@ -67,8 +67,8 @@ const h = React.createElement;
 // ---------------------------------------------------------------------------
 
 describe('DEFAULT_AGENT_CAPABILITIES', () => {
-  it('has both search modes enabled and deepSearch off', () => {
-    expect(DEFAULT_AGENT_CAPABILITIES.internalSearch).toBe(true);
+  it('disables internal search by default', () => {
+    expect(DEFAULT_AGENT_CAPABILITIES.internalSearch).toBe(false);
     expect(DEFAULT_AGENT_CAPABILITIES.webSearch).toBe(true);
     expect(DEFAULT_AGENT_CAPABILITIES.deepSearch).toBe(false);
   });
@@ -105,7 +105,7 @@ describe('localStorage agent capabilities helpers', () => {
   it('round-trips scoped capabilities per agentId', () => {
     const caps: AgentCapabilities = { internalSearch: true, webSearch: false, deepSearch: false };
     lsSet(caps, 'agent-42');
-    expect(lsGet('agent-42')).toEqual(caps);
+    expect(lsGet('agent-42')).toEqual({ ...caps, internalSearch: false });
   });
 
   it('scoped and universal keys are independent', () => {
@@ -114,7 +114,7 @@ describe('localStorage agent capabilities helpers', () => {
     lsSet(universal);
     lsSet(scoped, 'agent-abc');
     expect(lsGet()).toEqual(universal);
-    expect(lsGet('agent-abc')).toEqual(scoped);
+    expect(lsGet('agent-abc')).toEqual({ ...scoped, internalSearch: false });
   });
 
   it('falls back to defaults when stored JSON is corrupt', () => {
@@ -133,7 +133,7 @@ describe('localStorage agent capabilities helpers', () => {
   it('ignores non-boolean values and returns defaults for those fields', () => {
     storage.setItem(LS_KEY, JSON.stringify({ internalSearch: 'yes', webSearch: 0 }));
     const caps = lsGet();
-    expect(caps.internalSearch).toBe(true);
+    expect(caps.internalSearch).toBe(false);
     expect(caps.webSearch).toBe(true);
   });
 });
@@ -167,7 +167,7 @@ describe('PlusMenuContent', () => {
       Content,
     );
     expect(screen.getByText('Attach files')).toBeTruthy();
-    expect(screen.getByText('Internal Search')).toBeTruthy();
+    expect(screen.queryByText('Internal Search')).toBeNull();
     expect(screen.getByText('Web Search')).toBeTruthy();
   });
 
@@ -201,8 +201,7 @@ describe('PlusMenuContent', () => {
       },
       Content,
     );
-    const internalSwitch = screen.getByRole('switch', { name: 'Internal Search' }) as HTMLButtonElement;
-    expect(internalSwitch.disabled).toBe(true);
+    expect(screen.queryByRole('switch', { name: 'Internal Search' })).toBeNull();
   });
 
   it('disables the web search switch when agentHasWebSearch=false', async () => {
@@ -235,8 +234,8 @@ describe('PlusMenuContent', () => {
       },
       Content,
     );
-    fireEvent.click(screen.getByRole('switch', { name: 'Internal Search' }));
-    expect(toggle).toHaveBeenCalled();
+    expect(screen.queryByRole('switch', { name: 'Internal Search' })).toBeNull();
+    expect(toggle).not.toHaveBeenCalled();
   });
 
   it('does NOT call onToggleInternalSearch when the capability is absent', async () => {
@@ -253,7 +252,7 @@ describe('PlusMenuContent', () => {
       },
       Content,
     );
-    fireEvent.click(screen.getByRole('switch', { name: 'Internal Search' }));
+    expect(screen.queryByRole('switch', { name: 'Internal Search' })).toBeNull();
     expect(toggle).not.toHaveBeenCalled();
   });
 
@@ -281,7 +280,7 @@ describe('hasNonDefaultSearchCapabilities', () => {
       '../components/chat-panel/plus-menu-button'
     );
     expect(hasNonDefaultSearchCapabilities(true, true)).toBe(false);
-    expect(hasNonDefaultSearchCapabilities(false, true)).toBe(true);
+    expect(hasNonDefaultSearchCapabilities(false, true)).toBe(false);
     expect(hasNonDefaultSearchCapabilities(true, false)).toBe(true);
     expect(hasNonDefaultSearchCapabilities(false, false)).toBe(true);
   });
@@ -317,7 +316,6 @@ describe('PlusMenuButton filter badge', () => {
   it('shows the badge for each non-default capability combination', async () => {
     const Button = await importButton();
     const nonDefaults: Array<Pick<ButtonProps, 'internalSearch' | 'webSearch'>> = [
-      { internalSearch: false, webSearch: true },
       { internalSearch: true, webSearch: false },
       { internalSearch: false, webSearch: false },
     ];

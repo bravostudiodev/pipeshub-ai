@@ -389,8 +389,8 @@ class TestFindingInformation:
         result = _build(context, tool_names=[])
         assert "## Finding Information" in result
         section = result.split("## Finding Information", 1)[1]
-        assert "No knowledge source is attached to this agent." in section
-        assert "as though a search had been run" in section
+        assert "Indexed knowledge search is unavailable" in section
+        assert "rather than claiming it was searched" in section
 
     def test_no_knowledge_source_is_stated_alongside_other_surfaces(self) -> None:
         """Web search being available does not make the knowledge base
@@ -399,7 +399,7 @@ class TestFindingInformation:
         context.tool_state["web_search_config"] = {"enabled": True}
         result = _build(context, tool_names=["web_search", "fetch_url"])
         section = result.split("## Finding Information", 1)[1]
-        assert "No knowledge source is attached to this agent." in section
+        assert "Indexed knowledge search is unavailable" in section
         assert "web_search" in section or "fetch_url" in section
 
     def test_no_knowledge_notice_absent_when_retrieval_is_granted(self) -> None:

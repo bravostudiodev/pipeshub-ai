@@ -70,6 +70,18 @@ async def _fake_discover_tools(config: Any, credentials: dict, timeout_seconds: 
 
 
 class TestMcpServerWiring:
+    @pytest.mark.parametrize("mode", ["quick", "react", "planExecute", "deep"])
+    async def test_indexed_knowledge_is_disabled_but_mcp_remains(self, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+        monkeypatch.setattr("app.agents.agent_loop.mcp_tool_loader.discover_tools", _fake_discover_tools)
+        context = _mcp_context(has_knowledge=True, apps=["old-connector"], kb=["old-kb"])
+        _agent, runtime, _goal, _clarifying = await PipesHubAgentFactory().create(
+            context, context.llm, mode, query="Find the latest issue",
+        )
+        assert not context.has_knowledge
+        assert not any(name.startswith(("knowledgegraph__", "retrieval__", "knowledgehub__"))
+                       for name in runtime.tool_registry.names())
+        assert runtime.tool_registry.has("mcp_jira_mcp_search")
+
     async def test_mcp_tool_registered_and_grouped_under_mcp_parent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("app.agents.agent_loop.mcp_tool_loader.discover_tools", _fake_discover_tools)
         context = _mcp_context()

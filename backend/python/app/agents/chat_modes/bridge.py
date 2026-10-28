@@ -33,6 +33,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.core.context import CancellationToken
@@ -110,10 +111,9 @@ _MODE_INSTRUCTIONS: dict[str, str] = {
         "answer using publicly available information found via web_search/fetch_url."
     ),
     "agent": (
-        "Decide per-query whether internal knowledge search, web search, or both are needed to "
-        "answer well -- you have both available. Prefer internal knowledge for company-specific "
-        "questions and web search for current events/public information; use both when a query "
-        "needs each."
+        "For company-specific questions, use the available connected live service tools. "
+        "If the relevant service is unavailable, explain that rather than guessing or "
+        "claiming an unsuccessful search succeeded."
     ),
 }
 
@@ -355,6 +355,9 @@ async def run_chat_stream(  # noqa: PLR0913 - mirrors run_agent_loop_stream's ca
     from app.utils.fetch_slack_thread import connector_instances_have_slack
 
     policy = policy or resolve_chat_mode_policy(query_info.get("chatMode"))
+    # Disable indexed-knowledge prefetch even for legacy chat modes and callers
+    # which explicitly request it. Graph-backed identity/attachment ACLs remain.
+    policy = replace(policy, has_knowledge=False, prefetch_retrieval=False, system_prompt_key="agent")
     system_prompts_config = system_prompts_config or {}
 
     # Stop Generation (Phase 3a): registered BEFORE `build_initial_state()`
@@ -478,6 +481,7 @@ async def run_chat_stream(  # noqa: PLR0913 - mirrors run_agent_loop_stream's ca
         llm_provider=llm_provider, context_length=context_length,
         configured_context_window=configured_context_window,
         run_id=run_id, cancellation_token=cancellation_token,
+        authenticated_user_id=run_owner.user_id,
     )
 
     async def _produce() -> None:

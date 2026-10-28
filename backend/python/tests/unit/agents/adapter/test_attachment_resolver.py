@@ -332,8 +332,8 @@ class TestAttachmentRehydration:
         assert "vrid-1" in context.tool_state.get("virtual_record_id_to_result", {})
         assert len(goal.constraints) == 1
         assert "resume.pdf" in goal.constraints[0]
-        assert "knowledgegraph__fetch_record" in goal.constraints[0]
-        assert "rec-vrid-1" in goal.constraints[0]
+        assert "knowledgegraph__fetch_record" not in goal.constraints[0]
+        assert "attach them again" in goal.constraints[0]
 
     async def test_skips_already_populated_vrids(self):
         blob = AsyncMock()
@@ -353,7 +353,7 @@ class TestAttachmentRehydration:
         blob.get_record_from_storage.assert_not_awaited()
         assert context.tool_state["virtual_record_id_to_result"]["vrid-1"]["id"] == "existing"
         assert len(goal.constraints) == 1
-        assert '"existing"' in goal.constraints[0]
+        assert "attach them again" in goal.constraints[0]
 
     async def test_handles_blob_fetch_failure(self):
         blob = AsyncMock()
@@ -431,9 +431,9 @@ class TestAttachmentRehydration:
             await attachment_rehydration(context)(ctx_data, _noop_next)
 
         registry = ctx_data.scope.run.runtime.tool_registry
-        registry.register_tool_if_absent.assert_called_once()
+        registry.register_tool_if_absent.assert_not_called()
         spec = ctx_data.scope.run.spec
-        assert "knowledgegraph__fetch_record" in spec.tool_names
+        assert "knowledgegraph__fetch_record" not in spec.tool_names
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +454,7 @@ class TestRegisterFetchTool:
         _register_fetch_tool(ctx_data, context)
 
         registry = ctx_data.scope.run.runtime.tool_registry
-        registry.register_tool_if_absent.assert_called_once()
+        registry.register_tool_if_absent.assert_not_called()
 
     def test_no_op_without_registry(self):
         """Gracefully handles missing registry (e.g. in tests)."""

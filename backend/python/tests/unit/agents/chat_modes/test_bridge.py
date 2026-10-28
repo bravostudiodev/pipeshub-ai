@@ -451,10 +451,8 @@ class TestRunChatStream:
         assert events[-1].startswith("event: complete\n")
         assert captured_context.custom_instructions is None
 
-    async def test_internal_search_prefetch_merges_into_goal_and_tool_state(self) -> None:
-        """`INTERNAL_SEARCH_POLICY.prefetch_retrieval=True` -- a non-empty
-        `PrefetchResult` must be folded into `context.tool_state` and
-        `goal.constraints`."""
+    async def test_legacy_internal_search_does_not_prefetch(self) -> None:
+        """Even a legacy internal-search policy must not run indexed retrieval."""
         prefetch_result = PrefetchResult(
             formatted_context="Refunds are processed within 5 business days.",
             final_results=[{"virtual_record_id": "vr1"}],
@@ -477,6 +475,7 @@ class TestRunChatStream:
             return {"answer": agent_output}
 
         sql_patch, slack_patch = _patch_connectors()
+        prefetch = AsyncMock(return_value=prefetch_result)
         with (
             patch(
                 "app.modules.agents.qna.chat_state.build_initial_state",
@@ -486,21 +485,17 @@ class TestRunChatStream:
             slack_patch,
             patch("app.agents.chat_modes.bridge.PipesHubAgentFactory.create", new=_fake_create),
             patch("app.agents.chat_modes.bridge.AnswerFinalizer.run", new=_fake_finalizer_run),
-            patch(
-                "app.agents.chat_modes.bridge.prefetch_retrieval",
-                new=AsyncMock(return_value=prefetch_result),
-            ),
+            patch("app.agents.chat_modes.bridge.prefetch_retrieval", new=prefetch),
         ):
             events = [
                 chunk
                 async for chunk in run_chat_stream(**self._base_kwargs(policy=INTERNAL_SEARCH_POLICY))
             ]
 
+        prefetch.assert_not_awaited()
         assert events[-1].startswith("event: complete\n")
-        assert captured["context"].tool_state["final_results"] == prefetch_result.final_results
-        assert any(
-            "Refunds are processed" in str(c) for c in captured["goal"].constraints
-        )
+        assert captured["context"].tool_state["final_results"] == []
+        assert not any("Refunds are processed" in str(c) for c in captured["goal"].constraints)
 
     async def test_prefetch_appends_candidate_list_when_records_are_incomplete(self) -> None:
         """In prefetch mode the retrieval tool never runs, so candidate-list
@@ -569,12 +564,8 @@ class TestRunChatStream:
 
         assert events[-1].startswith("event: complete\n")
         constraint_text = " ".join(str(c) for c in captured["goal"].constraints)
-        # The candidate list must be present: the model cannot decide whether to
-        # fetch without knowing it holds 2 of 10 blocks.
-        assert "rec-1" in constraint_text, "candidate record_id must appear"
-        assert "2 of 10 blocks" in constraint_text, "coverage counts are the load-bearing part"
-        # Header must reflect the whole-document framing.
-        assert "whole-document content" in constraint_text
+        assert "rec-1" not in constraint_text
+        assert "2 of 10 blocks" not in constraint_text
 
     async def test_prefetch_candidate_list_appears_even_without_whole_document_bit(self) -> None:
         """The coverage list must be visible regardless of needs_whole_document,
@@ -632,11 +623,8 @@ class TestRunChatStream:
             ]
 
         constraint_text = " ".join(str(c) for c in captured["goal"].constraints)
-        assert "rec-2" in constraint_text, "list must appear even without whole_document bit"
-        assert "1 of 20 blocks" in constraint_text
-        # Coverage is 5% (< low-coverage threshold), so the low-coverage header
-        # applies regardless of the whole-document bit being False.
-        assert "Coverage is incomplete (as low as 5%)" in constraint_text
+        assert "rec-2" not in constraint_text
+        assert "1 of 20 blocks" not in constraint_text
 
     async def test_prefetch_collected_images_extend_attachment_image_blocks(self) -> None:
         """Prefetch has no tool result to carry a multipart `ToolMessage`, so
@@ -698,8 +686,8 @@ class TestRunChatStream:
             ]
 
         assert events[-1].startswith("event: complete\n")
-        assert captured["context"].attachment_image_blocks == collected_images
-        assert captured_prefetch_kwargs["image_budget"] is captured["context"].tool_state["image_budget"]
+        assert captured["context"].attachment_image_blocks == []
+        assert not captured_prefetch_kwargs
 
     async def test_agent_run_failure_emits_error_event(self) -> None:
         async def _fake_create(self, context, llm, chat_mode, *, query, model_name="", model_key=None):

@@ -36,7 +36,7 @@ export function FilePreviewRenderer({ fileUrl, fileName, fileType, fileBlob, pag
     case 'markdown':
       return <MarkdownRenderer fileUrl={fileUrl} fileName={fileName} citations={citations} activeCitationId={activeCitationId} onHighlightClick={onHighlightClick} />;
     case 'html':
-      return <HtmlRenderer fileUrl={fileUrl} fileName={fileName} citations={citations} activeCitationId={activeCitationId} onHighlightClick={onHighlightClick} />;
+      return <HtmlRenderer fileUrl={fileUrl} fileName={fileName} />;
     case 'text':
       // Text files could support chunked pagination in the future
       return <TextRenderer fileUrl={fileUrl} fileName={fileName} fileType={fileType} citations={citations} activeCitationId={activeCitationId} onHighlightClick={onHighlightClick} />;

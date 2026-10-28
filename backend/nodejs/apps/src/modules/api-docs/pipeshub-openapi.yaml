@@ -28722,6 +28722,44 @@ paths:
             Once the stream is open, terminal failures are surfaced as a
             `RUN_ERROR` SSE event instead of an HTTP status change.
 
+  /conversations/internal/image-attachment-membership:
+    post:
+      summary: Check whether an image attachment belongs to a caller-owned conversation
+      description: Internal service-only check. The caller identity and organization come from a scoped service token, not the request body. Shared conversations are not currently included.
+      tags:
+        - Conversations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversationId, virtualRecordId]
+              properties:
+                conversationId:
+                  type: string
+                virtualRecordId:
+                  type: string
+      responses:
+        '200':
+          description: Membership decision
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [allowed]
+                properties:
+                  allowed:
+                    type: boolean
+        '400':
+          description: Invalid identity or reference
+        '401':
+          description: Invalid service token
+        '403':
+          description: Missing service scope
+
   /conversations/attachments/upload:
     post:
       tags:

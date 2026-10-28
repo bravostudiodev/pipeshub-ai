@@ -356,7 +356,7 @@ def citation_tracking(
 
         run_scope = ctx.scope.turn.run if ctx.scope is not None else None
         registry = run_scope.runtime.tool_registry if run_scope is not None else None
-        if registry is None:
+        if registry is None or not context.has_knowledge:
             return
 
         if not collector.virtual_records and not collector.known_record_ids:
@@ -402,6 +402,8 @@ def ensure_fetch_full_record_available(
     responsible for ensuring the tool is visible (e.g. via ``_grant``
     directly).  When provided they mirror ``citation_tracking``'s behaviour.
     """
+    if not context.has_knowledge:
+        return
     collector = CitationCollector(context)
     if registry is not None:
         registry.register_tool_if_absent(_FetchFullRecordTool(collector, context))

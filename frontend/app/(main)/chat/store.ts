@@ -33,7 +33,7 @@ function lsGetAgentCapabilities(agentId?: string): AgentCapabilities {
     if (!raw) return { ...DEFAULT_AGENT_CAPABILITIES };
     const parsed = JSON.parse(raw) as Partial<AgentCapabilities>;
     return {
-      internalSearch: typeof parsed.internalSearch === 'boolean' ? parsed.internalSearch : true,
+      internalSearch: false,
       webSearch: typeof parsed.webSearch === 'boolean' ? parsed.webSearch : true,
       deepSearch: typeof parsed.deepSearch === 'boolean' ? parsed.deepSearch : false,
     };

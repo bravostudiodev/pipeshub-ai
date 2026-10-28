@@ -78,6 +78,8 @@ tests
 **/Thumbs.db
 
 # Build outputs created by the pipeline App build stage.
+# Next's reusable build cache is not part of the static frontend export.
+frontend/.next/
 frontend/dist/
 backend/nodejs/apps/dist/
 !backend/nodejs/apps/dist/
