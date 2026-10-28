@@ -65,12 +65,13 @@ canary or traffic-splitting process is required.
 
 [`../.bravo/config.yaml`](../.bravo/config.yaml) runs **App build** with
 `platform/node:20`. It runs `npm ci` and `npm run build` in
-`backend/nodejs/apps`, then prunes Node development dependencies. It runs
-`npm ci` and `ELECTRON_STATIC=1 npm run build` in `frontend` concurrently with
-the backend build, and waits for both before the image stage. Either failure
-fails the stage. These are two different package directories and lockfiles;
-the frontend's legacy peer-dependency setting applies only to its install, so
-parallel installs do not change each other's npm configuration. The `~/.npm` cache avoids repeated
+`backend/nodejs/apps`, then prunes Node development dependencies. It then runs
+`npm ci` and `ELECTRON_STATIC=1 npm run build` in `frontend`. The builds run
+sequentially to reduce potential peak resource demand after an unexplained
+concurrent-build failure; phase markers help identify where termination occurred.
+Either failure fails the stage. These are different package directories and
+lockfiles; the frontend's legacy peer-dependency setting applies only to its
+install. The `~/.npm` cache avoids repeated
 package downloads, but `npm ci` still recreates each directory's
 `node_modules`. `frontend/.next/cache` also persists Next.js build cache; it is
 excluded from the Docker context and is not part of the shipped static export.

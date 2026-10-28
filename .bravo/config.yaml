@@ -9,40 +9,30 @@ pipeline:
           script: |
             set -e
 
-            (
-              set -e
-              cd backend/nodejs/apps
-              ARCH=$(uname -m)
-              if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-                npm ci --ignore-scripts
-                npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
-                npm install sharp --save || true
-              else
-                npm ci
-              fi
-              npm run build
-              npm prune --production
-            ) &
-            backend_pid=$!
-
-            (
-              set -e
-              cd frontend
-              npm_config_legacy_peer_deps=true npm ci
-              ELECTRON_STATIC=1 npm run build
-            ) &
-            frontend_pid=$!
-
-            failed=0
-            wait "$backend_pid" || failed=1
-            wait "$frontend_pid" || failed=1
-            if [ "$failed" -ne 0 ]; then
-              echo "App build failed: backend or frontend build did not succeed" >&2
-              exit 1
+            echo "App build: installing backend dependencies"
+            cd backend/nodejs/apps
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+              npm ci --ignore-scripts || { echo "App build failed: backend install" >&2; exit 1; }
+              npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
+              npm install sharp --save || true
+            else
+              npm ci || { echo "App build failed: backend install" >&2; exit 1; }
             fi
+            echo "App build: compiling backend"
+            npm run build || { echo "App build failed: backend compilation" >&2; exit 1; }
+            echo "App build: pruning backend dependencies"
+            npm prune --production || { echo "App build failed: backend prune" >&2; exit 1; }
+
+            echo "App build: installing frontend dependencies"
+            cd ../../../frontend
+            npm_config_legacy_peer_deps=true npm ci || { echo "App build failed: frontend install" >&2; exit 1; }
+            echo "App build: compiling frontend"
+            ELECTRON_STATIC=1 npm run build || { echo "App build failed: frontend compilation" >&2; exit 1; }
+            echo "App build: complete"
         cache:
           - ~/.npm
-#          - frontend/.next/cache
+          - frontend/.next/cache
     "Image build":
       branch: "!main"
       imageBuild:
