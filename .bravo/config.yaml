@@ -56,3 +56,17 @@ pipeline:
       imageBuild:
         <<: *imageBuild
         push: true
+    "Sandbox image build":
+      branch: "!main"
+      imageBuild:
+        <<: &sandboxImageBuild
+          name: platform/pipeshubai-sandbox
+          context: deployment/sandbox
+          push: true # todo set to false
+          tags:
+            - 0.9.1.oddyssey1-1 # todo finalize
+    "Sandbox image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *sandboxImageBuild
+        push: true

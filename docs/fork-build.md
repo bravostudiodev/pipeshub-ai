@@ -85,3 +85,49 @@ The upstream Docker Compose examples in `deployment/docker-compose/` default
 to public `pipeshubai/pipeshub-ai-base` images and can override them using
 `PYTHON_DEPS_IMAGE` and `RUNTIME_BASE_IMAGE`. Those Compose defaults do not
 describe the private Bravo build.
+
+## Sandbox image
+
+The code execution sandbox is built separately from the application image
+using [`deployment/sandbox/Dockerfile`](../deployment/sandbox/Dockerfile). The
+wrapper Helm chart uses this image reference:
+
+```text
+doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1
+```
+
+The sandbox Dockerfile includes Python's `python-pptx` and
+Node's `pptxgenjs`, and runs as the non-root `sandbox` user.
+
+Package requests still use separate networked installer containers. Python
+packages use `SANDBOX_PIP_INDEX_URL` (default `https://pypi.org/simple`), and
+TypeScript packages use `SANDBOX_NPM_REGISTRY` (default
+`https://registry.npmjs.org`). Generated code runs in another container with
+networking disabled when code network access is off. The Helm deployment must
+control and permit the installer containers' registry route independently of
+generated-code networking.
+
+To build and publish it manually from the repository root:
+
+```bash
+docker build -f deployment/sandbox/Dockerfile -t doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1 deployment/sandbox
+docker push doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1
+```
+
+After the image is available locally, verify the prebaked document libraries
+and generate/read a PowerPoint file without network access or running as root:
+
+```bash
+docker run --rm --network none --user sandbox --entrypoint sh doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1 -ec '
+python -c "import pptx; print(\"python-pptx:\", pptx.__version__)"
+node -e '\''(async () => { const pptxgen = require("/home/sandbox/node_modules/pptxgenjs"); const pptx = new pptxgen(); pptx.addSlide().addText("Sandbox smoke test"); await pptx.writeFile({ fileName: "/tmp/sandbox-smoke.pptx" }); })().catch((err) => { console.error(err); process.exit(1); });'\''
+python -c "from pptx import Presentation; p = Presentation(\"/tmp/sandbox-smoke.pptx\"); assert len(p.slides) == 1; print(\"PowerPoint smoke test passed\")"
+'
+```
+
+This image smoke test does not verify Kubernetes user-namespace isolation.
+Separately verify that the runtime pod uses `hostUsers: false` and maps its
+container root UID to a nonzero host UID before enabling execution. It checks
+direct access to the libraries baked into the image; it does not exercise the
+tool's `packages` argument or the runtime package installer and its network
+route.
