@@ -62,4 +62,3 @@ pipeline:
       imageBuild:
         <<: *imageBuild
         push: true
-
