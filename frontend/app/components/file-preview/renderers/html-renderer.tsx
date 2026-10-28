@@ -17,14 +17,28 @@ interface HtmlRendererProps {
 export function buildHtmlPreviewDocument(html: string): string {
   const policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
   const csp = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
+  // In srcdoc, a bare #fragment resolves against the embedding page's URL.
+  // Handle in-document links before the browser replaces the preview with that page.
+  const anchors = `<script>document.addEventListener('click', function(event) {
+    var link = event.target instanceof Element && event.target.closest('a[href]');
+    var href = link && link.getAttribute('href');
+    if (!href || href.charAt(0) !== '#') return;
+    event.preventDefault();
+    var id;
+    try { id = decodeURIComponent(href.slice(1)); } catch (_) { return; }
+    if (!id) { window.scrollTo(0, 0); return; }
+    var target = document.getElementById(id) || document.getElementsByName(id)[0];
+    if (target) target.scrollIntoView();
+  }, true);</script>`;
+  const head = csp + anchors;
 
   if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/(<head\b[^>]*>)/i, `$1${csp}`);
+    return html.replace(/(<head\b[^>]*>)/i, `$1${head}`);
   }
   if (/<html\b[^>]*>/i.test(html)) {
-    return html.replace(/(<html\b[^>]*>)/i, `$1<head>${csp}</head>`);
+    return html.replace(/(<html\b[^>]*>)/i, `$1<head>${head}</head>`);
   }
-  return `<!doctype html><html><head>${csp}</head><body>${html}</body></html>`;
+  return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
 }
 
 export function HtmlRenderer({ fileUrl, fileName }: HtmlRendererProps) {

@@ -16,6 +16,8 @@ describe('HTML preview', () => {
     expect(result).toContain('<style>body { color: red }</style>');
     expect(result).toContain('<script>document.body.dataset.ready = "yes"</script>');
     expect(result).toContain("connect-src 'none'");
+    expect(result).toContain("event.preventDefault()");
+    expect(result).toContain('target.scrollIntoView()');
   });
 
   it('renders the document in an isolated iframe so page CSS applies', async () => {

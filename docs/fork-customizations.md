@@ -317,6 +317,13 @@ paths or provider responses. HTML and PPTX rendering and visual QA are not provi
 the coding sandbox. See `chat-image-analysis-plan.md` for implementation notes
 and remaining verification.
 
+Chat model streaming diagnostics (`llm_stream_start`, `llm_stream_first_chunk`,
+`llm_stream_first_event`, and `llm_stream_end`) record per-attempt timing,
+chunk and event counts, outcome, and error type without message or tool content.
+These describe what the LangChain transport received and yielded, not whether
+the browser displayed it. A running stream has no end log until it completes,
+fails, or is cancelled.
+
 ## Agent context budget and tool exposure
 
 The agent's context budget uses the context length an administrator sets for the
