@@ -15,8 +15,9 @@ from app.agents.mcp.models import AuthHint, MCPAuthMode, MCPServerTemplate, MCPT
         default_url="https://calendarmcp.googleapis.com/mcp/v1",
         authorization_url="https://accounts.google.com/o/oauth2/v2/auth",
         token_url="https://oauth2.googleapis.com/token",
-        # Google's documented Calendar MCP consent scopes are read-only. The remote
-        # MCP may advertise write tools, but these credentials do not grant write access.
+        # Base read scopes. The employee OAuth flow additionally requests the
+        # owned-calendar event scope for the official endpoint, including for
+        # existing instances whose saved scope list predates that capability.
         default_scopes=[
             "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
             "https://www.googleapis.com/auth/calendar.events.freebusy",

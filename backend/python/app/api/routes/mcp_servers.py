@@ -907,6 +907,14 @@ async def _build_oauth_authorization_url(
     # omit `scope` entirely rather than send a template default the discovered AS may reject
     # (Atlassian's MCP AS metadata advertises no scopes_supported at all).
     scopes = instance.get("scopes") or (discovered.scopes_supported if discovered else None)
+    # Existing catalog instances retain their stored read-only scopes. Add the
+    # owned-calendar grant to each employee's new consent request, without
+    # changing stored grants or extending it to custom servers/service accounts.
+    if owner_type == "user" and _is_google_calendar_mcp_instance(instance):
+        owned_scope = "https://www.googleapis.com/auth/calendar.events.owned"
+        scopes = list(scopes or [])
+        if owned_scope not in scopes:
+            scopes.append(owned_scope)
 
     state = dcr_module.generate_state()
     code_verifier = dcr_module.generate_code_verifier()

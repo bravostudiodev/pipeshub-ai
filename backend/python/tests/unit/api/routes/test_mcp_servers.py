@@ -638,6 +638,39 @@ class TestBuildOauthAuthorizationUrlDcrReuse:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("url", "type_id", "owner_type", "expects_write"),
+        [
+            ("https://calendarmcp.googleapis.com/mcp/v1", "google_calendar", "user", True),
+            ("https://calendarmcp.googleapis.com/mcp/v1", "google_calendar", "agent", False),
+            ("https://calendarmcp.googleapis.com/mcp/v1", None, "user", False),
+            ("https://other.example.com/mcp/v1", "google_calendar", "user", False),
+        ],
+    )
+    async def test_calendar_write_scope_is_only_added_for_official_user_auth(
+        self, url: str, type_id: str | None, owner_type: str, expects_write: bool,
+    ) -> None:
+        from urllib.parse import parse_qs, urlparse
+
+        instance = self._oauth_instance()
+        instance.update({"url": url, "typeId": type_id, "transport": "streamable_http"})
+        config_service = self._config_service(shared_dcr={"clientId": "cid", "clientSecret": "secret", "registeredAt": 1})
+        discovered = DiscoveredOAuthMetadata(
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+        )
+        patches = self._patched(discovered=discovered)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            result = await _build_oauth_authorization_url(
+                config_service, instance, "inst-1", "owner-1", "org-1", "https://app.example.com",
+                initiated_by="user-1", owner_type=owner_type,
+            )
+        scopes = parse_qs(urlparse(result["authorizationUrl"]).query)["scope"][0].split()
+        assert "read" in scopes
+        assert ("https://www.googleapis.com/auth/calendar.events.owned" in scopes) is expects_write
+        assert instance["scopes"] == ["read"]
+
+    @pytest.mark.asyncio
     async def test_reuses_shared_dcr_client_without_reregistering(self) -> None:
         existing = {
             "clientId": "existing-cid",

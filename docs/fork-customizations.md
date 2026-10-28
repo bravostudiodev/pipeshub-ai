@@ -32,7 +32,7 @@ The current chat cards cover:
 | Jira | Live Atlassian Rovo MCP and per-user OAuth | Uses the designated Atlassian Rovo instance. The card is labeled Jira for employees. |
 | Gmail | Live Google MCP and per-user OAuth | Uses the organization-configured Gmail MCP instance. |
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
-| Google Calendar | Live Google MCP and per-user OAuth | Uses the organization-configured Calendar MCP instance with Google's documented read-only OAuth scopes. The service is currently in Google's Developer Preview. |
+| Google Calendar | Live Google MCP and per-user OAuth | Uses the official Calendar MCP instance. Employee consent requests the read scopes and `calendar.events.owned` for events on calendars they own. Existing users must reconnect to grant the new scope. Google controls the actual grant and write operations; the service is in Developer Preview. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
 
 The MCP cards are implemented in

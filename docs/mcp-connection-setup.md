@@ -21,12 +21,13 @@ Ask the Google Cloud project administrator to:
 2. Configure Google Auth Platform's branding and audience. Use **Internal**
    for an organization-only app when available. If policy requires an External
    app, configure the allowed audience/test users as appropriate.
-3. Add these Calendar MCP read scopes to the OAuth app's Data Access settings:
+3. Add these Calendar scopes to the OAuth app's Data Access settings:
 
    ```text
    https://www.googleapis.com/auth/calendar.calendarlist.readonly
    https://www.googleapis.com/auth/calendar.events.freebusy
    https://www.googleapis.com/auth/calendar.events.readonly
+   https://www.googleapis.com/auth/calendar.events.owned
    ```
 
 4. Create an OAuth 2.0 client of type **Web application**. Add this exact
@@ -47,14 +48,18 @@ Ask the Google Cloud project administrator to:
 The OddJeeves workspace administrator then:
 
 1. Opens **Workspace → MCP Servers** and adds the built-in **Google Calendar**
-   catalog entry. The template supplies the hosted endpoint, Google OAuth
-   endpoints, and the read-only scopes above.
+   catalog entry. The template supplies the hosted endpoint and Google OAuth
+   endpoints. Employee authorization requests the read scopes and the owned-calendar
+   event scope above, including for existing instances.
 2. Saves the instance and enters the OAuth client ID and secret in that
    instance's OAuth client configuration. Keep OAuth authentication user-bound;
    do not enable shared administrator authentication.
 3. Confirms the configured instance is available in `/chat`. Each employee
    clicks **Connect** on the Google Calendar card and authorizes their own
-   Google account.
+   Google account. Existing users must reconnect to grant the new scope; an
+   existing token or token refresh does not gain it automatically. The scope
+   permits event changes on calendars the user owns, not arbitrary shared calendars.
+   Google's MCP service and workspace policy determine whether a write succeeds.
 
 The chart's Squid allowlist must contain `calendarmcp.googleapis.com`. The
 existing `accounts.google.com` and `oauth2.googleapis.com` entries cover the
