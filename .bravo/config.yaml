@@ -42,7 +42,7 @@ pipeline:
             fi
         cache:
           - ~/.npm
-          - frontend/.next/cache
+#          - frontend/.next/cache
     "Image build":
       branch: "!main"
       imageBuild:
