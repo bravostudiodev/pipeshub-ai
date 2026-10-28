@@ -59,6 +59,8 @@ pipeline:
       branch: "!main"
       imageBuild: &sandboxImageBuild
         name: platform/pipeshubai-sandbox
+        securityScan:
+          failSeverity: CRITICAL
         context: deployment/sandbox
         push: true # todo set to false
         tags:
