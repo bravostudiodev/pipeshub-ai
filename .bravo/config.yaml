@@ -53,6 +53,7 @@ pipeline:
               - CVE-2026-112393
               - CVE-2026-112398
               - CVE-2026-112900
+              - CVE-2026-111497
           context: .
           push: true # TODO
           tags:
