@@ -25,6 +25,7 @@ class TestAcceptedServiceScopes:
             {
                 "connector:signedUrl",
                 "record:content",
+                "artifact-share:content",
                 "conversation:create",
                 "conversation:permissions",
                 "fetch:config",

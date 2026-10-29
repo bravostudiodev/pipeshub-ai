@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from app.api.middlewares.auth import require_scopes
+from app.api.middlewares.auth import require_scopes, require_service_token
 from app.config.constants.http_status_code import HttpStatusCode
-from app.config.constants.service import OAuthScopes
+from app.config.constants.service import OAuthScopes, TokenScopes
 from app.services.artifact_registry.access import ArtifactNotFoundError
 from app.services.artifact_registry.gallery import ArtifactGalleryService, ArtifactListQuery
 from app.services.artifact_registry.models import Actor
+from app.services.artifact_registry.share_authorization import ArtifactShareAuthorization
+from app.services.artifact_registry.share_content import ArtifactShareContent
 from app.services.graph_db.interface.graph_db_provider import IGraphDBProvider
 
 logger = logging.getLogger(__name__)
@@ -39,6 +43,44 @@ def _actor_from_request(request: Request) -> Actor:
             detail="Authentication required",
         )
     return Actor(org_id=org_id, user_id=user_id)
+
+
+@artifacts_router.get("/api/v1/internal/artifact-share/content")
+async def internal_share_content(
+    request: Request,
+    claims: Mapping[str, Any] = Depends(require_service_token(TokenScopes.ARTIFACT_SHARE_CONTENT)),
+    graph_provider: IGraphDBProvider = Depends(get_graph_provider),
+) -> Response:
+    """Only a service token can name the owner, artifact and pinned version.
+
+    The Node caller must validate the share and active owner on each request.
+    This endpoint independently checks owner permission and visibility.
+    """
+    org_id, user_id, artifact_id, version, content_hash = (
+        claims.get("orgId"), claims.get("userId"), claims.get("artifactId"), claims.get("version"), claims.get("contentHash")
+    )
+    if not all(isinstance(v, str) and v for v in (org_id, user_id, artifact_id)):
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if not isinstance(content_hash, str) or len(content_hash) != 64:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    from app.modules.transformers.blob_storage import BlobStorage
+    from app.services.artifact_registry.registry import ArtifactRegistryService
+
+    registry = ArtifactRegistryService(graph_provider, BlobStorage(logger, request.app.state.config_service))
+    try:
+        content = await ArtifactShareContent(graph_provider, registry).get_content(
+            actor=Actor(org_id=org_id, user_id=user_id), artifact_id=artifact_id, version=version,
+            pinned_hash=content_hash,
+        )
+    except ArtifactNotFoundError:
+        raise HTTPException(status_code=404, detail="Artifact unavailable") from None
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @artifacts_router.get(
@@ -105,6 +147,29 @@ async def get_artifact_gallery(
             detail="Artifact not found",
         ) from None
     return detail.model_dump(by_alias=True)
+
+
+@artifacts_router.post(
+    "/api/v1/artifacts/{artifact_id}/share-authorization",
+    dependencies=[Depends(require_scopes(OAuthScopes.CONNECTOR_READ, OAuthScopes.KB_READ))],
+)
+async def authorize_artifact_share(
+    request: Request,
+    artifact_id: str,
+    version: int = Query(..., ge=1),
+    graph_provider: IGraphDBProvider = Depends(get_graph_provider),
+) -> dict:
+    """Check the authenticated caller's authority; this does not create a link."""
+    actor = _actor_from_request(request)
+    try:
+        content_hash = await ArtifactShareAuthorization(graph_provider).authorize(actor, artifact_id, version)
+        detail = await ArtifactGalleryService(graph_provider).get(actor, artifact_id)
+    except ArtifactNotFoundError:
+        raise HTTPException(
+            status_code=HttpStatusCode.NOT_FOUND.value,
+            detail="Artifact or version not found",
+        ) from None
+    return {"authorized": True, "contentHash": content_hash, "name": detail.name, "mimeType": detail.mime_type}
 
 
 @artifacts_router.get(

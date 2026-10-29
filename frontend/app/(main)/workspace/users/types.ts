@@ -25,6 +25,8 @@ export interface User {
   createdAtTimestamp?: number;
   /** Unix timestamp in milliseconds (absent for pending users) */
   updatedAtTimestamp?: number;
+  /** Most recent recorded authenticated human-session activity, in milliseconds. */
+  lastActiveTimestamp?: number;
 
   // ── Derived fields (computed during API merge) ──
 

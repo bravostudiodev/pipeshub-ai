@@ -39,6 +39,10 @@ through retrieval, citation/content loading, and answer generation. Permission
 checks must fail closed: if access cannot be established, do not return the
 content. Validate cache keys and invalidation against user, organization,
 source, and permission changes before caching access-sensitive results.
+The only exception is the implementation of artifact sharing. Only the artifact,
+not the conversation is shared. The artifact URL lives behind a zero-trust gateway (same as this app), 
+and the user took on himself the burden of choosing to share the data in the artifact, even though it 
+might be limited.
 
 Connector ingestion and MCP live access are both supported options. Choose per
 source based on per-user authorization, ACL enforcement, reliability, and

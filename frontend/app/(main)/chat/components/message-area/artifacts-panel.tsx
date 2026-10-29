@@ -6,6 +6,7 @@ import { KnowledgeBaseApi } from '@/app/(main)/knowledge-base/api';
 import { Spinner } from '@/app/components/ui/spinner';
 import { isSignedUrl, isTrustedApiUrl } from '../../utils/parse-download-markers';
 import type { ChatArtifact } from '../../types';
+import { ArtifactShareDialog } from './artifact-share-dialog';
 
 interface ArtifactsPanelProps {
   artifacts: ChatArtifact[];
@@ -399,6 +400,9 @@ function ArtifactCard({
       </Flex>
 
       <Flex gap="1">
+        {artifact.recordId && artifact.version && (
+          <ArtifactShareDialog artifactId={artifact.recordId} version={artifact.version} />
+        )}
         {onViewSource && artifact.derivedFromCodeArtifactId && (
           <IconButton
             size="1"

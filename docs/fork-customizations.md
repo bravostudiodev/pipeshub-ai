@@ -276,6 +276,76 @@ sidebar. Old in-flight builder listings cannot replace newer grant or identity
 results, and a failed listing shows a load error instead of "no servers".
 Remaining Phase 6 OAuth/status integration and live UI verification are pending.
 
+## Artifact sharing (in development)
+
+### Sharing model
+
+An authenticated artifact owner can choose **Share** on an artifact card and
+publish its selected version. Conversation readers cannot publish the owner's
+artifact. The owner chooses an expiry of 1, 7, or 30 days (default 7) and can
+stop an active share. Anyone who can access the link can view that artifact,
+including a recipient without access to its source records; the link can be
+forwarded and the owner accepts responsibility for its contents. This exception
+covers only the published artifact, not the conversation, other artifacts,
+source records, or credentials.
+
+Links use `/share/#<token>` on the current origin. The token is a bearer secret:
+the raw value is returned only at creation, and only its hash is persisted in
+MongoDB. Copy the link before closing the dialog; an existing link cannot be
+recovered from its hash, although the owner can list and revoke active shares.
+Expiry or revocation blocks subsequent requests, but cannot remove downloaded
+copies. A deleted, disabled, missing, or service-account owner, a missing or
+hidden artifact, or lost owner access also makes a link unavailable. Unknown,
+expired, revoked, and failed lookups receive the same unavailable response.
+
+### Delivery and preview
+
+The standalone viewer submits the token in the request body to
+`POST /api/v1/artifact-shares/metadata` and
+`POST /api/v1/artifact-shares/content`, never in the request URL. Each request rechecks the share, active owner, pinned
+version, visibility, and ownership. The connector receives a short-lived,
+dedicated service token, rechecks artifact authority, uses the existing blob
+storage and version mapping, and verifies the bytes against the SHA-256 hash
+recorded at publication. Missing or changed hashes fail closed; no signed
+storage URL is returned to the viewer. The content client limits responses to
+25 MiB. Metadata checks currently fetch and verify the artifact bytes too, so
+opening a link can be expensive. The filename and MIME type are captured at
+publication from current artifact metadata; historical versions do not have
+independently versioned MIME metadata and may be labelled incorrectly.
+
+HTML uses the existing artifact HTML renderer, including inline scripts and CSS,
+in an opaque-origin iframe. **This is not a complete network-isolation boundary:**
+its CSP blocks common subresource and fetch requests, but untrusted HTML can
+navigate the iframe, including through meta refresh. SVG uses the existing image
+renderer. PDF pages render to canvas with a bundled same-origin PDF.js worker,
+without annotation or form layers. Plain text, CSV, JSON, and signature-checked
+PNG, JPEG, and WebP also have previews. Supported previews have a browser
+full-screen control. PPTX, Word documents, and spreadsheets are download-only.
+
+### Deployment and verification
+
+The administrator must protect the viewer **and both direct share APIs** with
+the external zero-trust gateway and prevent bypassing it. The application does
+not detect or verify that gateway; recipients do not need an OddJeeves login.
+Node suppresses parser-error details and referrer/query logging for token
+endpoints. Gateways, proxies, analytics, and other observability systems must not
+record share request bodies or bearer tokens. Responses use no-store and
+no-referrer policies.
+
+The viewer calls share APIs on the current origin. In the contributor split
+setup, the Next development server proxies those calls to Node on port 3000 (or
+`NEXT_PUBLIC_API_BASE_URL`); static production exports are served by Node.
+Implementation lives under `backend/nodejs/apps/src/modules/artifacts/`,
+`backend/python/app/services/artifact_registry/`,
+`frontend/app/(main)/chat/components/message-area/artifact-share-dialog.tsx`,
+and `frontend/app/(public)/share/`.
+
+Focused tests cover the token, owner policy, request handling, UI, and selected
+browser preview behavior. The browser tests use mocked share APIs and can be run
+with `cd frontend && npx playwright test -c playwright.share.config.ts`.
+They do not establish full end-to-end behavior across running services, storage
+backends, restarts, replicas, or the deployed gateway; those checks remain open.
+
 ## Chat source lookup
 
 Chat does not prefetch or grant indexed knowledge search, even if an old

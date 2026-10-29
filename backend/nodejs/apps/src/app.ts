@@ -109,6 +109,8 @@ import { createMcpServersRouter } from './modules/mcp_servers/routes/mcp_servers
 import { ProjectsContainer } from './modules/projects/container/project.container';
 import { createProjectsRouter } from './modules/projects/routes/project.routes';
 import { createArtifactsRouter } from './modules/artifacts/routes/artifacts.routes';
+import { createShareContentRouter } from './modules/artifacts/routes/share-content.routes';
+import { isShareTokenRequest, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
 import { createMCPRouter } from './modules/mcp/routes/mcp.routes';
 // Side-effect import: registers edition-specific Redis providers for this process.
 import './redisProviders';
@@ -334,6 +336,10 @@ export class Application {
                 ? 'public, max-age=31536000, immutable'
                 : 'no-cache',
             );
+            if (filePath === path.join(publicDir, 'share', 'index.html')) {
+              res.setHeader('Referrer-Policy', 'no-referrer');
+              res.setHeader('Cache-Control', 'no-store, private');
+            }
           },
         }),
       );
@@ -475,18 +481,29 @@ export class Application {
     // Body parsing
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
-    this.app.use(xssSanitizationMiddleware);
+    this.app.use(suppressShareBodyParserError);
+    this.app.use((req, res, next) => {
+      // Bearer inputs are strictly validated by the share token parser. Avoid
+      // generic sanitizer error logs that could include malformed token bodies.
+      if (isShareTokenRequest(req.path)) return next();
+      return xssSanitizationMiddleware(req, res, next);
+    });
 
     // Logging — only log API requests, skip static assets.
     // 'combined' logs the full request URL, and OAuth callbacks arrive as
     // ?code=<authorization code> — a credential exchangeable for tokens by
     // whoever reads the log. Same format, with those values redacted.
-    morgan.token('url-redacted', (req: IncomingMessage) =>
-      redactSensitiveQueryParams((req as { originalUrl?: string; url?: string }).originalUrl ?? req.url ?? ''),
-    );
+    morgan.token('url-redacted', (req: IncomingMessage) => {
+      const url = (req as { originalUrl?: string; url?: string }).originalUrl ?? req.url ?? '';
+      const path = url.split('?')[0] ?? '';
+      if (isShareTokenRequest(path)) return '/api/v1/artifact-shares/[redacted]';
+      return redactSensitiveQueryParams(url);
+    });
     // The Referer is client-supplied and can itself be an OAuth callback or a
     // presigned URL, so it carries the same credentials the request line does.
     morgan.token('referrer-redacted', (req: IncomingMessage) => {
+      const path = ((req as { originalUrl?: string }).originalUrl ?? req.url ?? '').split('?')[0] ?? '';
+      if (isShareTokenRequest(path)) return '-';
       const referrer = req.headers.referer ?? req.headers.referrer;
       return typeof referrer === 'string'
         ? redactSensitiveQueryParams(referrer)
@@ -633,6 +650,11 @@ export class Application {
     this.app.use(
       '/api/v1/artifacts',
       createArtifactsRouter(this.knowledgeBaseContainer),
+    );
+
+    this.app.use(
+      '/api/v1/artifact-shares',
+      createShareContentRouter(this.knowledgeBaseContainer.get<AppConfig>('AppConfig')),
     );
 
     this.app.use(

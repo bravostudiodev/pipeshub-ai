@@ -48,6 +48,8 @@ class TokenScopes(Enum):
     # Deliberately separate from STORAGE_TOKEN so a leaked storage token
     # cannot also grant connector record reads.
     RECORD_CONTENT = "record:content"
+    # Node -> connectors, a single owner-checked published artifact version.
+    ARTIFACT_SHARE_CONTENT = "artifact-share:content"
     # Indexing's admin-level read of record bytes from the connectors service
     # (the name predates the route; it is not tied to signed URLs).
     CONNECTOR_SIGNED_URL = "connector:signedUrl"

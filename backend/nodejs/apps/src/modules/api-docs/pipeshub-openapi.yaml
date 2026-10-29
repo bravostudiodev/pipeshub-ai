@@ -20045,6 +20045,10 @@ paths:
                         updatedAtTimestamp:
                           type: integer
                           description: "Epoch milliseconds of `updatedAt` (absent if field is null)"
+                        lastActiveTimestamp:
+                          type: integer
+                          format: int64
+                          description: "Epoch milliseconds of most recent recorded human session activity; absent until observed. Updated at most once every five minutes."
                         profilePicture:
                           type: string
                           description: "Base64 data URI (`data:image/jpeg;base64,...`). Absent when no picture uploaded."
@@ -24911,6 +24915,160 @@ paths:
           description: The storage scoped token was missing or invalid.
         '404':
           description: No such document.
+  /artifacts/{artifactId}/shares:
+    parameters:
+      - in: path
+        name: artifactId
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Artifacts]
+      summary: Publish one artifact version
+      description: Requires artifact ownership. The token is returned only once; store only the URL fragment in the browser.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, expiresInDays]
+              properties:
+                version:
+                  type: integer
+                  minimum: 1
+                expiresInDays:
+                  type: integer
+                  enum: [1, 7, 30]
+      responses:
+        '201':
+          description: Share created; token is returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, token, expiresAt]
+                properties:
+                  id:
+                    type: string
+                  token:
+                    type: string
+                    description: Bearer secret, returned only on creation.
+                  expiresAt:
+                    type: string
+                    format: date-time
+        '404':
+          description: Artifact or version unavailable.
+    get:
+      tags: [Artifacts]
+      summary: List the caller's active shares for an artifact
+      responses:
+        '200':
+          description: Active shares without bearer tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shares]
+                properties:
+                  shares:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        version:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                        expiresAt:
+                          type: string
+                          format: date-time
+  /artifacts/{artifactId}/shares/{shareId}:
+    delete:
+      tags: [Artifacts]
+      summary: Revoke the caller's share
+      parameters:
+        - in: path
+          name: artifactId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: shareId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Share revoked.
+        '404':
+          description: Share unavailable.
+  /artifact-shares/metadata:
+    post:
+      tags: [Artifacts]
+      summary: Check availability of a published artifact version
+      description: The gateway must protect this endpoint. Submit the bearer token in the body.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: The pinned artifact version is available.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, name, mimeType]
+                properties:
+                  version:
+                    type: integer
+                  name:
+                    type: string
+                  mimeType:
+                    type: string
+        '404':
+          description: The artifact is unavailable.
+  /artifact-shares/content:
+    post:
+      tags:
+        - Artifacts
+      summary: Download a published artifact version
+      description: |
+        Validates the bearer share token on every request. Access to this
+        endpoint must be protected by the deployment's zero-trust gateway.
+        The token is sent in the request body, never the URL.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Artifact bytes, served as an attachment.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: The artifact is unavailable.
   /artifacts:
     get:
       tags:

@@ -23,6 +23,7 @@ import { stripTokenDisplayPrefix } from '../../modules/oauth_provider/constants/
 export type OAuthTokenServiceFactory = () => OAuthTokenService | null;
 
 const { PASSWORD_CHANGED } = userActivitiesType;
+const LAST_ACTIVE_WRITE_INTERVAL_MS = 5 * 60 * 1000;
 // Delay in milliseconds between password change activity and token generation
 
 function hasValidJwtRole(role: unknown): role is 'admin' | 'member' {
@@ -138,6 +139,36 @@ export class AuthMiddleware {
 
       if (userActivity && activityEndsSession(userActivity, decoded.iat)) {
         throw new UnauthorizedError('Session expired, please login again');
+      }
+    }
+
+    // Record real session activity separately from profile updatedAt. OAuth/PAT
+    // and service credentials do not represent an interactive human session.
+    // Use a conditional write so concurrent requests and multiple workers do
+    // not write more than once per interval; a telemetry failure cannot deny login.
+    const now = Date.now();
+    if (userId && orgId && (!user.lastActiveAt || now - new Date(user.lastActiveAt).getTime() >= LAST_ACTIVE_WRITE_INTERVAL_MS)) {
+      try {
+        void Users.updateOne(
+          {
+            _id: userId,
+            orgId,
+            isDeleted: false,
+            isDisabled: { $ne: true },
+            kind: { $ne: 'service' },
+            $or: [
+              { lastActiveAt: { $exists: false } },
+              { lastActiveAt: null },
+              { lastActiveAt: { $lte: new Date(now - LAST_ACTIVE_WRITE_INTERVAL_MS) } },
+            ],
+          },
+          { $max: { lastActiveAt: new Date(now) } },
+          { timestamps: false },
+        ).exec().catch((error) => {
+          this.logger.warn('Could not record session activity', error);
+        });
+      } catch (error) {
+        this.logger.warn('Could not record session activity', error);
       }
     }
 

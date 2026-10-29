@@ -216,6 +216,22 @@ describe('UserController', () => {
       expect(response).to.have.property('pagination');
     });
 
+    it('returns recorded activity separately from profile updates', async () => {
+      stubUserEnrichment();
+      const lastActive = new Date('2026-10-28T10:00:00Z');
+      const profileUpdate = new Date('2026-10-23T10:00:00Z');
+      stubUsersFind([
+        { _id: new mongoose.Types.ObjectId(), orgId: new mongoose.Types.ObjectId(), lastActiveAt: lastActive, updatedAt: profileUpdate },
+        { _id: new mongoose.Types.ObjectId(), orgId: new mongoose.Types.ObjectId(), updatedAt: profileUpdate },
+      ]);
+      stubUsersCount(2);
+      await controller.getAllUsers(req, res);
+      const users = res.json.firstCall.args[0].users;
+      expect(users[0].lastActiveTimestamp).to.equal(lastActive.getTime());
+      expect(users[0].updatedAtTimestamp).to.equal(profileUpdate.getTime());
+      expect(users[1].lastActiveTimestamp).to.equal(undefined);
+    });
+
     it('leaves service accounts out of the list of people by default', async () => {
       // They can never sign in, so listing them here would park them in the
       // pending-invite set for good and sweep them into bulk invites meant for

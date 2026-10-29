@@ -420,7 +420,7 @@ function UsersPageContent() {
     if (filters.lastActiveAfter || filters.lastActiveBefore) {
       result = result.filter((u) =>
         isInDateRange(
-          u.updatedAtTimestamp,
+          u.lastActiveTimestamp,
           filters.lastActiveAfter,
           filters.lastActiveBefore,
           filters.lastActiveDateType
@@ -680,7 +680,7 @@ function UsersPageContent() {
         width: '130px',
         render: (user) => (
           <Text size="2" style={{ color: 'var(--slate-11)' }}>
-            {user.updatedAtTimestamp ? formatDate(user.updatedAtTimestamp) : '-'}
+            {user.lastActiveTimestamp ? formatDate(user.lastActiveTimestamp) : '-'}
           </Text>
         ),
       },

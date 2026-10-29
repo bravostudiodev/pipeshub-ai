@@ -8,7 +8,10 @@ import { AppConfig } from '../../tokens_manager/config/config';
 import {
   artifactIdParamsSchema,
   listArtifactsSchema,
+  shareIdParamsSchema,
+  createShareSchema,
 } from '../validators/artifacts.validators';
+import { createArtifactShare, listArtifactShares, revokeArtifactShare } from '../controllers/share-owner.controller';
 import {
   getArtifact,
   listArtifactVersions,
@@ -26,6 +29,28 @@ export function createArtifactsRouter(container: Container): Router {
     requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
     ValidationMiddleware.validate(listArtifactsSchema),
     listArtifacts(appConfig),
+  );
+
+  router.post(
+    '/:artifactId/shares',
+    authMiddleware.authenticate,
+    requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
+    ValidationMiddleware.validate(createShareSchema),
+    createArtifactShare(appConfig),
+  );
+  router.get(
+    '/:artifactId/shares',
+    authMiddleware.authenticate,
+    requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
+    ValidationMiddleware.validate(artifactIdParamsSchema),
+    listArtifactShares(),
+  );
+  router.delete(
+    '/:artifactId/shares/:shareId',
+    authMiddleware.authenticate,
+    requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
+    ValidationMiddleware.validate(shareIdParamsSchema),
+    revokeArtifactShare(),
   );
 
   router.get(

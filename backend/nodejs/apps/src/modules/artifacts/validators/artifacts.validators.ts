@@ -83,10 +83,24 @@ export const listArtifactsSchema = z.object({
 
 const ARTIFACT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
+export const shareIdParamsSchema = z.object({
+  params: z.object({
+    artifactId: z.string().min(1).max(128).regex(ARTIFACT_ID_PATTERN),
+    shareId: z.string().regex(/^[0-9a-fA-F]{24}$/),
+  }),
+});
+
 export const artifactIdParamsSchema = z.object({
   params: z.object({
     artifactId: z.string().min(1).max(128).regex(ARTIFACT_ID_PATTERN, {
       message: 'artifactId must be a single path-safe identifier',
     }),
   }),
+});
+
+export const createShareSchema = artifactIdParamsSchema.extend({
+  body: z.object({
+    version: z.number().int().safe().positive(),
+    expiresInDays: z.union([z.literal(1), z.literal(7), z.literal(30)]),
+  }).strict(),
 });
