@@ -343,7 +343,7 @@ config:
   # slidevEnabled and the existing code-execution gate are enabled with
   # sandboxMode=docker. Publish this image before enabling it.
   slidevEnabled: false
-  slidevDockerImage: "doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1"
+  slidevDockerImage: "doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-2"
   # false: generated code runs with no network. Allowlisted package installs
   # still reach the configured registries from a separate install container.
   # true: generated code may reach public internet addresses only. Each

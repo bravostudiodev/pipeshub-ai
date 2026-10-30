@@ -84,7 +84,7 @@ pipeline:
         context: deployment/slidev
         push: true # todo set to false
         tags:
-          - 1.0.0-1 # todo  finalize
+          - 1.0.0-2 # todo  finalize
     "Slidev image build and push":
       branch: "main"
       imageBuild:

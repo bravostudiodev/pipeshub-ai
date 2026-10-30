@@ -1,8 +1,8 @@
 # Slidev renderer image
 
 The `.bravo/config.yaml` Slidev image stages build this context as
-`doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1`; the non-main stage
-builds without pushing, and the main-branch stage publishes it.
+`doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-2`. Both the non-main and
+main-branch stages currently have image pushing enabled.
 
 The base image is `docker.io/tangramor/slidev:latest`, resolved on 2026-10-29
 to `sha256:79c835dbc489be324f697a975842cd222371e62e62a388e200cf092ca0925db9`.
@@ -29,7 +29,7 @@ existing application release process. Enable `SLIDEV_ENABLED=true` only after
 that application image and this renderer image are available to the deployment.
 The Helm values expose `config.slidevEnabled` (default `false`) and
 `config.slidevDockerImage` (default
-`doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1`); the tool also requires
+`doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-2`); the tool also requires
 the existing code-execution gate and `SANDBOX_MODE=docker`.
 
 Run this smoke test after building the image. It builds a two-slide deck and a
@@ -37,11 +37,11 @@ local SVG asset for each supported theme with networking disabled, then checks
 the static site exists:
 
 ```sh
-docker build -t doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1 deployment/slidev
+docker build -t doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-2 deployment/slidev
 docker run --rm --network none --memory 1g --cpus 1 --pids-limit 128 \
   --cap-drop ALL --security-opt no-new-privileges:true \
   --user 1000:1000 --entrypoint sh \
-  doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1 -ec '
+  doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-2 -ec '
 mkdir -p public
 printf "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><circle cx=\"8\" cy=\"8\" r=\"7\" fill=\"#276EF1\"/></svg>" > public/smoke.svg
 for theme in default seriph; do
