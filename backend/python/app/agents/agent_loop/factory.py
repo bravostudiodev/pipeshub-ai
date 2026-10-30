@@ -168,6 +168,7 @@ from app.agents.agent_loop.sandbox_bridge import (
     register_coding_sandbox_tools,
     sandbox_network_enabled,
 )
+from app.agents.agent_loop.slidev import register_slidev_tool, slidev_artifact_propagation
 from app.agents.agent_loop.skills_wiring import (
     DOMAIN_SHARED_SKILL_TOOL_NAMES,
     build_skill_manager,
@@ -502,6 +503,9 @@ class PipesHubAgentFactory:
                 [n for n in tool_registry.names() if n in ("run_code", "install_packages", "read_sandbox_file")],
                 network_enabled,
             )
+
+        if register_slidev_tool(tool_registry, context, code_exec_enabled=code_exec_enabled):
+            logger.info("PipesHubAgentFactory.create: registered render_slidev")
 
         # Skills subsystem, gated by two layers that must BOTH be true:
         # `skills_enabled()` is the deployment-level env kill-switch
@@ -1077,6 +1081,10 @@ class PipesHubAgentFactory:
             register_coding_sandbox_hooks(
                 hooks, context, sandbox_manager,
                 allow_network=allow_network, artifact_store=artifact_store,
+            )
+        if tool_registry is not None and tool_registry.has("render_slidev"):
+            hooks.on(HookEvent.POST_TOOL_USE).use(
+                "/tools/slidev/**", slidev_artifact_propagation(context),
             )
 
         return hooks

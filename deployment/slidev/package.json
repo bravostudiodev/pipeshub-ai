@@ -1,0 +1,13 @@
+{
+  "name": "oddjeeves-slidev-renderer",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "slidev build slides.md --out dist --base ./"
+  },
+  "dependencies": {
+    "@slidev/cli": "53.0.0",
+    "@slidev/theme-default": "0.25.0",
+    "@slidev/theme-seriph": "0.25.0"
+  }
+}

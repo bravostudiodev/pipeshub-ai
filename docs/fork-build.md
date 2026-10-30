@@ -125,9 +125,15 @@ python -c "from pptx import Presentation; p = Presentation(\"/tmp/sandbox-smoke.
 '
 ```
 
-This image smoke test does not verify Kubernetes user-namespace isolation.
-Separately verify that the runtime pod uses `hostUsers: false` and maps its
-container root UID to a nonzero host UID before enabling execution. It checks
-direct access to the libraries baked into the image; it does not exercise the
-tool's `packages` argument or the runtime package installer and its network
-route.
+This image smoke test verifies the libraries baked into the image, but does
+not verify Kubernetes runtime isolation or the package installer and its
+network route. Before enabling execution, verify that Docker reports
+`name=rootless` in its `SecurityOptions`. The Helm executor pod uses
+`hostUsers: true` and UID/GID/fsGroup 1000 for sandbox containers; the outer
+executor container remains `privileged: true` to initialize and run the
+rootless Docker daemon. Rootless mode applies to the Docker engine and does not
+remove the outer container's privileged setting. Also verify per-run CPU and
+memory limits in practice: startup reports the daemon's cgroup driver and
+version, but does not guarantee enforcement. Per-run limits may be ignored
+unless the daemon uses the systemd cgroup driver with cgroup v2. Kubernetes
+CPU and memory limits on the outer pod remain configured.

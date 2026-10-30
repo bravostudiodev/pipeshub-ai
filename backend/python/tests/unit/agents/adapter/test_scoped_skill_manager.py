@@ -2,6 +2,7 @@
 verifies the per-agent assignment allowlist narrows catalog/search/activation
 without touching the underlying SkillManager's other surface (delegated
 transparently via __getattr__)."""
+
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -23,7 +24,11 @@ class TestCatalogSnapshot:
     def test_filters_to_allowed_names(self) -> None:
         manager = MagicMock()
         manager.catalog_snapshot = MagicMock(
-            return_value=[_metadata("pdf-extractor"), _metadata("csv-summarizer"), _metadata("web-search")]
+            return_value=[
+                _metadata("pdf-extractor"),
+                _metadata("csv-summarizer"),
+                _metadata("web-search"),
+            ]
         )
         scoped = ScopedSkillManager(manager, {"pdf-extractor", "web-search"})
         result = scoped.catalog_snapshot()
@@ -34,7 +39,6 @@ class TestCatalogSnapshot:
         manager.catalog_snapshot = MagicMock(return_value=[_metadata("pdf-extractor")])
         scoped = ScopedSkillManager(manager, set())
         assert scoped.catalog_snapshot() == []
-
 
 class TestListSkills:
     @pytest.mark.asyncio
@@ -65,7 +69,9 @@ class TestSearch:
                 _match("web-search"),
             ]
         )
-        scoped = ScopedSkillManager(manager, {"pdf-extractor", "csv-summarizer", "web-search"})
+        scoped = ScopedSkillManager(
+            manager, {"pdf-extractor", "csv-summarizer", "web-search"}
+        )
         result = await scoped.search("extract", limit=2)
         assert [m.skill.name for m in result] == ["pdf-extractor", "csv-summarizer"]
         # limit passed upstream must be over-fetched, never the raw requested limit.
@@ -77,7 +83,9 @@ class TestSearch:
         manager = MagicMock()
         manager.search = AsyncMock(return_value=[])
         scoped = ScopedSkillManager(manager, {"pdf-extractor"})
-        await scoped.search("q", category="documents", subcategory="pdf", tags=["a"], limit=5)
+        await scoped.search(
+            "q", category="documents", subcategory="pdf", tags=["a"], limit=5
+        )
         _, kwargs = manager.search.await_args
         assert kwargs["category"] == "documents"
         assert kwargs["subcategory"] == "pdf"
@@ -88,7 +96,9 @@ class TestGetSkill:
     @pytest.mark.asyncio
     async def test_allowed_skill_delegates(self) -> None:
         manager = MagicMock()
-        manager.get_skill = AsyncMock(return_value=SimpleNamespace(metadata=_metadata("pdf-extractor")))
+        manager.get_skill = AsyncMock(
+            return_value=SimpleNamespace(metadata=_metadata("pdf-extractor"))
+        )
         scoped = ScopedSkillManager(manager, {"pdf-extractor"})
         result = await scoped.get_skill("pdf-extractor")
         manager.get_skill.assert_awaited_once_with("pdf-extractor")
@@ -108,7 +118,9 @@ class TestActivateSkill:
     @pytest.mark.asyncio
     async def test_allowed_skill_delegates(self) -> None:
         manager = MagicMock()
-        manager.activate_skill = AsyncMock(return_value=SimpleNamespace(metadata=_metadata("pdf-extractor")))
+        manager.activate_skill = AsyncMock(
+            return_value=SimpleNamespace(metadata=_metadata("pdf-extractor"))
+        )
         scoped = ScopedSkillManager(manager, {"pdf-extractor"})
         result = await scoped.activate_skill("pdf-extractor", session_id="s1")
         manager.activate_skill.assert_awaited_once_with("pdf-extractor", "s1")
@@ -132,7 +144,9 @@ class TestLoadResource:
         scoped = ScopedSkillManager(manager, {"pdf-extractor"})
         result = await scoped.load_resource("pdf-extractor", "scripts/run.py")
         assert result == "print('hi')"
-        manager.load_resource.assert_awaited_once_with("pdf-extractor", "scripts/run.py")
+        manager.load_resource.assert_awaited_once_with(
+            "pdf-extractor", "scripts/run.py"
+        )
 
     @pytest.mark.asyncio
     async def test_disallowed_skill_raises_without_calling_manager(self) -> None:

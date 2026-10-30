@@ -1,6 +1,6 @@
 ---
 name: office-utils
-description: "Low-level support skill for hand-editing the raw XML inside a .docx or .pptx file (both formats are just ZIP archives of XML parts). Use this directly only when you need to unpack, inspect, or repack Open XML yourself — for example fixing a validation error in generated markup, or making one small targeted edit without regenerating a whole document from scratch. The docx and pptx skills already use this internally for their 'edit an existing file' workflow, so you rarely need to load this on its own."
+description: "Low-level support skill for hand-editing raw XML inside an existing .docx or .pptx file. Use only for reading or making a small targeted edit to an existing Office document; never use it to create a new presentation. For new browser-based presentations, use the slidev skill."
 metadata:
   agent-loop:
     version: 1.0.0
@@ -10,7 +10,7 @@ metadata:
     status: active
     source: builtin
     pack_name: office-utils
-    pack_version: 1.0.2
+    pack_version: 1.0.3
 ---
 
 # Office Open XML utilities
@@ -19,7 +19,7 @@ metadata:
 
 A `.docx` or `.pptx` file is a ZIP archive containing a tree of XML parts (`word/document.xml`, `ppt/slides/slide1.xml`, relationship files, content-type manifests, ...). Editing it directly means: unpack the ZIP, edit the XML text, repack the ZIP. No LibreOffice or other converter is required for this — it is pure `zipfile` + text editing.
 
-Note on language: the `docx`/`pptx`/`xlsx`/`pdf` skills default to Node (`docx`/`pptxgenjs`/`exceljs`/`pdfkit`) for *creating* a file from scratch, per this environment's Node-first policy for office-document generation. This skill stays Python: it's invoked by writing a `subprocess` call from your sandbox program (whichever coding tool runs it), and the Python invocation (`python skills/office-utils/scripts/unpack.py ...`) is guaranteed to resolve the same way across every sandbox backend, whereas the TypeScript runtime's binary (`tsx`) is installed per-sandbox and its exact invocation differs across backends — not worth the portability risk for a script that's about editing XML, not about which language "creates" the file.
+For new presentations, use the `slidev` skill and its offline renderer. This skill is for targeted edits to existing `.docx` or `.pptx` files; it does not create presentations. The `docx`, `xlsx`, and `pdf` skills continue to cover their respective document workflows.
 
 ## Quick Reference
 

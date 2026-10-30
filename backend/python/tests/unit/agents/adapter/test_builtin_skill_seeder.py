@@ -8,12 +8,21 @@ bumping it on an org-edited copy is skipped (fork-detection via
 from __future__ import annotations
 
 import os
-import tempfile
+from pathlib import Path
 
 import pytest
 
-from app.agent_loop_lib.modules.providers.skills.base import SkillSource, SkillStatus, SkillFilter
-from app.agents.agent_loop.skills.builtin_seeder import SEED_IDENTITY, BuiltinSkillSeeder
+from app.agent_loop_lib.modules.providers.skills.base import (
+    SkillFilter,
+    SkillMetadata,
+    SkillSource,
+    SkillStatus,
+)
+from app.agent_loop_lib.modules.providers.skills.validator import SkillFormatError
+from app.agents.agent_loop.skills.builtin_seeder import (
+    SEED_IDENTITY,
+    BuiltinSkillSeeder,
+)
 from app.agents.agent_loop.skills.graph_store import GraphSkillStore
 from tests.unit.agents.adapter.test_skills_graph_store import FakeGraphProvider
 
@@ -213,11 +222,11 @@ class TestDisableSurvivesUpgrade:
             def __init__(self, inner: GraphSkillStore) -> None:
                 self._inner = inner
 
-            def __getattr__(self, name: str):
+            def __getattr__(self, name: str) -> object:
                 return getattr(self._inner, name)
 
-            async def list_skills(self, filter: SkillFilter | None = None):
-                listed = await self._inner.list_skills(filter)
+            async def list_skills(self, skill_filter: SkillFilter | None = None) -> list[SkillMetadata]:
+                listed = await self._inner.list_skills(skill_filter)
                 await self._inner.set_skill_status(
                     "pack-a", SkillStatus.ACTIVE, from_status=SkillStatus.DISABLED,
                 )
@@ -259,7 +268,7 @@ class TestValidationOnLoad:
         startup rather than silently ship a broken pack."""
         root = str(tmp_path / "bad_packs")
         _write_pack(root, "bad-pack", "---\nname: bad-pack\ndescription: x\n---\n\n")
-        with pytest.raises(Exception):
+        with pytest.raises(SkillFormatError):
             BuiltinSkillSeeder(root)
 
 
@@ -319,6 +328,60 @@ class TestResourceSeeding:
 
         resources = await store.get_resources("pack-a")
         assert resources == {"scripts/run.py": "print(1)"}
+
+
+class TestOfficeUtilsPresentationGuidance:
+    def test_real_pack_has_current_version_and_routes_new_presentations_to_slidev(self) -> None:
+        packs_root = Path(__file__).resolve().parents[4] / "app/agents/agent_loop/skills/builtin_packs"
+        seeder = BuiltinSkillSeeder(str(packs_root))
+        office_utils = next(
+            skill for skill in seeder._packs if skill.metadata.name == "office-utils"
+        )
+
+        assert office_utils.metadata.pack_version == "1.0.3"
+        assert "new presentations" in office_utils.body.lower()
+        assert "slidev" in office_utils.body.lower()
+        assert "pptxgenjs" not in office_utils.body.lower()
+
+    async def test_unmodified_office_utils_copy_upgrades_and_custom_copy_is_preserved(
+        self, tmp_path,
+    ) -> None:
+        old_root = str(tmp_path / "office-utils-v1")
+        _write_pack(old_root, "office-utils", """---
+name: office-utils
+description: Edit existing Office documents
+metadata:
+  agent-loop:
+    source: builtin
+    pack_name: office-utils
+    pack_version: 1.0.2
+---
+
+Use pptxgenjs to create a new presentation.
+""")
+        graph = FakeGraphProvider()
+        seed_store = _seed_store(graph)
+        await BuiltinSkillSeeder(old_root).sync(seed_store)
+
+        packs_root = Path(__file__).resolve().parents[4] / "app/agents/agent_loop/skills/builtin_packs"
+        await BuiltinSkillSeeder(str(packs_root)).sync(seed_store)
+
+        upgraded = await seed_store.get_skill("office-utils")
+        assert upgraded.metadata.pack_version == "1.0.3"
+        assert "new presentations" in upgraded.body.lower()
+        assert "pptxgenjs" not in upgraded.body.lower()
+
+        # A real user's edits prevent the next pack sync from overwriting
+        # their org-specific copy, even when its pack version is stale.
+        user_store = GraphSkillStore(graph, "org-1", "user-42")
+        await user_store.patch_skill(
+            "office-utils", "new presentations", "custom presentation notes",
+        )
+        await BuiltinSkillSeeder(old_root).sync(seed_store)
+
+        custom = await user_store.get_skill("office-utils")
+        assert custom.metadata.pack_version == "1.0.3"
+        assert "custom presentation notes" in custom.body
 
     async def test_unmodified_upgrade_refreshes_bundled_resources_too(
         self, packs_root_v1: str, packs_root_v2: str,

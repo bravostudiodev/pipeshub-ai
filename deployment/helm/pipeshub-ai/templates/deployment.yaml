@@ -114,6 +114,10 @@ spec:
               value: {{ include "pipeshub-ai.sandboxAllowLocal" . | quote }}
             - name: SANDBOX_DOCKER_IMAGE
               value: {{ .Values.config.sandboxDockerImage | quote }}
+            - name: SLIDEV_ENABLED
+              value: {{ .Values.config.slidevEnabled | toString | quote }}
+            - name: SLIDEV_DOCKER_IMAGE
+              value: {{ .Values.config.slidevDockerImage | quote }}
             - name: SANDBOX_ALLOW_NETWORK
               value: {{ .Values.config.sandboxAllowNetwork | quote }}
             - name: SANDBOX_EGRESS_NETWORK

@@ -339,6 +339,11 @@ config:
   sandboxAllowLocal: false
   # Image `run_code` containers are started from (SANDBOX_MODE=docker only).
   sandboxDockerImage: "pipeshubai/pipeshub-sandbox:latest"
+  # Dedicated offline Slidev renderer. The tool is available only when both
+  # slidevEnabled and the existing code-execution gate are enabled with
+  # sandboxMode=docker. Publish this image before enabling it.
+  slidevEnabled: false
+  slidevDockerImage: "doc.oddbytes.com/platform/pipeshubai-slidev:1.0.0-1"
   # false: generated code runs with no network. Allowlisted package installs
   # still reach the configured registries from a separate install container.
   # true: generated code may reach public internet addresses only. Each

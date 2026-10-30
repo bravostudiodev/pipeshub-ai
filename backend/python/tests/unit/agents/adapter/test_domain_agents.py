@@ -84,6 +84,7 @@ def _full_registry() -> ToolRegistry:
         FakeTool("run_code"),
         FakeTool("install_packages"),
         FakeTool("read_sandbox_file"),
+        FakeTool("render_slidev"),
         FakeTool("dynamic__web_search", app_name="dynamic"),
         FakeTool("dynamic__fetch_url", app_name="dynamic"),
         FakeTool("knowledgegraph__search", app_name="knowledgegraph"),
@@ -126,7 +127,7 @@ class TestComposition:
         # Unclaimed connector tool stays a direct top-level tool...
         assert "jira_search_issues" in top_names
         # ...while claimed domain tools leave the top level entirely.
-        for claimed in ("run_code", "dynamic__web_search", "retrieval_search",
+        for claimed in ("run_code", "render_slidev", "dynamic__web_search", "retrieval_search",
                         "calculator_evaluate", "date_calculator_get_exclusion_dates",
                         "google_calendar_list_events"):
             assert claimed not in top_names
@@ -421,7 +422,7 @@ class TestSharedToolNames:
 
         coding = registry.resolve_by_name("coding_agent")._spec
         assert set(coding.tool_names) == {
-            "run_code", "install_packages", "read_sandbox_file", "web_agent",
+            "run_code", "install_packages", "read_sandbox_file", "render_slidev", "web_agent",
         }
         assert "coding_agent" in top_names
 

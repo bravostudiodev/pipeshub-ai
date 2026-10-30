@@ -324,8 +324,8 @@ DOMAIN_AGENT_DEFINITIONS: tuple[DomainAgentDefinition, ...] = (
         description=(
             "Delegate a coding task to a focused sub-agent that writes and runs "
             "code in a sandbox, installs packages, and reads files it produced. "
-            "Use for computation, data analysis/transformation, chart or file "
-            "generation. It can also generate AI images (via its own "
+            "Use for computation, data analysis/transformation, chart, file, or "
+            "browser-presentation generation. It can also generate AI images (via its own "
             "image-generation tool) and combine them into documents/decks. Give "
             "it ONE self-contained goal stating exactly what to "
             "compute or produce and what the expected output looks like — tool "
@@ -340,7 +340,7 @@ DOMAIN_AGENT_DEFINITIONS: tuple[DomainAgentDefinition, ...] = (
             "and paths of files it generated."
         ),
         tool_names=frozenset({
-            "run_code", "install_packages", "read_sandbox_file",
+            "run_code", "install_packages", "read_sandbox_file", "render_slidev",
             # Real AI image generation belongs with the domain that owns
             # file/asset generation: a goal like "generate 7 images then
             # build a deck from them" must not be answerable only by
@@ -356,7 +356,10 @@ DOMAIN_AGENT_DEFINITIONS: tuple[DomainAgentDefinition, ...] = (
             "NOT draw them programmatically with PIL/matplotlib shapes. "
             "Generated images are saved as artifacts automatically; pass their "
             "file names into run_code's input_artifacts to embed them in a "
-            "document/presentation. Draw with code only for charts/graphs of "
+            "document, or render_slidev's input_artifacts for browser slide decks. "
+            "Use render_slidev for browser presentation deliverables; it only "
+            "supports offline default/seriph themes and returns a ZIP, not PPTX/PDF. "
+            "Draw with code only for charts/graphs of "
             "data. run_code always sets $OUTPUT_DIR — write ONLY the final "
             "deliverable(s) there and they are attached to the response "
             "automatically as downloadable artifacts; never re-run code to "

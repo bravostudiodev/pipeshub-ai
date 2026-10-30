@@ -94,6 +94,7 @@ backend/nodejs/apps/dist/
 # SKILL.md files excluded by `**/*.md` above must ship in the image or the
 # BuiltinSkillSeeder finds zero packs and orgs get an empty skill catalog.
 !backend/python/app/agents/agent_loop/skills/builtin_packs/**/*.md
+!backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/LICENSE
 
 # Tests
 **/tests/
