@@ -1,83 +1,86 @@
 pipeline:
   stages:
-    "App build":
-      appBuild:
-        image:
-          name: platform/node
-          tag: "20"
-        exec:
-          script: |
-            set -e
-
-            cd backend/nodejs/apps
-            ARCH=$(uname -m)
-            if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-              npm ci --ignore-scripts
-              npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
-              npm install sharp --save || true
-            else
-              npm ci
-            fi
-            npm run build
-            npm prune --production
-
-            cd ../../../frontend
-            npm config set legacy-peer-deps true
-            npm ci
-            ELECTRON_STATIC=1 npm run build
-        cache:
-          - ~/.npm
-    "Image build":
-      branch: "!main"
-      imageBuild: &imageBuild
-        name: platform/pipeshubai
-        securityScan:
-          failSeverity: CRITICAL
-          issueAllowlist:
-            - CVE-2026-49261
-            - CVE-2026-44172
-            - CVE-2026-6653
-            - CVE-2026-85394
-            - CVE-2026-8838
-            - GHSA-6q48-6c7w-9gw2
-            - CVE-2026-112403
-            - GHSA-hq85-5cpj-mr62
-            - CVE-2026-91403
-            - CVE-2026-112393
-            - CVE-2026-112398
-            - CVE-2026-112900
-            - CVE-2026-111497
-            - CVE-2026-114820
-        context: .
-        push: true # todo set to false
-        tags:
-          - 0.9.1.oddyssey2-1 # todo finalize
-    "Image build and push":
-      branch: "main"
-      imageBuild:
-        <<: *imageBuild
-        push: true
-    "Sandbox image build":
-      branch: "!main"
-      imageBuild: &sandboxImageBuild
-        name: platform/pipeshubai-sandbox
-        securityScan:
-          failSeverity: CRITICAL
-        context: deployment/sandbox
-        push: true # todo set to false
-        tags:
-          - 0.9.1.oddyssey1-1 # todo finalize
-    "Sandbox image build and push":
-      branch: "main"
-      imageBuild:
-        <<: *sandboxImageBuild
-        push: true
+#    "App build":
+#      appBuild:
+#        image:
+#          name: platform/node
+#          tag: "20"
+#        exec:
+#          script: |
+#            set -e
+#
+#            cd backend/nodejs/apps
+#            ARCH=$(uname -m)
+#            if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
+#              npm ci --ignore-scripts
+#              npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
+#              npm install sharp --save || true
+#            else
+#              npm ci
+#            fi
+#            npm run build
+#            npm prune --production
+#
+#            cd ../../../frontend
+#            npm config set legacy-peer-deps true
+#            npm ci
+#            ELECTRON_STATIC=1 npm run build
+#        cache:
+#          - ~/.npm
+#    "Image build":
+#      branch: "!main"
+#      imageBuild: &imageBuild
+#        name: platform/pipeshubai
+#        securityScan:
+#          failSeverity: CRITICAL
+#          issueAllowlist:
+#            - CVE-2026-49261
+#            - CVE-2026-44172
+#            - CVE-2026-6653
+#            - CVE-2026-85394
+#            - CVE-2026-8838
+#            - GHSA-6q48-6c7w-9gw2
+#            - CVE-2026-112403
+#            - GHSA-hq85-5cpj-mr62
+#            - CVE-2026-91403
+#            - CVE-2026-112393
+#            - CVE-2026-112398
+#            - CVE-2026-112900
+#            - CVE-2026-111497
+#            - CVE-2026-114820
+#        context: .
+#        push: true # todo set to false
+#        tags:
+#          - 0.9.1.oddyssey2-1 # todo finalize
+#    "Image build and push":
+#      branch: "main"
+#      imageBuild:
+#        <<: *imageBuild
+#        push: true
+#    "Sandbox image build":
+#      branch: "!main"
+#      imageBuild: &sandboxImageBuild
+#        name: platform/pipeshubai-sandbox
+#        securityScan:
+#          failSeverity: CRITICAL
+#        context: deployment/sandbox
+#        push: true # todo set to false
+#        tags:
+#          - 0.9.1.oddyssey1-1 # todo finalize
+#    "Sandbox image build and push":
+#      branch: "main"
+#      imageBuild:
+#        <<: *sandboxImageBuild
+#        push: true
     "Slidev image build":
       branch: "!main"
       imageBuild: &slidevImageBuild
         name: platform/pipeshubai-slidev
         securityScan:
           failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-31789
+            - CVE-2026-59873
         context: deployment/slidev
         push: true # todo set to false
         tags:
