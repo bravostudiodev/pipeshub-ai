@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ArtifactShareDialog } from './artifact-share-dialog';
 import { apiClient } from '@/lib/api';
+import { Theme } from '@radix-ui/themes';
 
 vi.mock('@/lib/api', () => ({ apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -11,14 +12,18 @@ describe('artifact sharing dialog', () => {
   it('requires explicit creation and defaults to seven days', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { shares: [] } });
     vi.mocked(apiClient.post).mockResolvedValue({ data: { id: 'share', token: 'secret', expiresAt: '2030-01-01T00:00:00Z' } });
-    render(<ArtifactShareDialog artifactId="artifact" version={2} />);
+    render(<Theme accentColor="jade" data-accent-color="emerald"><ArtifactShareDialog artifactId="artifact" version={2} /></Theme>);
     fireEvent.click(screen.getByRole('button', { name: 'Share artifact' }));
+    const dialog = await screen.findByRole('dialog');
+    // Radix recreates a jade Theme in the portal; globals.css maps that
+    // fallback to the same brand palette as the application root.
+    expect(dialog.closest('.radix-themes')?.getAttribute('data-accent-color')).toBe('jade');
     expect(await screen.findByText(/Anyone who can access this link/)).toBeTruthy();
     expect(apiClient.post).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/artifacts/artifact/shares', { version: 2, expiresInDays: 7 }));
     const link = (await screen.findByLabelText('Share link') as HTMLInputElement).value;
-    expect(link).toContain('/share/#secret');
+    expect(link).toContain('/share/?token=secret');
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));

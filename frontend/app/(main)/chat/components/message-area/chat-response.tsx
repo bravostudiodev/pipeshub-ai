@@ -335,6 +335,7 @@ export const ChatResponse = React.memo(function ChatResponse({
             size: artifact.sizeBytes,
             hideFileDetails: true,
             showDownload: true,
+            shareArtifactId: recordId,
             version,
             latestVersion: effectiveLatest,
             onVersionChange,

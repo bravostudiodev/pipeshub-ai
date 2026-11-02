@@ -17,6 +17,28 @@ function minimalPdf(): Buffer {
   return Buffer.from(pdf);
 }
 
+test('query share link survives a simulated gateway sign-in redirect', async ({ page }) => {
+  const token = 'B'.repeat(43);
+  let signedIn = false;
+  await page.route('**/share/?token=*', async (route) => {
+    if (signedIn) return route.continue();
+    const url = new URL(route.request().url());
+    const login = `/simulated-login?return=${encodeURIComponent(url.pathname + url.search)}`;
+    return route.fulfill({ contentType: 'text/html', body: `<script>location.replace(${JSON.stringify(login)})</script>` });
+  });
+  await page.route('**/simulated-login*', (route) => {
+    signedIn = true;
+    const returnTo = new URL(route.request().url()).searchParams.get('return') || '/share/';
+    return route.fulfill({ contentType: 'text/html', body: `<script>location.replace(${JSON.stringify(returnTo)})</script>` });
+  });
+  await page.route('**/api/v1/artifact-shares/metadata', (route) => route.fulfill({ json: { version: 1, name: 'test.txt', mimeType: 'text/plain' } }));
+  await page.route('**/api/v1/artifact-shares/content', (route) => route.fulfill({ status: 200, body: 'Shared artifact text' }));
+  await page.goto(`/share/?token=${token}`);
+  await expect(page.getByText('Shared artifact text')).toBeVisible();
+  expect(new URL(page.url()).search).toBe('');
+  expect(new URL(page.url()).hash).toBe(`#${token}`);
+});
+
 test('shared PDF renders a page without fetching a third-party worker', async ({ page }) => {
   const thirdParty: string[] = [];
   page.on('request', (request) => { if (request.url().includes('unpkg.com')) thirdParty.push(request.url()); });

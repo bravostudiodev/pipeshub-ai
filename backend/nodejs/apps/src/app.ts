@@ -110,7 +110,7 @@ import { ProjectsContainer } from './modules/projects/container/project.containe
 import { createProjectsRouter } from './modules/projects/routes/project.routes';
 import { createArtifactsRouter } from './modules/artifacts/routes/artifacts.routes';
 import { createShareContentRouter } from './modules/artifacts/routes/share-content.routes';
-import { isShareTokenRequest, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
+import { isShareTokenRequest, isShareViewerRequest, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
 import { createMCPRouter } from './modules/mcp/routes/mcp.routes';
 // Side-effect import: registers edition-specific Redis providers for this process.
 import './redisProviders';
@@ -485,7 +485,7 @@ export class Application {
     this.app.use((req, res, next) => {
       // Bearer inputs are strictly validated by the share token parser. Avoid
       // generic sanitizer error logs that could include malformed token bodies.
-      if (isShareTokenRequest(req.path)) return next();
+      if (isShareTokenRequest(req.path) || (req.method === 'GET' && isShareViewerRequest(req.path))) return next();
       return xssSanitizationMiddleware(req, res, next);
     });
 

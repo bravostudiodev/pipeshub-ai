@@ -81,7 +81,6 @@ export function ArchiveChatDialog({
               {t('action.cancel')}
             </Button>
             <LoadingButton
-              color="jade"
               onClick={handleConfirm}
               loading={isArchiving}
               loadingLabel={t('chat.archiving')}

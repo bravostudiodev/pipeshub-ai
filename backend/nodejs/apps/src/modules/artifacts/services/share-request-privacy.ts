@@ -10,6 +10,10 @@ export function suppressShareBodyParserError(error: unknown, req: Request, res: 
   next(error);
 }
 
+export function isShareViewerRequest(path: string): boolean {
+  return /^\/share\/?$/i.test(path);
+}
+
 export function isShareTokenRequest(path: string): boolean {
   const normalized = path.toLowerCase();
   return normalized === '/api/v1/artifact-shares' || normalized.startsWith('/api/v1/artifact-shares/');

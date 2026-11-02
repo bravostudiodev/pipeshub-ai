@@ -75,6 +75,11 @@ html.dark .oauth-callback-shell { background: #111113; }
   color: #fff !important;
 }
 
+/* Share can be opened from the fullscreen preview (z-index 100). Keep its
+   dialog and expiration popup above that preview without changing other dialogs. */
+.rt-DialogOverlay:has(.artifact-share-dialog) { z-index: 110; }
+[data-radix-popper-content-wrapper]:has(.artifact-share-expiration-select) { z-index: 120 !important; }
+
 /* Org logos may fail to load, leaving Radix's initials fallback visible. */
 .rt-AvatarRoot.oddjeeves-org-avatar {
   --accent-a3: var(--brand-a3);
@@ -237,8 +242,13 @@ html.dark .oauth-callback-shell { background: #111113; }
   --file-icon-fill: #212225;
 }
 
-/* Map the company accent palette to Radix accent variables. */
-.radix-themes[data-accent-color="emerald"] {
+/* Portaled dialogs recreate the theme from its jade context instead of copying
+   the root's custom data attribute. Legacy action buttons also select jade
+   explicitly. Map both to the company palette; semantic badges and red
+   destructive actions retain their explicit colors. */
+.radix-themes[data-accent-color="emerald"],
+.radix-themes[data-accent-color="jade"],
+.rt-BaseButton[data-accent-color="jade"] {
   --accent-1: var(--brand-1);
   --accent-2: var(--brand-2);
   --accent-3: var(--brand-3);

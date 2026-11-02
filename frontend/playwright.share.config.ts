@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e/artifacts',
-  testMatch: /shared-preview-security\.spec\.ts/,
+  testMatch: /(?:shared-preview-security|theme-colors)\.spec\.ts/,
   use: {
     ...devices['Desktop Chrome'],
     baseURL: 'http://localhost:3001',

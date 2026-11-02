@@ -38,6 +38,7 @@ import { Flex, Box, Text, Avatar, Tooltip } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { FilePreviewInlinePanel, FilePreviewFullscreen } from '@/app/components/file-preview';
 import { ChatSearch } from './components/search';
+import { ArtifactShareDialog } from './components/message-area/artifact-share-dialog';
 import { isCommandKey } from '@/lib/utils/platform';
 import { LottieLoader } from '@/app/components/ui/lottie-loader';
 import { useGitHubStars } from '@/app/components/workspace-menu/hooks/use-github-stars';
@@ -1471,6 +1472,9 @@ function ChatContent() {
                   initialCitationId={previewFile.initialCitationId}
                   hideFileDetails={previewFile.hideFileDetails}
                   showDownload={previewFile.showDownload}
+                  headerAction={previewFile.shareArtifactId && previewFile.version && !previewFile.isSwitchingVersion ? (
+                    <ArtifactShareDialog key={`${previewFile.shareArtifactId}:${previewFile.version}`} artifactId={previewFile.shareArtifactId} version={previewFile.version} neutral />
+                  ) : undefined}
                   latestVersion={previewFile.latestVersion}
                   onVersionChange={previewFile.onVersionChange}
                   isSwitchingVersion={previewFile.isSwitchingVersion}
@@ -1512,6 +1516,9 @@ function ChatContent() {
           initialCitationId={previewFile.initialCitationId}
           hideFileDetails={previewFile.hideFileDetails}
           showDownload={previewFile.showDownload}
+          headerAction={previewFile.shareArtifactId && previewFile.version && !previewFile.isSwitchingVersion ? (
+            <ArtifactShareDialog key={`${previewFile.shareArtifactId}:${previewFile.version}`} artifactId={previewFile.shareArtifactId} version={previewFile.version} neutral />
+          ) : undefined}
           latestVersion={previewFile.latestVersion}
           onVersionChange={previewFile.onVersionChange}
           isSwitchingVersion={previewFile.isSwitchingVersion}

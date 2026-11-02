@@ -25,7 +25,14 @@ export default function SharedArtifactPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const value = window.location.hash.slice(1);
+    const params = new URLSearchParams(window.location.search);
+    const supplied = params.getAll('token');
+    // Query links survive gateway sign-in. Once the page loads, remove the
+    // bearer from the query so refreshes and subsequent navigation use a fragment.
+    const value = supplied.length === 1 ? supplied[0] : supplied.length === 0 ? window.location.hash.slice(1) : '';
+    if (supplied.length > 0) {
+      window.history.replaceState(null, '', `${window.location.pathname}${/^[A-Za-z0-9_-]{43}$/.test(value) ? `#${value}` : ''}`);
+    }
     setToken(value);
     let cancelled = false;
     let pdfObjectUrl = '';
@@ -90,14 +97,14 @@ export default function SharedArtifactPage() {
   return (
     <Flex align="center" justify="center" style={{ minHeight: '100vh', padding: 'var(--space-5)' }}>
       <meta name="referrer" content="no-referrer" />
-      <Box style={{ maxWidth: 1200, width: '100%', padding: 'var(--space-6)', background: 'white', borderRadius: 'var(--radius-4)' }}>
+      <Box style={{ maxWidth: 1200, width: '100%', padding: 'var(--space-6)', background: 'var(--color-panel-solid)', color: 'var(--gray-12)', borderRadius: 'var(--radius-4)' }}>
         <Heading size="5">Shared artifact</Heading>
         {state === 'loading' && <Text as="p" style={{ marginTop: 'var(--space-4)' }}>Checking availability…</Text>}
         {state === 'unavailable' && <Text as="p" style={{ marginTop: 'var(--space-4)' }}>This artifact is unavailable.</Text>}
         {state === 'available' && (
           <Flex direction="column" gap="4" style={{ marginTop: 'var(--space-4)' }}>
             <Text>{metadata?.name} · Version {metadata?.version}</Text>
-            <Box ref={previewRef} style={{ background: 'white', overflow: 'auto', ...(fullscreen ? { width: '100%', height: '100%', padding: 'var(--space-4)' } : {}) }}>
+            <Box ref={previewRef} style={{ background: 'var(--color-panel-solid)', overflow: 'auto', ...(fullscreen ? { width: '100%', height: '100%', padding: 'var(--space-4)' } : {}) }}>
               {(preview || htmlUrl || svgUrl || raster || pdfUrl) && <Button variant="soft" onClick={toggleFullscreen}>{fullscreen ? 'Exit full screen' : 'Full screen'}</Button>}
               {preview ? <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: fullscreen ? 'none' : 600, overflow: 'auto' }}>{preview.source}</pre> : htmlUrl ? <Box style={{ height: fullscreen ? '100%' : '70vh' }}><HtmlRenderer fileUrl={htmlUrl} fileName={metadata?.name || 'artifact.html'} /></Box> : svgUrl ? <Box style={{ height: fullscreen ? '100%' : '70vh' }}><ImageRenderer fileUrl={svgUrl} fileName={metadata?.name || 'artifact.svg'} /></Box> : raster ? <RasterPreview bytes={raster.bytes} mime={raster.mime} /> : pdfUrl ? <PdfPreview url={pdfUrl} /> : <Text size="2" color="gray">Preview is not available. Download the artifact to view it.</Text>}
             </Box>

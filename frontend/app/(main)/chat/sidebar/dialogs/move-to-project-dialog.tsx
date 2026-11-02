@@ -130,7 +130,6 @@ export function MoveToProjectDialog({
             <LoadingButton
               type="button"
               size="2"
-              color="jade"
               onClick={() => void handleConfirm()}
               loading={isMoving}
               loadingLabel={t('chat.projects.moveDialog.moving')}

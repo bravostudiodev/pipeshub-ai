@@ -280,8 +280,9 @@ Remaining Phase 6 OAuth/status integration and live UI verification are pending.
 
 ### Sharing model
 
-An authenticated artifact owner can choose **Share** on an artifact card and
-publish its selected version. Conversation readers cannot publish the owner's
+An authenticated artifact owner can choose **Share** on an artifact card or
+in its chat preview header and publish the currently displayed version.
+Conversation readers cannot publish the owner's
 artifact. The owner chooses an expiry of 1, 7, or 30 days (default 7) and can
 stop an active share. Anyone who can access the link can view that artifact,
 including a recipient without access to its source records; the link can be
@@ -289,9 +290,12 @@ forwarded and the owner accepts responsibility for its contents. This exception
 covers only the published artifact, not the conversation, other artifacts,
 source records, or credentials.
 
-Links use `/share/#<token>` on the current origin. The token is a bearer secret:
-the raw value is returned only at creation, and only its hash is persisted in
-MongoDB. Copy the link before closing the dialog; an existing link cannot be
+New links use `/share/?token=<token>` on the current origin so an authentication
+gateway can retain the token in its return URL. The token is a bearer secret:
+the initial request, gateway login/return URLs and gateway/proxy logs can see it.
+After the viewer loads, it replaces the query with a fragment; legacy
+`/share/#<token>` links remain supported. The raw value is returned only at
+creation, and only its hash is persisted in MongoDB. Copy the link before closing the dialog; an existing link cannot be
 recovered from its hash, although the owner can list and revoke active shares.
 Expiry or revocation blocks subsequent requests, but cannot remove downloaded
 copies. A deleted, disabled, missing, or service-account owner, a missing or
@@ -327,10 +331,13 @@ full-screen control. PPTX, Word documents, and spreadsheets are download-only.
 The administrator must protect the viewer **and both direct share APIs** with
 the external zero-trust gateway and prevent bypassing it. The application does
 not detect or verify that gateway; recipients do not need an OddJeeves login.
-Node suppresses parser-error details and referrer/query logging for token
-endpoints. Gateways, proxies, analytics, and other observability systems must not
-record share request bodies or bearer tokens. Responses use no-store and
-no-referrer policies.
+Node suppresses parser-error details and redacts share viewer query credentials
+from request context and error logs. Gateways, proxies, identity providers,
+analytics, and other observability systems must redact the `token` query
+parameter (including nested authentication return URLs) and must not record
+share request bodies or bearer tokens. Gateway redirect preservation and log
+redaction must be verified in deployment; they cannot be enforced by OddJeeves.
+Responses use no-store and no-referrer policies.
 
 The viewer calls share APIs on the current origin. In the contributor split
 setup, the Next development server proxies those calls to Node on port 3000 (or

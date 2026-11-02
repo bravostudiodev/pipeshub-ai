@@ -6,7 +6,7 @@ import * as api from './api';
 vi.mock('./api', () => ({ getShareMetadata: vi.fn(), getShareContent: vi.fn(), downloadShare: vi.fn() }));
 vi.mock('@/app/components/file-preview/renderers/html-renderer', () => ({ HtmlRenderer: ({ fileName }: { fileName: string }) => <div>Existing HTML preview: {fileName}</div> }));
 
-afterEach(() => { cleanup(); vi.resetAllMocks(); window.location.hash = ''; });
+afterEach(() => { cleanup(); vi.resetAllMocks(); window.history.replaceState(null, '', '/'); });
 
 describe('shared artifact viewer', () => {
   it('shows an unavailable message for a malformed link', async () => {
@@ -26,6 +26,25 @@ describe('shared artifact viewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download' }));
     await waitFor(() => expect(api.downloadShare).toHaveBeenCalledWith(token, 'report.txt'));
     expect(api.getShareMetadata).toHaveBeenCalledWith(token);
+  });
+
+  it('accepts a gateway-preserved query token and moves it out of the query', async () => {
+    const token = 'B'.repeat(43);
+    window.history.replaceState(null, '', `/share/?token=${token}`);
+    vi.mocked(api.getShareMetadata).mockResolvedValue({ version: 1, name: 'report.txt', mimeType: 'application/octet-stream' });
+    render(<SharedArtifactPage />);
+    expect(await screen.findByText(/Version 1/)).toBeTruthy();
+    expect(api.getShareMetadata).toHaveBeenCalledWith(token);
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe(`#${token}`);
+  });
+
+  it('rejects repeated token parameters rather than selecting one', async () => {
+    window.history.replaceState(null, '', `/share/?token=${'A'.repeat(43)}&token=${'B'.repeat(43)}`);
+    render(<SharedArtifactPage />);
+    expect(await screen.findByText('This artifact is unavailable.')).toBeTruthy();
+    expect(api.getShareMetadata).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('');
   });
 
   it('previews HTML inside an isolated sandbox', async () => {

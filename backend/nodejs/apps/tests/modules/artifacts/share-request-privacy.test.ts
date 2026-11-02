@@ -1,7 +1,8 @@
 import { expect } from 'chai';
 import express from 'express';
 import { AddressInfo } from 'net';
-import { suppressShareBodyParserError, isShareTokenRequest } from '../../../src/modules/artifacts/services/share-request-privacy';
+import { suppressShareBodyParserError, isShareTokenRequest, isShareViewerRequest } from '../../../src/modules/artifacts/services/share-request-privacy';
+import { ErrorMiddleware } from '../../../src/libs/middlewares/error.middleware';
 
 describe('share bearer request privacy', () => {
   it('recognizes only token endpoints', () => {
@@ -10,6 +11,17 @@ describe('share bearer request privacy', () => {
     expect(isShareTokenRequest('/API/V1/ARTIFACT-SHARES/CONTENT/')).to.equal(true);
     expect(isShareTokenRequest('/api/v1/artifact-shares/unknown')).to.equal(true);
     expect(isShareTokenRequest('/api/v1/artifacts')).to.equal(false);
+  });
+
+  it('recognizes the static share viewer and hides query credentials from error logs', () => {
+    expect(isShareViewerRequest('/share/')).to.equal(true);
+    expect(isShareViewerRequest('/share')).to.equal(true);
+    expect(isShareViewerRequest('/share/other')).to.equal(false);
+    const context = (ErrorMiddleware as any).getRequestContext({
+      method: 'GET', path: '/share/', query: { token: 'private-token' }, params: {},
+      headers: { referer: 'https://example.com/share/?token=private-token' },
+    });
+    expect(JSON.stringify(context)).not.to.include('private-token');
   });
 
   it('suppresses malformed JSON body errors on token endpoints', async () => {
