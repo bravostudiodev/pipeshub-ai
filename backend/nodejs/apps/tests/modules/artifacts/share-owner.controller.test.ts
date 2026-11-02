@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { createArtifactShare, revokeArtifactShare } from '../../../src/modules/artifacts/controllers/share-owner.controller';
+import { createArtifactShare, getArtifactShareLink, revokeArtifactShare } from '../../../src/modules/artifacts/controllers/share-owner.controller';
 import * as owner from '../../../src/modules/artifacts/services/share-owner';
 import * as repo from '../../../src/modules/artifacts/services/share-repository';
 import * as connector from '../../../src/modules/tokens_manager/utils/connector.utils';
@@ -36,6 +36,23 @@ describe('artifact share owner controllers', () => {
     await createArtifactShare(config)(request(), res, sinon.stub());
     expect(res.status.calledWith(404)).to.equal(true);
     expect(insert.called).to.equal(false);
+  });
+  it('recovers a link only for the authenticated owner and sets privacy headers', async () => {
+    sinon.stub(owner, 'isShareOwnerActive').resolves(true);
+    const recover = sinon.stub(repo, 'recoverShareToken').resolves('owner-secret');
+    const res = response();
+    await getArtifactShareLink()(request(), res, sinon.stub());
+    expect(recover.firstCall.args[0]).to.deep.equal({ shareId: 'id', artifactId: 'artifact', orgId: 'org', ownerId: 'owner' });
+    expect(res.json.calledWith({ token: 'owner-secret' })).to.equal(true);
+    expect(res.set.firstCall.args[0]).to.have.property('Cache-Control').that.includes('no-store');
+  });
+  it('does not return another owner’s or unavailable share token', async () => {
+    sinon.stub(owner, 'isShareOwnerActive').resolves(true);
+    sinon.stub(repo, 'recoverShareToken').resolves(null);
+    const res = response();
+    await getArtifactShareLink()(request(), res, sinon.stub());
+    expect(res.status.calledWith(404)).to.equal(true);
+    expect(res.json.calledWith({ token: sinon.match.any })).to.equal(false);
   });
   it('revokes only with authenticated caller and artifact identity', async () => {
     const revoke = sinon.stub(repo, 'revokeShare').resolves(true);

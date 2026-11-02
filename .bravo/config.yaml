@@ -58,7 +58,7 @@ pipeline:
           context: .
           push: true # TODO
           tags:
-            - 0.9.1.oddyssey2-6 # TODO
+            - 0.9.1.oddyssey2-7 # TODO
     "Image build and push":
       branch: "main"
       imageBuild:
@@ -66,4 +66,3 @@ pipeline:
         push: true
 
 
-        

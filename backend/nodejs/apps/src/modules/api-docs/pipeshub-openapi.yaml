@@ -24951,7 +24951,7 @@ paths:
     post:
       tags: [Artifacts]
       summary: Publish one artifact version
-      description: Requires artifact ownership. The token is returned only once; store only the URL fragment in the browser.
+      description: Requires artifact ownership. The bearer is encrypted at rest and can be recovered only by the owner while the share is active.
       requestBody:
         required: true
         content:
@@ -24968,7 +24968,7 @@ paths:
                   enum: [1, 7, 30]
       responses:
         '201':
-          description: Share created; token is returned once.
+          description: Share created; the response contains a bearer secret.
           content:
             application/json:
               schema:
@@ -24979,7 +24979,7 @@ paths:
                     type: string
                   token:
                     type: string
-                    description: Bearer secret, returned only on creation.
+                    description: Bearer secret; do not log or cache.
                   expiresAt:
                     type: string
                     format: date-time
@@ -25012,6 +25012,38 @@ paths:
                         expiresAt:
                           type: string
                           format: date-time
+                        canCopy:
+                          type: boolean
+                          description: False for legacy hash-only shares whose token cannot be recovered.
+  /artifacts/{artifactId}/shares/{shareId}/link:
+    get:
+      tags: [Artifacts]
+      summary: Recover an active share token as its owner
+      description: Returns the bearer secret only to the authenticated owner in the same organization. Legacy hash-only shares cannot be recovered.
+      parameters:
+        - in: path
+          name: artifactId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: shareId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Owner-only bearer token; never cache or log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token:
+                    type: string
+        '404':
+          description: Share unavailable or not recoverable.
   /artifacts/{artifactId}/shares/{shareId}:
     delete:
       tags: [Artifacts]

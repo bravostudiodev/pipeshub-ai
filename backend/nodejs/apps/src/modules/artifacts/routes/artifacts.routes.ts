@@ -11,7 +11,7 @@ import {
   shareIdParamsSchema,
   createShareSchema,
 } from '../validators/artifacts.validators';
-import { createArtifactShare, listArtifactShares, revokeArtifactShare } from '../controllers/share-owner.controller';
+import { createArtifactShare, getArtifactShareLink, listArtifactShares, revokeArtifactShare } from '../controllers/share-owner.controller';
 import {
   getArtifact,
   listArtifactVersions,
@@ -44,6 +44,13 @@ export function createArtifactsRouter(container: Container): Router {
     requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
     ValidationMiddleware.validate(artifactIdParamsSchema),
     listArtifactShares(),
+  );
+  router.get(
+    '/:artifactId/shares/:shareId/link',
+    authMiddleware.authenticate,
+    requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
+    ValidationMiddleware.validate(shareIdParamsSchema),
+    getArtifactShareLink(),
   );
   router.delete(
     '/:artifactId/shares/:shareId',

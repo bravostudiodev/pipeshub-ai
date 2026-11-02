@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Dialog, Flex, IconButton, Text, TextField } from '@radix-ui/themes';
 import { apiClient } from '@/lib/api';
 
-interface Share { _id: string; version: number; expiresAt: string }
+interface Share { _id: string; version: number; expiresAt: string; canCopy?: boolean }
 
 export function ArtifactShareDialog({ artifactId, version, neutral = false }: { artifactId: string; version: number; neutral?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -38,6 +38,16 @@ export function ArtifactShareDialog({ artifactId, version, neutral = false }: { 
       setExpires(response.data.expiresAt);
       try { await refresh(); } catch { setMessage('Link created, but active shares could not be refreshed.'); }
     } catch { setMessage('Could not create the share. Only the artifact owner can share it.'); }
+    finally { setBusy(false); }
+  }
+
+  async function copyShare(share: Share) {
+    setBusy(true); setMessage('');
+    try {
+      const response = await apiClient.get<{ token: string }>(`${base}/${encodeURIComponent(share._id)}/link`);
+      await navigator.clipboard.writeText(`${window.location.origin}/share/${encodeURIComponent(response.data.token)}`);
+      setMessage('Link copied.');
+    } catch { setMessage('Could not copy link. It may have expired or been revoked.'); }
     finally { setBusy(false); }
   }
 
@@ -76,8 +86,17 @@ export function ArtifactShareDialog({ artifactId, version, neutral = false }: { 
             </label>
           </Flex>
           <Button onClick={create} disabled={busy}>Create link</Button>
-          {link && <Flex direction="column" gap="2"><Text size="2">Expires {new Date(expires).toLocaleString()}. Copy this link now; it cannot be shown again.</Text><TextField.Root aria-label="Share link" value={link} readOnly /><Button variant="soft" onClick={() => { void navigator.clipboard.writeText(link).then(() => setMessage('Link copied.')).catch(() => setMessage('Could not copy link.')); }}>Copy link</Button></Flex>}
-          {shares.map((share) => <Flex key={share._id} align="center" justify="between" gap="2"><Text size="2">Version {share.version} · expires {new Date(share.expiresAt).toLocaleString()}</Text><Button variant="soft" color="red" disabled={busy} onClick={() => revoke(share._id)}>Stop sharing</Button></Flex>)}
+          {link && <Flex direction="column" gap="2"><Text size="2">Expires {new Date(expires).toLocaleString()}.</Text><TextField.Root aria-label="Share link" value={link} readOnly /><Button variant="soft" onClick={() => { void navigator.clipboard.writeText(link).then(() => setMessage('Link copied.')).catch(() => setMessage('Could not copy link.')); }}>Copy link</Button></Flex>}
+          {shares.map((share) => <Flex key={share._id} align="center" justify="between" gap="2" wrap="wrap">
+            <Flex direction="column" gap="1">
+              <Text size="2">Version {share.version} · expires {new Date(share.expiresAt).toLocaleString()}</Text>
+              {!share.canCopy && <Text size="1" color="gray">Older link cannot be copied. Create a new link instead.</Text>}
+            </Flex>
+            <Flex gap="2">
+              <Button variant="soft" disabled={busy || !share.canCopy} onClick={() => void copyShare(share)}>Copy link</Button>
+              <Button variant="soft" color="red" disabled={busy} onClick={() => revoke(share._id)}>Stop sharing</Button>
+            </Flex>
+          </Flex>)}
           <Text size="1" color="gray">Stopping sharing cannot remove copies already downloaded.</Text>
           {message && <Text size="2" role="status">{message}</Text>}
           <Dialog.Close><Button variant="soft">Close</Button></Dialog.Close>

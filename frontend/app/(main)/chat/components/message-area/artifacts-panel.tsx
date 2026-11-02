@@ -336,8 +336,18 @@ function ArtifactCard({
         borderRadius: 'var(--radius-2)',
         border: '1px solid var(--slate-6)',
         backgroundColor: 'var(--slate-2)',
+        position: 'relative',
       }}
     >
+      {onPreview && (
+        <button
+          type="button"
+          aria-label={`Preview ${artifact.fileName}`}
+          disabled={isPreviewing}
+          onClick={() => void runPreview()}
+          style={{ position: 'absolute', inset: 0, zIndex: 1, border: 0, borderRadius: 'inherit', background: 'transparent', cursor: isPreviewing ? 'wait' : 'pointer' }}
+        />
+      )}
       {showThumbnail ? (
         <Box
           style={{
@@ -399,7 +409,7 @@ function ArtifactCard({
         )}
       </Flex>
 
-      <Flex gap="1">
+      <Flex gap="1" style={{ position: 'relative', zIndex: 2 }}>
         {artifact.recordId && artifact.version && (
           <ArtifactShareDialog artifactId={artifact.recordId} version={artifact.version} />
         )}

@@ -3,6 +3,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 /** A share is an authority to serve one version, not a copy of its content. */
 export interface ArtifactShare extends Document {
   tokenHash: string;
+  encryptedToken?: string;
   artifactId: string;
   version: number;
   contentHash: string;
@@ -18,6 +19,7 @@ export interface ArtifactShare extends Document {
 const artifactShareSchema = new Schema<ArtifactShare>(
   {
     tokenHash: { type: String, required: true, match: /^[0-9a-f]{64}$/, select: false },
+    encryptedToken: { type: String, select: false },
     artifactId: { type: String, required: true },
     version: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
     contentHash: { type: String, required: true, match: /^[0-9a-f]{64}$/ },

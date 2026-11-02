@@ -316,9 +316,11 @@ New links use `/share/<token>` on the current origin so the authentication
 gateway can preserve the token in its return path. The token is a bearer secret:
 the initial request, gateway login/return URLs and gateway/proxy logs can see it.
 Earlier `/share/?token=<token>` and `/share/#<token>` links remain supported.
-The raw value is returned only at
-creation, and only its hash is persisted in MongoDB. Copy the link before closing the dialog; an existing link cannot be
-recovered from its hash, although the owner can list and revoke active shares.
+New shares store a hash for lookup and an encrypted token for authenticated,
+owner-only recovery; the owner can copy an active link again from the share dialog.
+The encryption uses the server's `SECRET_KEY`; changing or losing it makes saved
+links unrecoverable, though their hashes still allow use and revocation. Older
+hash-only shares cannot be recovered; the owner can create a new link instead.
 Expiry or revocation blocks subsequent requests, but cannot remove downloaded
 copies. A deleted, disabled, missing, or service-account owner, a missing or
 hidden artifact, or lost owner access also makes a link unavailable. Unknown,

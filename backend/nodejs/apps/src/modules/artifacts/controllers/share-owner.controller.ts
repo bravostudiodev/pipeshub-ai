@@ -3,7 +3,7 @@ import { AuthenticatedUserRequest } from '../../../libs/middlewares/types';
 import { HttpMethod } from '../../../libs/enums/http-methods.enum';
 import { AppConfig } from '../../tokens_manager/config/config';
 import { executeConnectorCommand } from '../../tokens_manager/utils/connector.utils';
-import { insertShare, listActiveShares, revokeShare } from '../services/share-repository';
+import { insertShare, listActiveShares, recoverShareToken, revokeShare } from '../services/share-repository';
 import { isShareOwnerActive } from '../services/share-owner';
 import { setShareResponsePrivacyHeaders } from '../services/share-response';
 
@@ -39,7 +39,7 @@ export const createArtifactShare = (config: AppConfig) => async (
     }
     const share = await insertShare({ artifactId, version, contentHash: result.data.contentHash!, name: result.data.name, mimeType: result.data.mimeType, orgId: actor.orgId, ownerId: actor.userId,
       expiresAt: new Date(Date.now() + expiresInDays * 86_400_000) });
-    // The bearer token is returned once and is never persisted or logged.
+    // The bearer token is stored encrypted for owner-only recovery; never log it.
     res.status(201).json(share);
   } catch {
     res.status(503).json({ message: 'Could not create share. Please try again.' });
@@ -56,6 +56,22 @@ export const listArtifactShares = () => async (
     const shares = await listActiveShares({ artifactId: String(req.params.artifactId), orgId: actor.orgId, ownerId: actor.userId });
     res.json({ shares });
   } catch { res.status(503).json({ message: 'Could not load shares.' }); }
+};
+
+export const getArtifactShareLink = () => async (
+  req: AuthenticatedUserRequest, res: Response, _next: NextFunction,
+): Promise<void> => {
+  setShareResponsePrivacyHeaders(res);
+  const actor = identity(req);
+  if (!actor) { res.status(401).json({ message: 'Authentication required.' }); return; }
+  try {
+    if (!await isShareOwnerActive(actor.userId, actor.orgId)) {
+      res.status(404).json({ message: 'Share unavailable.' }); return;
+    }
+    const token = await recoverShareToken({ shareId: String(req.params.shareId), artifactId: String(req.params.artifactId), orgId: actor.orgId, ownerId: actor.userId });
+    if (!token) { res.status(404).json({ message: 'Share unavailable.' }); return; }
+    res.json({ token });
+  } catch { res.status(503).json({ message: 'Could not retrieve share.' }); }
 };
 
 export const revokeArtifactShare = () => async (

@@ -43,6 +43,29 @@ describe('artifact sharing dialog', () => {
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/artifacts/artifact/shares', { version: 1, expiresInDays: 30 }));
   });
 
+  it('copies a previously created recoverable share', async () => {
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({ data: { shares: [{ _id: 'id', version: 1, expiresAt: '2030-01-01T00:00:00Z', canCopy: true }] } })
+      .mockResolvedValueOnce({ data: { token: 'saved-token' } });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<Theme><ArtifactShareDialog artifactId="artifact" version={1} /></Theme>);
+    fireEvent.click(screen.getByRole('button', { name: 'Share artifact' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/api/v1/artifacts/artifact/shares/id/link'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/share/saved-token`));
+    expect(await screen.findByText('Link copied.')).toBeTruthy();
+  });
+
+  it('shows why older hash-only links cannot be copied', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { shares: [{ _id: 'old', version: 1, expiresAt: '2030-01-01T00:00:00Z', canCopy: false }] } });
+    render(<Theme><ArtifactShareDialog artifactId="artifact" version={1} /></Theme>);
+    fireEvent.click(screen.getByRole('button', { name: 'Share artifact' }));
+    const copy = await screen.findByRole('button', { name: 'Copy link' }) as HTMLButtonElement;
+    expect(copy.disabled).toBe(true);
+    expect(screen.getByText(/Older link cannot be copied/)).toBeTruthy();
+  });
+
   it('lists active links and can stop sharing', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: { shares: [{ _id: 'id', version: 1, expiresAt: '2030-01-01T00:00:00Z' }] } });
     vi.mocked(apiClient.delete).mockResolvedValue({});

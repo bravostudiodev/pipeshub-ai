@@ -1,19 +1,21 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { ArtifactShareModel } from '../../../src/modules/artifacts/schema/artifact-share.schema';
-import { findActiveShare, insertShare, listActiveShares, revokeShare } from '../../../src/modules/artifacts/services/share-repository';
+import { findActiveShare, insertShare, listActiveShares, recoverShareToken, revokeShare } from '../../../src/modules/artifacts/services/share-repository';
 import { hashShareToken } from '../../../src/modules/artifacts/services/share-token';
 
 describe('artifact share repository', () => {
   afterEach(() => sinon.restore());
 
-  it('persists a hash, not the generated token', async () => {
+  it('persists a hash and encrypted copy, never the plaintext token', async () => {
+    sinon.stub(process, 'env').value({ ...process.env, SECRET_KEY: 'test-key' });
     const create = sinon.stub(ArtifactShareModel, 'create').resolves({ _id: 'id', expiresAt: new Date('2030-01-01') } as never);
     const expiresAt = new Date(Date.now() + 60000);
     const result = await insertShare({ artifactId: 'a', version: 2, contentHash: 'a'.repeat(64), name: 'file', mimeType: 'text/plain', ownerId: 'u', orgId: 'o', expiresAt });
     const saved = create.firstCall.args[0] as unknown as Record<string, unknown>;
     expect(saved.tokenHash).to.equal(hashShareToken(result.token));
     expect(saved).not.to.have.property('token');
+    expect(String(saved.encryptedToken)).not.to.include(result.token);
   });
 
   it('rejects malformed tokens before accessing persistence', async () => {
@@ -42,7 +44,28 @@ describe('artifact share repository', () => {
     const filter = find.firstCall.args[0] as Record<string, unknown>;
     expect(filter).to.include({ artifactId: 'a', orgId: 'o', ownerId: 'u', revokedAt: null });
     expect(filter.expiresAt).to.have.property('$gt').that.is.instanceOf(Date);
-    expect(select.firstCall.args[0]).to.equal('_id version createdAt expiresAt');
+    expect(select.firstCall.args[0]).to.equal('_id version createdAt expiresAt +encryptedToken');
+  });
+
+  it('indicates copy availability without returning encrypted bearer values', async () => {
+    sinon.stub(ArtifactShareModel, 'find').returns({ select: () => ({ sort: () => ({ lean: () => ({ exec: async () => [
+      { _id: 'new', version: 1, encryptedToken: 'encrypted-secret' },
+      { _id: 'old', version: 1 },
+    ] }) }) }) } as never);
+    const result = await listActiveShares({ artifactId: 'a', orgId: 'o', ownerId: 'u' });
+    expect(result.map((share) => share.canCopy)).to.deep.equal([true, false]);
+    expect(JSON.stringify(result)).not.to.include('encrypted-secret');
+  });
+
+  it('recovers only a live share scoped to owner, organization, and artifact', async () => {
+    sinon.stub(process, 'env').value({ ...process.env, SECRET_KEY: 'test-key' });
+    const create = sinon.stub(ArtifactShareModel, 'create').resolves({ _id: 'id', expiresAt: new Date('2030-01-01') } as never);
+    const saved = await insertShare({ artifactId: 'a', version: 2, contentHash: 'a'.repeat(64), name: 'file', mimeType: 'text/plain', ownerId: 'u', orgId: 'o', expiresAt: new Date(Date.now() + 60000) });
+    const record = create.firstCall.args[0] as any;
+    const find = sinon.stub(ArtifactShareModel, 'findOne').returns({ select: () => ({ lean: () => ({ exec: async () => record }) }) } as never);
+    expect(await recoverShareToken({ shareId: 'id', artifactId: 'a', orgId: 'o', ownerId: 'u' })).to.equal(saved.token);
+    expect(find.firstCall.args[0]).to.include({ _id: 'id', artifactId: 'a', orgId: 'o', ownerId: 'u', revokedAt: null });
+    expect(await recoverShareToken({ shareId: 'id', artifactId: 'a', orgId: 'other', ownerId: 'u' })).to.equal(null);
   });
 
   it('scopes revocation to owner, organisation, artifact and active link', async () => {
