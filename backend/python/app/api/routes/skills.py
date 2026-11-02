@@ -8,10 +8,10 @@ search, and the three-source package importer (npm / URL / upload).
 
 Every route uses `build_management_skill_manager`, the creator-scoped
 profile (see that factory's docstring) — a user only ever sees/edits their
-own custom skills here, plus org-wide `builtin` ones. Content mutations
-(update/patch/rollback/deprecate/delete) and resource write/delete of a
-builtin still 403; enable/disable of a builtin is allowed for org admins
-only (`fetch_caller_role`). A non-owner attempt to mutate someone else's
+own custom skills here, plus org-wide `builtin` ones. Content edits,
+resource writes, rollback, and enable/disable of a builtin require a live
+org-admin check (`fetch_caller_role`); deleting or deprecating builtins remains
+blocked. A non-owner attempt to mutate someone else's
 custom skill is invisible (404) because the store's `visibility_scope`
 filters on `createdBy`.
 
@@ -227,6 +227,8 @@ def _build_content(payload: SkillWriteRequest, *, name: str, existing: SkillMeta
         requires=payload.requires,
         concepts=payload.concepts,
         source=existing.source if existing is not None else SkillSource.MANUAL,
+        pack_name=existing.pack_name if existing is not None else None,
+        pack_version=existing.pack_version if existing is not None else None,
         status=existing.status if existing is not None else SkillStatus.ACTIVE,
         deprecated_reason=existing.deprecated_reason if existing is not None else None,
         replaced_by=existing.replaced_by if existing is not None else None,
@@ -368,21 +370,19 @@ async def _load_skill_metadata(manager: SkillManager, name: str) -> SkillMetadat
 
 
 async def _reject_if_builtin_skill(manager: SkillManager, name: str) -> SkillMetadata:
-    """Blocks a content `SKILL_WRITE` mutation (update/patch/rollback/
-    deprecate/delete, or resource write/delete) against an EXISTING
-    builtin-sourced skill — the counterpart to `_reject_if_builtin_name`
-    above, which only blocks *creating* a new skill under a reserved
-    name. Enable/disable is the exception: those routes call
-    `_require_admin_for_builtin_availability` instead, so an org admin
-    can mute a builtin without being able to edit its SKILL.md.
-    Returns the fetched metadata so callers that also need it (e.g.
-    `update_skill`, to preserve lifecycle fields — see `_build_content`)
-    don't have to load the skill twice. Raises 404/409 (via
-    `_handle_registry_error`) if the skill doesn't exist, or 403 if it's
-    a builtin."""
+    """Prevent deletion or deprecation of a built-in skill.
+
+    Content and resource edits instead use the live administrator check below.
+    """
     metadata = await _load_skill_metadata(manager, name)
     if metadata.source == SkillSource.BUILTIN:
         raise HTTPException(status_code=403, detail=f"{name!r} is a built-in skill and cannot be modified.")
+    return metadata
+
+
+async def _require_admin_for_builtin_edit(request: Request, manager: SkillManager, name: str) -> SkillMetadata:
+    metadata = await _load_skill_metadata(manager, name)
+    await _require_admin_for_builtin_availability(request, metadata)
     return metadata
 
 
@@ -390,7 +390,8 @@ async def _require_admin_for_builtin_availability(request: Request, metadata: Sk
     """Enable/disable of a custom skill is creator-gated by the store's
     visibility scope (non-owners never load the doc). Enable/disable of a
     builtin is org-wide, so it additionally requires a live org-admin
-    role from Node (`fetch_caller_role`) — members get 403. Fail closed
+    role from Node (`fetch_caller_role`) — members get 403. The same check
+    applies to content edits and rollback. Fail closed
     if Node cannot answer."""
     if metadata.source != SkillSource.BUILTIN:
         return
@@ -398,7 +399,7 @@ async def _require_admin_for_builtin_availability(request: Request, metadata: Sk
     if not (await fetch_caller_role(request, config_service)).is_admin:
         raise HTTPException(
             status_code=403,
-            detail=f"{metadata.name!r} is a built-in skill; only an organization admin can change its availability.",
+            detail=f"{metadata.name!r} is a built-in skill; only an organization admin can modify it.",
         )
 
 
@@ -555,7 +556,7 @@ async def update_skill(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> JSONResponse:
     manager, _ctx = await _build_manager(request)
-    existing_metadata = await _reject_if_builtin_skill(manager, name)
+    existing_metadata = await _require_admin_for_builtin_edit(request, manager, name)
     content = _build_content(payload, name=name, existing=existing_metadata)
     try:
         metadata = await manager.update(
@@ -578,7 +579,7 @@ async def patch_skill_body(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> JSONResponse:
     manager, _ctx = await _build_manager(request)
-    await _reject_if_builtin_skill(manager, name)
+    await _require_admin_for_builtin_edit(request, manager, name)
     try:
         ok = await manager.patch(
             name, payload.old_string, payload.new_string,
@@ -713,7 +714,7 @@ async def get_version(request: Request, name: str, version: str) -> JSONResponse
 @router.post("/{name}/rollback", dependencies=[Depends(require_scopes(OAuthScopes.SKILL_WRITE))])
 async def rollback_skill(request: Request, name: str, payload: RollbackRequest) -> JSONResponse:
     manager, _ctx = await _build_manager(request)
-    await _reject_if_builtin_skill(manager, name)
+    await _require_admin_for_builtin_edit(request, manager, name)
     try:
         metadata = await manager.rollback(name, payload.version)
     except RegistryError as e:
@@ -738,7 +739,7 @@ async def get_resource(request: Request, name: str, path: str = Query(..., min_l
 @router.put("/{name}/resource", dependencies=[Depends(require_scopes(OAuthScopes.SKILL_WRITE))])
 async def write_resource(request: Request, name: str, payload: ResourceWriteRequest) -> JSONResponse:
     manager, _ctx = await _build_manager(request)
-    await _reject_if_builtin_skill(manager, name)
+    await _require_admin_for_builtin_edit(request, manager, name)
     try:
         ok = await manager.write_resource(name, payload.path, payload.content)
     except SkillFormatError as e:
@@ -751,7 +752,7 @@ async def write_resource(request: Request, name: str, payload: ResourceWriteRequ
 @router.delete("/{name}/resource", dependencies=[Depends(require_scopes(OAuthScopes.SKILL_WRITE))])
 async def remove_resource(request: Request, name: str, path: str = Query(..., min_length=1)) -> JSONResponse:
     manager, _ctx = await _build_manager(request)
-    await _reject_if_builtin_skill(manager, name)
+    await _require_admin_for_builtin_edit(request, manager, name)
     ok = await manager.remove_resource(name, path)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Resource {path!r} not found for skill {name!r}.")

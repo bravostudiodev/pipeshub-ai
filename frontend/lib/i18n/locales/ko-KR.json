@@ -2936,7 +2936,7 @@
         "conflictDescription": "최신 버전을 다시 불러온 다음 수정 사항을 적용하세요.",
         "conflictReload": "다시 불러오기"
       },
-      "builtinReadOnly": "기본 제공 스킬이므로 편집할 수 없습니다.",
+      "builtinReadOnly": "워크스페이스 관리자만 이 기본 제공 스킬을 편집할 수 있습니다.",
       "editorPanel": {
         "createTitle": "새 스킬",
         "reviewTitle": "후보 검토 및 편집",

@@ -3386,7 +3386,7 @@
         "conflictDescription": "Reload the latest version, then re-apply your edits.",
         "conflictReload": "Reload"
       },
-      "builtinReadOnly": "This is a built-in skill and cannot be edited.",
+      "builtinReadOnly": "Only workspace administrators can edit this built-in skill.",
       "editorPanel": {
         "createTitle": "New Skill",
         "reviewTitle": "Review & Edit Candidate",

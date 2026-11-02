@@ -3386,7 +3386,7 @@
         "conflictDescription": "नवीनतम संस्करण फिर से लोड करें, फिर अपने बदलाव दोबारा लागू करें।",
         "conflictReload": "पुनः लोड करें"
       },
-      "builtinReadOnly": "यह एक अंतर्निहित skill है और इसे संपादित नहीं किया जा सकता।",
+      "builtinReadOnly": "केवल कार्यक्षेत्र व्यवस्थापक इस अंतर्निहित skill को संपादित कर सकते हैं।",
       "editorPanel": {
         "createTitle": "नई Skill",
         "reviewTitle": "उम्मीदवार की समीक्षा और संपादन",

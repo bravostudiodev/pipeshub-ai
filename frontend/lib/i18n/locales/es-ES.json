@@ -3410,7 +3410,7 @@
         "conflictDescription": "Vuelva a cargar la última versión y aplique de nuevo sus cambios.",
         "conflictReload": "Recargar"
       },
-      "builtinReadOnly": "Esta es una skill integrada y no se puede editar.",
+      "builtinReadOnly": "Solo los administradores del espacio de trabajo pueden editar esta skill integrada.",
       "editorPanel": {
         "createTitle": "Nueva Skill",
         "reviewTitle": "Revisar y editar la candidata",

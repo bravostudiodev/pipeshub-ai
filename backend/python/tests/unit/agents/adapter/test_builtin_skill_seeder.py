@@ -12,7 +12,8 @@ import tempfile
 
 import pytest
 
-from app.agent_loop_lib.modules.providers.skills.base import SkillSource, SkillStatus, SkillFilter
+from app.agent_loop_lib.core.exceptions import RegistryError
+from app.agent_loop_lib.modules.providers.skills.base import SkillFilter, SkillSource, SkillStatus
 from app.agents.agent_loop.skills.builtin_seeder import SEED_IDENTITY, BuiltinSkillSeeder
 from app.agents.agent_loop.skills.graph_store import GraphSkillStore
 from tests.unit.agents.adapter.test_skills_graph_store import FakeGraphProvider
@@ -72,7 +73,7 @@ def packs_root_v2(tmp_path) -> str:
 
 
 def _seed_store(graph: FakeGraphProvider, org_id: str = "org-1") -> GraphSkillStore:
-    return GraphSkillStore(graph, org_id, SEED_IDENTITY)
+    return GraphSkillStore(graph, org_id, SEED_IDENTITY, allow_builtin_writes=True)
 
 
 class TestFirstSync:
@@ -142,7 +143,7 @@ class TestForkSkip:
 
         # A real user edits the org's copy of pack-a — updatedBy becomes
         # their id, not the seed identity.
-        real_user_store = GraphSkillStore(graph, "org-1", "user-42")
+        real_user_store = GraphSkillStore(graph, "org-1", "user-42", allow_builtin_writes=True)
         await real_user_store.patch_skill("pack-a", "version 1", "version 1 (customized)")
 
         await BuiltinSkillSeeder(packs_root_v2).sync(seed_store)
@@ -152,6 +153,27 @@ class TestForkSkip:
         # upstream content — pack_version stays at the pre-upgrade value.
         assert skill.metadata.pack_version == "1.0.0"
         assert "customized" in skill.body
+
+    async def test_admin_resource_edit_prevents_pack_upgrade(
+        self, packs_root_v1: str, packs_root_v2: str,
+    ) -> None:
+        graph = FakeGraphProvider()
+        seed_store = _seed_store(graph)
+        await BuiltinSkillSeeder(packs_root_v1).sync(seed_store)
+        admin_store = GraphSkillStore(graph, "org-1", "admin-1", allow_builtin_writes=True)
+        assert await admin_store.write_resource("pack-a", "references/custom.md", "custom")
+        await BuiltinSkillSeeder(packs_root_v2).sync(seed_store)
+        assert (await admin_store.get_skill("pack-a")).metadata.pack_version == "1.0.0"
+        assert (await admin_store.get_resources("pack-a"))["references/custom.md"] == "custom"
+
+    async def test_runtime_cannot_edit_builtin(self, packs_root_v1: str) -> None:
+        graph = FakeGraphProvider()
+        await BuiltinSkillSeeder(packs_root_v1).sync(_seed_store(graph))
+        runtime_store = GraphSkillStore(graph, "org-1", "employee")
+        with pytest.raises(RegistryError, match="administrator"):
+            await runtime_store.patch_skill("pack-a", "version 1", "changed")
+        with pytest.raises(RegistryError, match="administrator"):
+            await runtime_store.write_resource("pack-a", "references/custom.md", "changed")
 
     async def test_seed_identity_edits_are_still_auto_upgraded(
         self, packs_root_v1: str, packs_root_v2: str,

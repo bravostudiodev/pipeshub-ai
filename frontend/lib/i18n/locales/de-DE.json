@@ -3381,7 +3381,7 @@
         "conflictDescription": "Laden Sie die neueste Version und wenden Sie Ihre Änderungen anschließend erneut an.",
         "conflictReload": "Neu laden"
       },
-      "builtinReadOnly": "Dieser Skill ist integriert und kann nicht bearbeitet werden.",
+      "builtinReadOnly": "Nur Arbeitsbereichsadministratoren können diesen integrierten Skill bearbeiten.",
       "editorPanel": {
         "createTitle": "Neuer Skill",
         "reviewTitle": "Vorschlag prüfen und bearbeiten",

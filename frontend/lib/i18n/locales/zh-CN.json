@@ -2936,7 +2936,7 @@
         "conflictDescription": "请重新加载最新版本，然后再次应用您的编辑。",
         "conflictReload": "重新加载"
       },
-      "builtinReadOnly": "这是内置技能，无法编辑。",
+      "builtinReadOnly": "只有工作区管理员可以编辑此内置技能。",
       "editorPanel": {
         "createTitle": "新建技能",
         "reviewTitle": "审核并编辑候选技能",

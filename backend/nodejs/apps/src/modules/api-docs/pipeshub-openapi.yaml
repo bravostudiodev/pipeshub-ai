@@ -14383,7 +14383,7 @@ components:
         source:
           type: string
           enum: [builtin, manual, imported, learned]
-          description: "`builtin` skills are seeded by `BuiltinSkillSeeder` and read-only for end users."
+          description: "`builtin` skills are seeded per organization and editable only by organization administrators."
         license:
           type: string
           nullable: true
@@ -39502,7 +39502,7 @@ paths:
       tags:
         - Skills
       summary: Update a skill
-      description: Full update of a skill's content and metadata from structured form fields. Builtin skills can only be edited by the seeding identity — a non-owner attempt surfaces as 404/409.
+      description: Full update of a skill's content and metadata from structured form fields. Built-in skills require a current organization administrator; custom skills are creator-scoped.
       operationId: updateSkill
       security:
         - bearerAuth: []
@@ -39617,7 +39617,7 @@ paths:
       tags:
         - Skills
       summary: Patch a skill's body with an exact string replacement
-      description: Fails 400 if `old_string` doesn't exist, or exists more than once, in the current body.
+      description: Built-in skills require an organization administrator. Fails 400 if `old_string` doesn't exist, or exists more than once, in the current body.
       operationId: patchSkillBody
       security:
         - bearerAuth: []
@@ -39688,7 +39688,7 @@ paths:
 
         Custom skills: only the creator can disable (a non-owner gets 404,
         matching GET). Builtin skills: only an organization admin; members
-        get 403. Content edits of builtins remain 403.
+        get 403. Organization admins can also edit builtin content.
       operationId: disableSkill
       security:
         - bearerAuth: []
@@ -39847,6 +39847,7 @@ paths:
       tags:
         - Skills
       summary: Roll back a skill to a prior version
+      description: Rolling back a built-in skill requires an organization administrator.
       operationId: rollbackSkill
       security:
         - bearerAuth: []
@@ -39917,7 +39918,7 @@ paths:
       summary: Write a bundled resource
       description: |
         Creates or overwrites a text resource file under the skill's directory.
-        Rejects (400) path traversal, absolute paths, `SKILL.md`, and payloads
+        Built-in skills require an organization administrator. Rejects (400) path traversal, absolute paths, `SKILL.md`, and payloads
         that exceed the per-file/per-skill byte budget. Binary resources are
         not yet supported (deferred to a blob-storage follow-up).
       operationId: writeSkillResource
@@ -39951,6 +39952,7 @@ paths:
       tags:
         - Skills
       summary: Remove a bundled resource
+      description: Removing a built-in skill resource requires an organization administrator.
       operationId: removeSkillResource
       security:
         - bearerAuth: []

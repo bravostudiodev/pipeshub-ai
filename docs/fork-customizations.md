@@ -590,6 +590,17 @@ chart profile does not inject a second adapter that overrides that selection.
 The baked FastEmbed BM25 cache is separate; it serves the sparse/entity-index
 path, not dense embeddings.
 
+## Built-in skills
+
+Organization administrators can edit the content, metadata, and resources of
+built-in skills in the workspace Skills editor and restore earlier revisions.
+The server checks the caller's current organization-admin role for every such
+edit; members can read built-ins but cannot modify them. Deleting or deprecating
+built-ins remains blocked, and the agent runtime cannot modify them through its
+skill tools. Edits are per organization. An administrator's content or resource
+changes mark that organization's copy as customized, so later built-in pack
+upgrades do not overwrite them; unmodified copies continue receiving updates.
+
 ## Usage telemetry and Hugging Face
 
 PipesHub's built-in metrics and product-event collection is separate from the
