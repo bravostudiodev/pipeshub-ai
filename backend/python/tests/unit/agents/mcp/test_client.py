@@ -68,6 +68,15 @@ def _http_config(**overrides: Any) -> MCPServerConfig:  # noqa: ANN401
     return _config(**{"transport": MCPTransport.STREAMABLE_HTTP, "url": "https://mcp.example.com/mcp?api_key=secret", "command": None, **overrides})
 
 
+def test_obsales_short_bearer_token_is_redacted_from_connect_errors() -> None:
+    config = _http_config(name="OBSales", type_id=None, is_custom=True,
+                          auth_mode=MCPAuthMode.API_TOKEN, use_admin_auth=True)
+    manager = MCPClientManager(config, headers={"Authorization": "Bearer xy7"})
+    error = manager._connect_error(RuntimeError("provider echoed xy7"), wire.WireRecord(), "")
+    assert "xy7" not in str(error)
+    assert "xy7" not in manager._sanitize_credentials("provider echoed xy7")
+
+
 async def _answered(status: int, *, session_id: bool = False, challenge: str | None = None) -> None:
     """What the response hook records for one request."""
     headers = {"mcp-session-id": "s-1"} if session_id else {}

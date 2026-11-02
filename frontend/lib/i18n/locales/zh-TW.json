@@ -2748,6 +2748,7 @@
         "scopes": "範圍",
         "scopesPlaceholder": "新增範圍",
         "useAdminAuth": "對所有使用者使用共用的管理員驗證",
+        "useAdminAuthHint": "僅供 OBSales 使用；員工會自動使用此共用權杖。",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "憑證（選填）",

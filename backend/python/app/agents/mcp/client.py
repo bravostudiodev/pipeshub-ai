@@ -681,7 +681,7 @@ class MCPClientManager:
                     challenge=from_wire.challenge,
                 )
         elif isinstance(leaf, MCPError) and _is_refused_redirect(leaf):
-            logger.warning(f"MCP server {self.config.id} redirected elsewhere: {redact_urls_in_text(leaf.message)}")
+            logger.warning(f"MCP server {self.config.id} redirected elsewhere: {self._sanitize_credentials(leaf.message)}")
             error = MCPUrlBlockedError(_REFUSED_REDIRECT)
         elif isinstance(leaf, httpx2.HTTPStatusError) and leaf.response.is_redirect:
             error = MCPUrlBlockedError(_REFUSED_REDIRECT)
@@ -696,9 +696,12 @@ class MCPClientManager:
     def _sanitize_credentials(self, text: str) -> str:
         values = set(self.env.values()) | set(self.headers.values())
         values.update(value.split(" ", 1)[1] for value in self.headers.values() if value.lower().startswith("bearer "))
+        from app.agents.mcp.service import uses_shared_admin_credential
+
+        shared_obsales = uses_shared_admin_credential(self.config.model_dump(by_alias=True))
         for value in sorted(values, key=len, reverse=True):
-            # Short values ("1", "us") are configuration, not secrets, and would corrupt the message.
-            if len(value) >= 8:
+            # For OBSales, even short bearer tokens must never be logged or returned.
+            if value and (len(value) >= 8 or shared_obsales):
                 text = text.replace(value, "[REDACTED]")
         return redact_urls_in_text(text)
 
@@ -941,7 +944,7 @@ class MCPClientManager:
         if _is_sdk_timeout(error, method):
             return TimeoutError(f"The MCP server didn't answer {what} within {call_timeout(self.config):g}s")
         if _is_refused_redirect(error):
-            logger.warning(f"MCP server {self.config.id} redirected elsewhere: {redact_urls_in_text(error.message)}")
+            logger.warning(f"MCP server {self.config.id} redirected elsewhere: {self._sanitize_credentials(error.message)}")
             return MCPUrlBlockedError(_REFUSED_REDIRECT)
         if error.code == CONNECTION_CLOSED and error.message == _SDK_CONNECTION_CLOSED:
             session.lost = True

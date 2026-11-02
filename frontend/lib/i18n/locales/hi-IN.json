@@ -2606,6 +2606,7 @@
         "scopes": "स्कोप्स",
         "scopesPlaceholder": "एक स्कोप जोड़ें",
         "useAdminAuth": "सभी उपयोगकर्ताओं के लिए साझा एडमिन प्रमाणीकरण का उपयोग करें",
+        "useAdminAuthHint": "केवल OBSales के लिए; कर्मचारी इस साझा टोकन का अपने-आप उपयोग करेंगे।",
         "headerValue": "{{headerName}}",
         "apiToken": "API टोकन",
         "credentialsHeading": "प्रमाण-पत्र (वैकल्पिक)",

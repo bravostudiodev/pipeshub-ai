@@ -129,6 +129,7 @@ vi.mock('../components/search', () => ({
 
 vi.mock('../components/slack-connection-card', () => ({
   SlackConnectionCard: () => <button type="button">Connect</button>,
+  ObSalesConnectionCard: () => <div>OBSales</div>,
   NotionConnectionCard: () => <button type="button">Connect</button>,
   MiroConnectionCard: () => <button type="button">Connect</button>,
   JiraConnectionCard: () => <button type="button">Connect</button>,

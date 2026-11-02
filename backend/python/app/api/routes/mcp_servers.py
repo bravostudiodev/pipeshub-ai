@@ -231,11 +231,27 @@ _load_org_instances = load_mcp_instances
 _get_org_instance = get_mcp_instance_resolved
 
 
+async def _get_org_instance_for_org(
+    instance_id: str, config_service: ConfigurationService, org_id: str,
+) -> dict[str, Any] | None:
+    """Fail closed when an instance ID resolves outside the authenticated organization."""
+    instance = await _get_org_instance(instance_id, config_service)
+    if not isinstance(instance, dict) or instance.get("orgId") != org_id:
+        return None
+    return instance
+
+
 def _validate_instance_config(payload: MCPServerInstanceConfig, registry: MCPRegistry) -> None:
     """Cross-field validation the Pydantic model alone can't express."""
-    if payload.use_admin_auth and payload.auth_mode in (MCPAuthMode.API_TOKEN, MCPAuthMode.HEADERS):
+    if payload.use_admin_auth and not (
+        payload.auth_mode == MCPAuthMode.API_TOKEN
+        and payload.transport == MCPTransport.STREAMABLE_HTTP
+        and payload.type_id is None
+        and payload.name.strip().casefold() == "obsales"
+    ):
         raise HTTPException(
-            status_code=HttpStatusCode.BAD_REQUEST.value, detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE,
+            status_code=HttpStatusCode.BAD_REQUEST.value,
+            detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE,
         )
     if payload.type_id:
         template = registry.get_template(payload.type_id)
@@ -259,6 +275,28 @@ def _validate_instance_config(payload: MCPServerInstanceConfig, registry: MCPReg
                 status_code=HttpStatusCode.BAD_REQUEST.value,
                 detail="A custom SSE/streamable_http MCP server requires a url.",
             )
+
+
+async def _assert_unique_obsales_instance(
+    payload: MCPServerInstanceConfig,
+    org_id: str,
+    config_service: ConfigurationService,
+    *,
+    exclude_instance_id: str | None = None,
+) -> None:
+    if not payload.use_admin_auth:
+        return
+    instances = await resolve_mcp_instances_with_inheritance(config_service)
+    if any(
+        instance.get("orgId") == org_id
+        and instance.get("_id") != exclude_instance_id
+        and mcp_service.uses_shared_admin_credential(instance)
+        for instance in instances
+    ):
+        raise HTTPException(
+            status_code=HttpStatusCode.CONFLICT.value,
+            detail="An OBSales shared MCP connection is already configured for this workspace.",
+        )
 
 
 def _build_instance_record(
@@ -399,6 +437,7 @@ async def create_instance(
 
     registry = _get_mcp_registry(request)
     _validate_instance_config(payload, registry)
+    await _assert_unique_obsales_instance(payload, user_context["org_id"], config_service)
 
     # STDIO instance creation is admin-only (already enforced above) and env vars are built
     # from an explicit allowlist — never pass through arbitrary client-supplied env keys.
@@ -434,7 +473,7 @@ async def get_instance(request: Request, instance_id: str) -> dict[str, Any]:
     if not is_admin:
         raise HTTPException(status_code=HttpStatusCode.FORBIDDEN.value, detail="Only administrators can view MCP server instance details.")
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
@@ -457,13 +496,16 @@ async def update_instance(
     if not is_admin:
         raise HTTPException(status_code=HttpStatusCode.FORBIDDEN.value, detail="Only administrators can update MCP server instances.")
 
-    existing = await _get_org_instance(instance_id, config_service)
+    existing = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not existing:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
     forbid_inherited_mcp_mutation(existing)
 
     registry = _get_mcp_registry(request)
     _validate_instance_config(payload, registry)
+    await _assert_unique_obsales_instance(
+        payload, user_context["org_id"], config_service, exclude_instance_id=instance_id,
+    )
     record = _build_instance_record(payload, instance_id, user_context["org_id"], user_context["user_id"], registry, existing=existing)
 
     success = await config_service.set_config(get_mcp_instance_path(instance_id), record)
@@ -480,7 +522,7 @@ async def delete_instance(request: Request, instance_id: str) -> dict[str, Any]:
     if not is_admin:
         raise HTTPException(status_code=HttpStatusCode.FORBIDDEN.value, detail="Only administrators can delete MCP server instances.")
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
     forbid_inherited_mcp_mutation(instance)
@@ -521,6 +563,28 @@ async def delete_instance(request: Request, instance_id: str) -> dict[str, Any]:
 # ============================================================================
 # Auth — API token / headers
 # ============================================================================
+
+
+def _credential_owner_id(instance: dict[str, Any], caller_id: str) -> str:
+    """Use the canonical creator slot for OBSales' one shared server-side credential."""
+    if mcp_service.uses_shared_admin_credential(instance):
+        owner_id = instance.get("createdBy")
+        if not isinstance(owner_id, str) or not owner_id:
+            raise HTTPException(
+                status_code=HttpStatusCode.CONFLICT.value,
+                detail="The shared OBSales credential owner is unavailable.",
+            )
+        return owner_id
+    return caller_id
+
+
+def _reject_agent_shared_credential(instance: dict[str, Any]) -> None:
+    """The OBSales credential is configured once at workspace scope, never per agent."""
+    if mcp_service.uses_shared_admin_credential(instance):
+        raise HTTPException(
+            status_code=HttpStatusCode.CONFLICT.value,
+            detail="Shared credentials are managed at workspace scope.",
+        )
 
 
 def _assert_non_oauth_auth_mode(instance: dict[str, Any]) -> None:
@@ -621,6 +685,8 @@ def _build_credential_record(instance: dict[str, Any], payload: AuthenticateRequ
         "authMode": auth_mode,
         "isAuthenticated": True,
         "credentials": credentials,
+        # Changes on every save so catalog/session authority is invalidated on rotation.
+        "credentialGeneration": uuid.uuid4().hex,
         "updatedAt": now_ms,
     }
 
@@ -638,14 +704,17 @@ async def authenticate_instance(
     user_context = _get_user_context(request)
     org_id, user_id = user_context["org_id"], user_context["user_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, org_id)
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
     await _assert_can_write_credentials(instance, user_context, request, config_service)
-    record = _build_credential_record(instance, payload, user_id, org_id)
+    credential_owner_id = _credential_owner_id(instance, user_id)
+    record = _build_credential_record(instance, payload, credential_owner_id, org_id)
 
-    success = await config_service.set_config(get_mcp_credentials_path(instance_id, user_id), record)
+    success = await config_service.set_config(
+        get_mcp_credentials_path(instance_id, credential_owner_id), record,
+    )
     if not success:
         raise HTTPException(status_code=HttpStatusCode.INTERNAL_SERVER_ERROR.value, detail="Failed to save credentials.")
     return {"success": True, "isAuthenticated": True}
@@ -677,12 +746,13 @@ async def remove_credentials(request: Request, instance_id: str) -> dict[str, An
     user_context = _get_user_context(request)
     user_id = user_context["user_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
     await _assert_admin_owns_shared_credential(instance, user_context, request, config_service)
 
-    cred_path = get_mcp_credentials_path(instance_id, user_id)
+    credential_owner_id = _credential_owner_id(instance, user_id)
+    cred_path = get_mcp_credentials_path(instance_id, credential_owner_id)
     await config_service.delete_config(cred_path)
     if instance.get("authMode") == MCPAuthMode.OAUTH.value:
         # Mirrors `reauthenticate_instance` — only the legacy per-owner DCR client is this
@@ -708,13 +778,19 @@ async def auto_authenticate_instance(request: Request, instance_id: str) -> dict
     config_service = _get_config_service(request)
     _get_user_context(request)
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, _get_user_context(request)["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
     if not instance.get("useAdminAuth"):
-        raise HTTPException(status_code=HttpStatusCode.BAD_REQUEST.value, detail="This instance does not use a shared admin credential.")
-    if mcp_service.uses_shared_admin_credential(instance):
-        raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE)
+        raise HTTPException(
+            status_code=HttpStatusCode.BAD_REQUEST.value,
+            detail="This instance does not use a shared admin credential.",
+        )
+    if not mcp_service.uses_shared_admin_credential(instance):
+        raise HTTPException(
+            status_code=HttpStatusCode.CONFLICT.value,
+            detail=mcp_service.SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE,
+        )
 
     admin_record = await config_service.get_config(
         get_mcp_credentials_path(instance_id, instance.get("createdBy")), default=None, use_cache=False
@@ -737,11 +813,14 @@ async def reauthenticate_instance(request: Request, instance_id: str) -> dict[st
     user_context = _get_user_context(request)
     user_id = user_context["user_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
-    cred_path = get_mcp_credentials_path(instance_id, user_id)
+    if mcp_service.uses_shared_admin_credential(instance):
+        await _assert_admin_owns_shared_credential(instance, user_context, request, config_service)
+    credential_owner_id = _credential_owner_id(instance, user_id)
+    cred_path = get_mcp_credentials_path(instance_id, credential_owner_id)
     await config_service.delete_config(cred_path)
     # Only the legacy per-owner DCR client is this caller's alone to clear — the shared
     # per-instance client (if this instance uses one) is relied on by every other
@@ -972,7 +1051,7 @@ async def get_oauth_authorization_url(
     user_context = _get_user_context(request)
     org_id, user_id = user_context["org_id"], user_context["user_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, org_id)
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
@@ -1281,7 +1360,7 @@ async def update_oauth_config(
     if not is_admin:
         raise HTTPException(status_code=HttpStatusCode.FORBIDDEN.value, detail="Only administrators can configure OAuth clients.")
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
@@ -1312,6 +1391,21 @@ async def update_oauth_config(
 # ============================================================================
 # Discovery / consumption
 # ============================================================================
+
+
+async def _probe_obsales_availability(
+    instance: dict[str, Any], auth: dict[str, Any],
+) -> None:
+    """Open a fresh OBSales session and complete discovery; never trust cached catalog state."""
+    config = mcp_service.instance_config_from_dict(instance)
+    credentials = mcp_service.credentials_to_discovery_dict(instance.get("authMode", ""), auth)
+    env, headers = build_auth_env_and_headers(config, credentials)
+    manager = MCPClientManager(config, env=env, headers=headers)
+    try:
+        await manager.open()
+        await manager.fetch_tool_listing_in_session()
+    finally:
+        await manager.aclose()
 
 
 async def _discover_catalog_for_owner(
@@ -1348,7 +1442,13 @@ async def _build_mcp_instance_entry(
     service-account path `/agents/{agent_key}` (`_resolve_effective_user_auth` already
     treats both the same way). Shared so the two routes can't drift.
     """
-    entry = dict(instance)
+    # Treat the employee-facing merged catalog as an allowlisted metadata projection.
+    # Credential records are separate, but strip secret-shaped fields defensively so a
+    # malformed/legacy instance record cannot serialize a token into browser state.
+    entry = {
+        key: value for key, value in instance.items()
+        if key not in {"credentials", "apiToken", "headerValue", "clientSecret", "authorization"}
+    }
     owner_svc = await resolve_instance_owner_config_service(instance["_id"], config_service) or config_service
     entry["hasOAuthClientConfig"] = bool(
         await owner_svc.get_config(get_mcp_oauth_client_config_path(instance["_id"]), default=None)
@@ -1369,11 +1469,20 @@ async def _build_mcp_instance_entry(
             )
             entry["tools"] = [t.model_dump(by_alias=True) for t in tools]
         except (MCPConnectionError, asyncio.TimeoutError) as e:
-            entry["toolsError"] = str(e)
+            entry["toolsError"] = (
+                "Failed to discover tools."
+                if mcp_service.uses_shared_admin_credential(instance) else str(e)
+            )
         except LegacySharedAuthIneligible as e:
             entry["toolsError"] = str(e)
         except Exception as e:
-            logger.warning(f"Unexpected error discovering tools for MCP instance {instance['_id']}: {e}")
+            if mcp_service.uses_shared_admin_credential(instance):
+                logger.warning(
+                    "OBSales tool discovery failed (instance=%s, error_type=%s)",
+                    instance.get("_id"), type(e).__name__,
+                )
+            else:
+                logger.warning(f"Unexpected error discovering tools for MCP instance {instance['_id']}: {e}")
             entry["toolsError"] = "Failed to discover tools."
     return entry
 
@@ -1511,6 +1620,18 @@ def _is_google_calendar_mcp_instance(instance: dict[str, Any]) -> bool:
     )
 
 
+def _is_obsales_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Reserved OBSales boundary: explicit name plus custom Streamable HTTP/API token."""
+    return (
+        str(instance.get("name", "")).strip().casefold() == "obsales"
+        and instance.get("isCustom") is True
+        and instance.get("typeId") is None
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.API_TOKEN.value
+        and bool(instance.get("useAdminAuth"))
+    )
+
+
 def _is_superhuman_docs_mcp_instance(instance: dict[str, Any]) -> bool:
     """Match the organization's Superhuman Docs MCP server configured for user tokens."""
     url = instance.get("url")
@@ -1612,6 +1733,34 @@ async def get_google_drive_connection(request: Request) -> dict[str, Any]:
 async def get_google_calendar_connection(request: Request) -> dict[str, Any]:
     """Return only Google Calendar MCP availability and the caller's own connection state."""
     return await _get_designated_mcp_connection(request, _is_google_calendar_mcp_instance)
+
+
+@router.get("/obsales-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_obsales_connection(request: Request) -> dict[str, Any]:
+    """Report OBSales availability without returning its shared credential."""
+    config_service = _get_config_service(request)
+    user_context = _get_user_context(request)
+    instances = await resolve_mcp_instances_with_inheritance(config_service)
+    matches = [i for i in instances if i.get("orgId") == user_context["org_id"] and _is_obsales_mcp_instance(i)]
+    if len(matches) != 1:
+        if len(matches) > 1:
+            logger.error("Multiple OBSales MCP instances configured for organization %s", user_context["org_id"])
+        return {"configured": False, "isConnected": False}
+    instance = matches[0]
+    try:
+        auth = await _resolve_effective_user_auth(instance, user_context["user_id"], config_service)
+        if not mcp_service.is_effective_auth_authenticated(auth):
+            return {"configured": True, "isConnected": False}
+        # Bypass the metadata catalog cache: the homepage reflects current transport/discovery
+        # availability rather than merely the presence of a recently cached tool listing.
+        await asyncio.wait_for(
+            _probe_obsales_availability(instance, auth),
+            timeout=DEFAULT_TOOLS_DISCOVERY_TIMEOUT_SECONDS,
+        )
+        return {"configured": True, "isConnected": True}
+    except Exception as exc:
+        logger.warning("OBSales MCP availability check failed (error_type=%s)", type(exc).__name__)
+        return {"configured": True, "isConnected": False}
 
 
 @router.get("/superhuman-docs-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
@@ -1743,7 +1892,10 @@ async def get_instance_tools(request: Request, instance_id: str) -> dict[str, An
     except (CatalogScopeError, CatalogInvalidated) as e:
         raise HTTPException(status_code=HttpStatusCode.CONFLICT.value, detail="This connection changed or is unavailable. Try again.") from e
     except MCPConnectionError as e:
-        logger.warning("Tool discovery failed for MCP instance %s: %s", instance_id, e, exc_info=True)
+        if mcp_service.uses_shared_admin_credential(instance):
+            logger.warning("OBSales tool discovery failed (instance=%s, error_type=%s)", instance_id, type(e).__name__)
+        else:
+            logger.warning("Tool discovery failed for MCP instance %s: %s", instance_id, e, exc_info=True)
         raise HTTPException(
             status_code=HttpStatusCode.BAD_GATEWAY.value,
             detail=action_failed("load this MCP server's tools"),
@@ -1812,11 +1964,12 @@ async def authenticate_agent_instance(
     user_context = _get_user_context(request)
     org_id = user_context["org_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, org_id)
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 
     _assert_non_oauth_auth_mode(instance)
+    _reject_agent_shared_credential(instance)
     record = _build_credential_record(instance, payload, agent_key, org_id)
     record["agentKey"] = agent_key
 
@@ -1848,11 +2001,12 @@ async def update_agent_instance_credentials(
 async def remove_agent_instance_credentials(request: Request, agent_key: str, instance_id: str) -> dict[str, Any]:
     await _require_mcp_agent_edit_access(agent_key, request)
     config_service = _get_config_service(request)
-    _get_user_context(request)
+    user_context = _get_user_context(request)
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
+    _reject_agent_shared_credential(instance)
 
     cred_path = get_mcp_credentials_path(instance_id, agent_key)
     await config_service.delete_config(cred_path)
@@ -1874,11 +2028,12 @@ async def reauthenticate_agent_instance(request: Request, agent_key: str, instan
     """Clear the agent's stored credentials/tokens for this instance, forcing re-auth."""
     await _require_mcp_agent_edit_access(agent_key, request)
     config_service = _get_config_service(request)
-    _get_user_context(request)
+    user_context = _get_user_context(request)
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, user_context["org_id"])
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
+    _reject_agent_shared_credential(instance)
 
     cred_path = get_mcp_credentials_path(instance_id, agent_key)
     await config_service.delete_config(cred_path)
@@ -1916,7 +2071,7 @@ async def get_agent_oauth_authorization_url(
     user_context = _get_user_context(request)
     org_id, user_id = user_context["org_id"], user_context["user_id"]
 
-    instance = await _get_org_instance(instance_id, config_service)
+    instance = await _get_org_instance_for_org(instance_id, config_service, org_id)
     if not instance:
         raise HTTPException(status_code=HttpStatusCode.NOT_FOUND.value, detail="MCP server instance not found.")
 

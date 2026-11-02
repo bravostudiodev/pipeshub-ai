@@ -2748,6 +2748,7 @@
         "scopes": "权限范围",
         "scopesPlaceholder": "添加权限范围",
         "useAdminAuth": "为所有用户使用共享的管理员认证",
+        "useAdminAuthHint": "仅用于 OBSales；员工会自动使用此共享令牌。",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "凭证（可选）",

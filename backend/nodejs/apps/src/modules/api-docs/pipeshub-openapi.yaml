@@ -16421,6 +16421,32 @@ paths:
         '403':
           description: Caller is not permitted to use this API
 
+  /mcp-servers/obsales-connection:
+    get:
+      tags: [MCP Servers]
+      summary: Get OBSales shared connection availability
+      description: Reports whether the designated OBSales MCP connection is available. The shared administrator token is never returned.
+      operationId: getObSalesConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OBSales connection availability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  isConnected:
+                    type: boolean
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
   /mcp-servers/instances:
     get:
       tags: [MCP Servers]

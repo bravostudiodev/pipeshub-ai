@@ -34,7 +34,9 @@ Source authorization is a hard security boundary. Treat credentials and access
 as user-specific unless the source has a demonstrated permission model that
 enforces source ACLs at query time. Never introduce a shared credential, shared
 index, cache, agent tool, or retrieval path that can expose one user's content
-to another. For ingested records, preserve and enforce record-level access
+to another. The only exception is the OBSales MCP, which uses a single shared token
+for all employees. That access is explicitly allowed by the MCP admin and should stay that way.
+For ingested records, preserve and enforce record-level access
 through retrieval, citation/content loading, and answer generation. Permission
 checks must fail closed: if access cannot be established, do not return the
 content. Validate cache keys and invalidation against user, organization,

@@ -2628,6 +2628,7 @@
         "scopes": "Ámbitos",
         "scopesPlaceholder": "Añadir un ámbito",
         "useAdminAuth": "Usar autenticación de administrador compartida para todos los usuarios",
+        "useAdminAuthHint": "Solo para OBSales; los empleados usan este token compartido automáticamente.",
         "headerValue": "{{headerName}}",
         "apiToken": "Token de API",
         "credentialsHeading": "Credenciales (opcional)",

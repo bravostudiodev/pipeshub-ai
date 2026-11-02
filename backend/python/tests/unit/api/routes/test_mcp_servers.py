@@ -22,6 +22,7 @@ from app.api.routes.mcp_servers import (
     _assert_admin_owns_shared_credential,
     _assert_can_write_credentials,
     _assert_non_oauth_auth_mode,
+    _assert_unique_obsales_instance,
     _build_credential_record,
     _build_instance_record,
     _build_oauth_authorization_url,
@@ -166,6 +167,44 @@ class TestValidateInstanceConfig:
         registry = MagicMock()
         payload = MCPServerInstanceConfig(name="x", transport=MCPTransport.STDIO, auth_mode=MCPAuthMode.NONE, command="npx")
         _validate_instance_config(payload, registry)  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_shared_obsales_instance_is_unique_per_workspace(self) -> None:
+        payload = MCPServerInstanceConfig(
+            name="OBSales", transport=MCPTransport.STREAMABLE_HTTP,
+            auth_mode=MCPAuthMode.API_TOKEN, use_admin_auth=True,
+            url="https://sales.example/mcp",
+        )
+        existing = {
+            "_id": "existing", "orgId": "org-1", "name": "OBSales", "typeId": None,
+            "isCustom": True, "transport": "streamable_http", "authMode": "api_token",
+            "useAdminAuth": True,
+        }
+        service = MagicMock()
+        with patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[existing])):
+            with pytest.raises(HTTPException) as exc:
+                await _assert_unique_obsales_instance(payload, "org-1", service)
+        assert exc.value.status_code == 409
+        with patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[existing])):
+            await _assert_unique_obsales_instance(payload, "org-2", service)
+
+    def test_shared_admin_auth_is_limited_to_obsales_custom_streamable_token(self) -> None:
+        registry = MagicMock()
+        valid = MCPServerInstanceConfig(
+            name="OBSales", type_id=None, transport=MCPTransport.STREAMABLE_HTTP,
+            auth_mode=MCPAuthMode.API_TOKEN, use_admin_auth=True, url="https://sales.example/mcp",
+        )
+        _validate_instance_config(valid, registry)
+        invalid_payloads = (
+            valid.model_copy(update={"name": "Other"}),
+            valid.model_copy(update={"type_id": "brave_search"}),
+            valid.model_copy(update={"transport": MCPTransport.SSE}),
+            valid.model_copy(update={"auth_mode": MCPAuthMode.HEADERS}),
+        )
+        for invalid in invalid_payloads:
+            with pytest.raises(HTTPException) as exc:
+                _validate_instance_config(invalid, registry)
+            assert exc.value.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +361,7 @@ class TestRemoveCredentials:
 
     @pytest.mark.asyncio
     async def test_oauth_instance_disconnect_succeeds(self) -> None:
-        instance = {"_id": "inst-1", "authMode": MCPAuthMode.OAUTH.value, "useAdminAuth": False}
+        instance = {"_id": "inst-1", "orgId": "o1", "authMode": MCPAuthMode.OAUTH.value, "useAdminAuth": False}
         request = _mock_request(user={"userId": "u1", "orgId": "o1"}, app_state={"config_service": MagicMock()})
         config_service = MagicMock()
         config_service.delete_config = AsyncMock(return_value=True)
@@ -345,7 +384,7 @@ class TestRemoveCredentials:
 
     @pytest.mark.asyncio
     async def test_api_token_instance_disconnect_does_not_touch_dcr_client(self) -> None:
-        instance = {"_id": "inst-2", "authMode": MCPAuthMode.API_TOKEN.value, "useAdminAuth": False}
+        instance = {"_id": "inst-2", "orgId": "o1", "authMode": MCPAuthMode.API_TOKEN.value, "useAdminAuth": False}
         request = _mock_request(user={"userId": "u1", "orgId": "o1"}, app_state={"config_service": MagicMock()})
         config_service = MagicMock()
         config_service.delete_config = AsyncMock(return_value=True)
@@ -359,7 +398,7 @@ class TestRemoveCredentials:
 
     @pytest.mark.asyncio
     async def test_shared_admin_credential_blocks_non_admin(self) -> None:
-        instance = {"_id": "inst-3", "authMode": MCPAuthMode.OAUTH.value, "useAdminAuth": True}
+        instance = {"_id": "inst-3", "orgId": "o1", "authMode": MCPAuthMode.OAUTH.value, "useAdminAuth": True}
         request = _mock_request(user={"userId": "u1", "orgId": "o1"}, app_state={"config_service": MagicMock()})
 
         with patch("app.api.routes.mcp_servers._get_org_instance", new=AsyncMock(return_value=instance)), patch(
@@ -462,14 +501,25 @@ class TestResolveEffectiveUserAuth:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_use_admin_auth_resolves_creator_record(self) -> None:
-        instance = {"_id": "inst-1", "authMode": MCPAuthMode.API_TOKEN.value, "useAdminAuth": True, "createdBy": "admin-1"}
+    async def test_obsales_shared_auth_resolves_creator_record(self) -> None:
+        instance = {
+            "_id": "inst-1", "orgId": "org-1", "name": "OBSales", "typeId": None,
+            "isCustom": True, "transport": "streamable_http", "authMode": MCPAuthMode.API_TOKEN.value,
+            "useAdminAuth": True, "createdBy": "admin-1",
+        }
         config_service = MagicMock()
         config_service.get_config = AsyncMock(return_value={"isAuthenticated": True})
         result = await _resolve_effective_user_auth(instance, "user-2", config_service)
         assert result == {"isAuthenticated": True}
-        called_path = config_service.get_config.await_args.args[0]
-        assert called_path.endswith("/inst-1/admin-1")
+        assert config_service.get_config.await_args.args[0].endswith("/inst-1/admin-1")
+
+    @pytest.mark.asyncio
+    async def test_non_obsales_admin_auth_does_not_resolve_creator_record(self) -> None:
+        instance = {"_id": "inst-1", "authMode": MCPAuthMode.API_TOKEN.value, "useAdminAuth": True, "createdBy": "admin-1"}
+        config_service = MagicMock()
+        config_service.get_config = AsyncMock(return_value={"isAuthenticated": True})
+        await _resolve_effective_user_auth(instance, "user-2", config_service)
+        assert config_service.get_config.await_args.args[0].endswith("/inst-1/user-2")
 
     @pytest.mark.asyncio
     async def test_use_admin_auth_ignored_for_oauth(self) -> None:

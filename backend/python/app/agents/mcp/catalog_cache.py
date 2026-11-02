@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from app.agents.mcp.catalog_scope import CatalogScopeError, load_catalog_scope
+from app.agents.mcp.service import uses_shared_admin_credential
 from app.utils.env_utils import env_int
 
 if TYPE_CHECKING:
@@ -243,6 +244,28 @@ async def _read_epoch(key: str, config_service: Any) -> str:  # noqa: ANN401
     return epoch
 
 
+def _reject_obsales_credential_echo(scope: CatalogScope, tools: list, instructions: str | None) -> None:
+    """Never publish or cache provider metadata that contains the shared token."""
+    if not uses_shared_admin_credential(scope.instance):
+        return
+    credentials = scope.auth.get("credentials") or {}
+    token = credentials.get("apiToken") if isinstance(credentials, dict) else None
+    if not isinstance(token, str) or not token:
+        raise CatalogUnavailable("OBSales credential is unavailable")
+
+    def contains(value: Any) -> bool:  # noqa: ANN401
+        if isinstance(value, str):
+            return token in value
+        if isinstance(value, dict):
+            return any(contains(key) or contains(item) for key, item in value.items())
+        if isinstance(value, list):
+            return any(contains(item) for item in value)
+        return False
+
+    if contains(tools) or contains(instructions):
+        raise CatalogUnavailable("OBSales discovery returned unsafe metadata")
+
+
 async def get_for_owner(
     instance_id: str, org_id: str, owner_id: str, config_service: Any,  # noqa: ANN401
     discover: Callable[[CatalogScope], Awaitable[Any]],
@@ -276,12 +299,14 @@ async def get_for_owner(
                         epoch = None
                         current_epoch = None
                     if epoch is not None and current_epoch == epoch:
+                        _reject_obsales_credential_echo(fresh, parsed[0], parsed[1])
                         return CatalogResult(fresh, parsed[0], parsed[1], True)
             scope = await _current(scope, config_service)
             async with listing_slot(instance_id):
                 listing = await discover(scope)
             tools, instructions, hint = _normalize_listing(listing)
             scope = await _current(scope, config_service)
+            _reject_obsales_credential_echo(scope, tools, instructions)
             if epoch is not None and value_key is not None:
                 try:
                     current_epoch = await config_service.get_config(epoch_key, default=None, use_cache=False, raise_on_error=True)

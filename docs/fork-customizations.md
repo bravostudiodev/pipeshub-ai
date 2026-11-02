@@ -22,6 +22,26 @@ token, or another user's credential as a fallback. A connected status is based
 on saved user credentials; tool discovery is a separate diagnostic action and
 must not be required to complete authorization.
 
+OBSales shared-token exception: shared administrator auth is permitted only for a
+custom instance explicitly named `OBSales` (case-insensitive), using Streamable
+HTTP and API-token authentication. This name plus custom/transport/auth-mode
+combination is the designation boundary; do not identify it by an arbitrary URL
+or catalog type. The token remains in the server-side administrator credential
+record. Other MCP instances retain per-user credential behavior. OBSales access
+is shared by policy. Every OBSales tool receives `requesting_user_email` for its
+access log: OddJeeves replaces any model-supplied value with the authenticated
+caller's graph-record email, after checking the caller's organization and the
+provider's allowed domains (`oddbytes.com` and `chirp.me`). Calls fail closed
+when that identity cannot be established, including synthetic service-account
+callers; an unverified `callerEmail` override is never used as identity.
+Provider contract verified against the available `mcp__obsales` server metadata:
+its namespace instructions say every tool call must include
+`requesting_user_email` for the person asking, at `@oddbytes.com` or `@chirp.me`;
+the `crm_guide` schema describes it as used for the access log only. The
+schemas of all 19 exposed tools include that parameter; see the reproducible
+[provider metadata snapshot](obsales-mcp-contract.md). This is attribution,
+not source-side verification or an authorization credential.
+
 The current chat cards cover:
 
 | Card | Connection model | Configuration and implementation |
@@ -34,6 +54,7 @@ The current chat cards cover:
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
 | Google Calendar | Live Google MCP and per-user OAuth | Uses the official Calendar MCP instance. Employee consent requests the read scopes and `calendar.events.owned` for events on calendars they own. Existing users must reconnect to grant the new scope. Google controls the actual grant and write operations; the service is in Developer Preview. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
+| OBSales | Custom Streamable HTTP MCP with one administrator-managed shared bearer/API token | Reserved custom instance name `OBSales` (case-insensitive), `typeId` absent, Streamable HTTP transport, API-token auth, and `useAdminAuth=true`. The credential is stored under the instance creator and resolved server-side for employees in that organization. No employee credential setup or Connect action. The card probes discovery and reports only connected/unavailable. Token changes rotate the credential generation; deleting the instance credential revokes the shared connection. |
 
 The MCP cards are implemented in
 `frontend/app/(main)/chat/components/slack-connection-card.tsx` (the filename
@@ -133,7 +154,8 @@ refreshed or reconnected. A callback reports success only after credentials are
 saved. No employee setup, scope, provider matching or model-routing changes are
 required for this hardening.
 
-Token and header instances cannot use one shared administrator credential
+Except for the explicitly designated OBSales API-token instance described above,
+token and header instances cannot use one shared administrator credential
 (`useAdminAuth`): saving one is refused, and an existing one is reported to the
 user and model as needing per-user sign-in, never as a temporary outage. OAuth
 is always per user. A service-account agent's MCP sign-in, and its tool catalog

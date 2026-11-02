@@ -2757,6 +2757,7 @@
         "scopes": "Scopes",
         "scopesPlaceholder": "Add a scope",
         "useAdminAuth": "Use shared admin authentication for all users",
+        "useAdminAuthHint": "Only for OBSales; employees use this shared token automatically.",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "Credentials (optional)",

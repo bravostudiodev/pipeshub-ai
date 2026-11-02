@@ -33,6 +33,7 @@ from app.api.routes.mcp_servers import (
     _is_gmail_mcp_instance,
     _is_google_drive_mcp_instance,
     _is_miro_mcp_instance,
+    _is_obsales_mcp_instance,
     _is_official_slack_mcp_instance,
     _sweep_expired_oauth_states,
     authenticate_agent_instance,
@@ -52,6 +53,7 @@ from app.api.routes.mcp_servers import (
     get_my_mcp_servers,
     get_oauth_authorization_url,
     get_oauth_config,
+    get_obsales_connection,
     get_slack_connection,
     list_catalog,
     list_instances,
@@ -59,6 +61,7 @@ from app.api.routes.mcp_servers import (
     reauthenticate_instance,
     refresh_oauth_token,
     remove_agent_instance_credentials,
+    remove_credentials,
     update_credentials,
     update_instance,
     update_oauth_config,
@@ -460,6 +463,58 @@ class TestAuthHandlers:
         assert saved["credentials"]["apiToken"] == "tok-1"
 
     @pytest.mark.asyncio
+    async def test_obsales_token_is_saved_only_under_creator_and_never_returned(self) -> None:
+        config_service = MagicMock()
+        config_service.set_config = AsyncMock(return_value=True)
+        request = _mock_request(
+            user={"userId": "admin-b", "orgId": "org-1"},
+            app_state={"config_service": config_service},
+        )
+        instance = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True, createdBy="admin-a",
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True, requiredEnv=[],
+        )
+        with (
+            patch("app.api.routes.mcp_servers._get_org_instance", new=AsyncMock(return_value=instance)),
+            patch("app.api.routes.mcp_servers._assert_can_write_credentials", new=AsyncMock()),
+        ):
+            result = await authenticate_instance(request, "inst-1", AuthenticateRequest(apiToken="secret-token"))
+        assert result == {"success": True, "isAuthenticated": True}
+        assert "secret-token" not in repr(result)
+        saved_path, saved = config_service.set_config.await_args.args
+        assert saved_path.endswith("/inst-1/admin-a")
+        assert saved["credentials"]["apiToken"] == "secret-token"
+        assert saved["orgId"] == "org-1" and saved["userId"] == "admin-a"
+        assert saved["credentialGeneration"]
+
+    @pytest.mark.asyncio
+    async def test_obsales_revoke_deletes_the_canonical_creator_record(self) -> None:
+        config_service = MagicMock()
+        config_service.delete_config = AsyncMock(return_value=True)
+        request = _mock_request(
+            user={"userId": "admin-b", "orgId": "org-1"},
+            app_state={"config_service": config_service},
+        )
+        instance = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True, createdBy="admin-a",
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True, requiredEnv=[],
+        )
+        refresh = MagicMock()
+        with (
+            patch("app.api.routes.mcp_servers._get_org_instance", new=AsyncMock(return_value=instance)),
+            patch("app.api.routes.mcp_servers._assert_admin_owns_shared_credential", new=AsyncMock()),
+            patch(
+                "app.connectors.core.base.token_service.startup_service.startup_service.get_mcp_token_refresh_service",
+                return_value=refresh,
+            ),
+        ):
+            result = await remove_credentials(request, "inst-1")
+        assert result == {"success": True}
+        path = config_service.delete_config.await_args.args[0]
+        assert path.endswith("/inst-1/admin-a")
+        refresh.cancel_refresh_task.assert_called_once_with(path)
+
+    @pytest.mark.asyncio
     async def test_authenticate_instance_not_found(self) -> None:
         request = _admin_request()
         with patch("app.api.routes.mcp_servers._get_org_instance", new=AsyncMock(return_value=None)):
@@ -477,6 +532,25 @@ class TestAuthHandlers:
             result = await update_credentials(request, "inst-1", AuthenticateRequest(apiToken="x"))
         assert result == {"success": True}
         auth.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_obsales_agent_auth_cannot_create_a_per_agent_token(self) -> None:
+        config_service = MagicMock()
+        config_service.set_config = AsyncMock(return_value=True)
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True, requiredEnv=[],
+        )
+        with (
+            patch("app.api.routes.mcp_servers._require_mcp_agent_edit_access", new=AsyncMock()),
+            patch("app.api.routes.mcp_servers._get_org_instance", new=AsyncMock(return_value=instance)),
+            pytest.raises(HTTPException) as raised,
+        ):
+            await authenticate_agent_instance(request, "agent-key", "inst-1", AuthenticateRequest(apiToken="personal-token"))
+        assert raised.value.status_code == 409
+        config_service.set_config.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_auto_authenticate_requires_admin_auth_flag(self) -> None:
@@ -643,6 +717,53 @@ class TestOauthRouteWrappers:
 
 
 class TestDiscoveryHandlers:
+    def test_obsales_matcher_requires_reserved_custom_streamable_api_token(self) -> None:
+        obsales = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True,
+        )
+        assert _is_obsales_mcp_instance(obsales)
+        assert not _is_obsales_mcp_instance({**obsales, "name": "Other"})
+        assert not _is_obsales_mcp_instance({**obsales, "typeId": "obsales"})
+        assert not _is_obsales_mcp_instance({**obsales, "useAdminAuth": False})
+        assert not _is_obsales_mcp_instance({**obsales, "authMode": MCPAuthMode.HEADERS.value})
+
+    @pytest.mark.asyncio
+    async def test_obsales_status_probes_shared_auth_without_returning_secrets(self) -> None:
+        config_service = MagicMock()
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True,
+        )
+        shared_auth = {"isAuthenticated": True, "credentials": {"apiToken": "never-return-this"}}
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value=shared_auth)) as resolve_auth,
+            patch("app.api.routes.mcp_servers._probe_obsales_availability", new=AsyncMock()) as discover,
+        ):
+            result = await get_obsales_connection(request)
+        resolve_auth.assert_awaited_once_with(instance, "admin-1", config_service)
+        discover.assert_awaited_once_with(instance, shared_auth)
+        assert result == {"configured": True, "isConnected": True}
+        assert "never-return-this" not in repr(result)
+
+    @pytest.mark.asyncio
+    async def test_obsales_discovery_failure_is_unavailable_not_error_leak(self) -> None:
+        request = _admin_request()
+        instance = _api_token_instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport=MCPTransport.STREAMABLE_HTTP.value, useAdminAuth=True,
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})),
+            patch("app.api.routes.mcp_servers._probe_obsales_availability", new=AsyncMock(side_effect=RuntimeError("secret token failure"))),
+        ):
+            result = await get_obsales_connection(request)
+        assert result == {"configured": True, "isConnected": False}
+        assert "secret" not in repr(result)
+
     def test_official_slack_match_excludes_legacy_bot_template(self) -> None:
         official = {
             "url": "https://mcp.slack.com/mcp",
@@ -897,6 +1018,25 @@ class TestDiscoveryHandlers:
         assert len(result["instances"]) == 1
         assert result["instances"][0]["isAuthenticated"] is True
         assert result["instances"][0]["tools"] == []
+
+    @pytest.mark.asyncio
+    async def test_employee_mcp_listing_never_serializes_secret_shaped_instance_fields(self) -> None:
+        config_service = MagicMock()
+        config_service.get_config = AsyncMock(return_value=None)
+        request = _admin_request(config_service=config_service)
+        instance = _api_token_instance(
+            credentials={"apiToken": "leaked"}, apiToken="also-leaked",
+            headerValue="secret-header", clientSecret="secret-client", authorization="secret-auth",
+        )
+        with (
+            patch("app.api.routes.mcp_servers.resolve_mcp_instances_with_inheritance", new=AsyncMock(return_value=[instance])),
+            patch("app.api.routes.mcp_servers._resolve_effective_user_auth", new=AsyncMock(return_value={"isAuthenticated": True})),
+        ):
+            result = await get_my_mcp_servers(request, include_tools=False)
+        assert len(result["instances"]) == 1
+        rendered = repr(result)
+        for secret in ("leaked", "also-leaked", "secret-header", "secret-client", "secret-auth"):
+            assert secret not in rendered
 
     @pytest.mark.asyncio
     async def test_get_my_mcp_servers_records_tools_error(self) -> None:

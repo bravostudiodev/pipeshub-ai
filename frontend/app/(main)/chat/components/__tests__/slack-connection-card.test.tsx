@@ -12,6 +12,7 @@ import {
   GmailConnectionCard,
   GoogleDriveConnectionCard,
   SlackConnectionCard,
+  ObSalesConnectionCard,
   SuperhumanDocsConnectionCard,
   ConfluenceConnectionCard,
 } from '../slack-connection-card';
@@ -29,6 +30,7 @@ vi.mock('@/app/(main)/workspace/mcp-servers/api', () => ({
     getGmailConnection: vi.fn(),
     getGoogleDriveConnection: vi.fn(),
     getSuperhumanDocsConnection: vi.fn(),
+    getObSalesConnection: vi.fn(),
     authenticate: vi.fn(),
     removeCredentials: vi.fn(),
   },
@@ -57,6 +59,7 @@ const getAtlassianStatus = vi.mocked(McpServersApi.getAtlassianConnection);
 const getGmailStatus = vi.mocked(McpServersApi.getGmailConnection);
 const getGoogleDriveStatus = vi.mocked(McpServersApi.getGoogleDriveConnection);
 const getSuperhumanStatus = vi.mocked(McpServersApi.getSuperhumanDocsConnection);
+const getObSalesStatus = vi.mocked(McpServersApi.getObSalesConnection);
 
 function renderCard() {
   render(<Theme><SlackConnectionCard /></Theme>);
@@ -73,6 +76,7 @@ beforeEach(() => {
   getGmailStatus.mockReset();
   getGoogleDriveStatus.mockReset();
   getSuperhumanStatus.mockReset();
+  getObSalesStatus.mockReset();
   vi.mocked(McpServersApi.authenticate).mockReset();
   vi.mocked(ConnectorsApi.getActiveConnectors).mockReset();
   vi.mocked(ConnectorsApi.createConnectorInstance).mockReset();
@@ -82,6 +86,30 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+describe('ObSalesConnectionCard', () => {
+  it('shows connected when the shared connection is available and offers no Connect action', async () => {
+    getObSalesStatus.mockResolvedValue({ configured: true, isConnected: true });
+    render(<Theme><ObSalesConnectionCard /></Theme>);
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    expect(screen.getByText('OBSales')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /connect/i })).toBeNull();
+  });
+
+  it('shows unavailable when the shared connection is not configured', async () => {
+    getObSalesStatus.mockResolvedValue({ configured: false, isConnected: false });
+    render(<Theme><ObSalesConnectionCard /></Theme>);
+    expect(await screen.findByText('Unavailable')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /connect/i })).toBeNull();
+  });
+
+  it('shows unavailable when the status request fails', async () => {
+    getObSalesStatus.mockRejectedValue(new Error('temporary failure'));
+    render(<Theme><ObSalesConnectionCard /></Theme>);
+    expect(await screen.findByText('Unavailable')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /connect/i })).toBeNull();
+  });
+});
 
 describe('SlackConnectionCard', () => {
   it('offers a compact Connect action when the user has not connected', async () => {

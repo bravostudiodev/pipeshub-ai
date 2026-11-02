@@ -2748,6 +2748,7 @@
         "scopes": "스코프",
         "scopesPlaceholder": "스코프 추가",
         "useAdminAuth": "모든 사용자에게 공유 관리자 인증 사용",
+        "useAdminAuthHint": "OBSales 전용입니다. 직원은 이 공유 토큰을 자동으로 사용합니다.",
         "headerValue": "{{headerName}}",
         "apiToken": "API 토큰",
         "credentialsHeading": "자격 증명(선택 사항)",

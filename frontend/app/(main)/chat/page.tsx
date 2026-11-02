@@ -57,6 +57,7 @@ import type { ProjectDetail } from '@/chat/project-types';
 import { useProjectScopeHydration } from '@/chat/hooks/use-project-scope-hydration';
 import {
   JiraConnectionCard,
+  ObSalesConnectionCard,
   MiroConnectionCard,
   GmailConnectionCard,
   GoogleDriveConnectionCard,
@@ -1158,6 +1159,7 @@ function ChatContent() {
           style={{ flexWrap: 'wrap', width: '100%' }}
         >
           <SlackConnectionCard />
+          <ObSalesConnectionCard />
           <NotionConnectionCard />
           <MiroConnectionCard />
           <JiraConnectionCard />

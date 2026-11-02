@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, DropdownMenu, Flex, IconButton, Text, TextField, Tooltip } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { MaterialIcon } from '@/app/components/ui/MaterialIcon';
+import { PipesHubIcon } from '@/app/components/ui/pipes-hub-icon';
 import { isProcessedError } from '@/lib/api';
 import { McpServersApi } from '@/app/(main)/workspace/mcp-servers/api';
 import { ConnectorsApi } from '@/app/(main)/workspace/connectors/api';
@@ -316,6 +317,30 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
           </Flex>
         </Tooltip>
       )}
+    </Flex>
+  );
+}
+
+export function ObSalesConnectionCard() {
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void McpServersApi.getObSalesConnection()
+      .then((status) => { if (active) setAvailable(status.configured && status.isConnected); })
+      .catch(() => { if (active) setAvailable(false); });
+    return () => { active = false; };
+  }, []);
+
+  if (available === null) return null;
+
+  const label = available ? 'Connected' : 'Unavailable';
+  return (
+    <Flex align="center" gap="2" px="2" py="1" style={{ minHeight: 34, flexShrink: 0, border: '1px solid var(--slate-5)', borderRadius: 'var(--radius-3)', background: 'var(--color-panel)' }} aria-label={`OBSales ${label}`}>
+      <PipesHubIcon size={20} />
+      <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>OBSales</Text>
+      {available ? <MaterialIcon name="check_circle" size={14} color="var(--jade-9)" /> : <MaterialIcon name="info" size={14} color="var(--slate-9)" />}
+      <Text size="1" color="gray" role="status">{label}</Text>
     </Flex>
   );
 }

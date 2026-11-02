@@ -173,6 +173,11 @@ export const McpServersApi = {
     return data;
   },
 
+  async getObSalesConnection(): Promise<{ configured: boolean; isConnected: boolean }> {
+    const { data } = await apiClient.get(`${BASE_URL}/obsales-connection`);
+    return data;
+  },
+
   async getSuperhumanDocsConnection(): Promise<SuperhumanDocsConnectionStatus> {
     const { data } = await apiClient.get(`${BASE_URL}/superhuman-docs-connection`);
     return data;

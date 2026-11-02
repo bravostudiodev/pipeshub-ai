@@ -2611,6 +2611,7 @@
         "scopes": "Berechtigungen",
         "scopesPlaceholder": "Berechtigung hinzufügen",
         "useAdminAuth": "Gemeinsame Admin-Authentifizierung für alle Benutzer verwenden",
+        "useAdminAuthHint": "Nur für OBSales; Beschäftigte verwenden dieses gemeinsame Token automatisch.",
         "headerValue": "{{headerName}}",
         "apiToken": "API-Token",
         "credentialsHeading": "Anmeldedaten (optional)",
