@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Dialog, Flex, IconButton, Select, Text, TextField } from '@radix-ui/themes';
+import { Button, Dialog, Flex, IconButton, Text, TextField } from '@radix-ui/themes';
 import { apiClient } from '@/lib/api';
 
 interface Share { _id: string; version: number; expiresAt: string }
@@ -33,7 +33,7 @@ export function ArtifactShareDialog({ artifactId, version, neutral = false }: { 
       const response = await apiClient.post<{ id: string; token: string; expiresAt: string }>(base, {
         version, expiresInDays: Number(days),
       });
-      setLink(`${window.location.origin}/share/?token=${encodeURIComponent(response.data.token)}`);
+      setLink(`${window.location.origin}/share/${encodeURIComponent(response.data.token)}`);
       setLinkId(response.data.id);
       setExpires(response.data.expiresAt);
       try { await refresh(); } catch { setMessage('Link created, but active shares could not be refreshed.'); }
@@ -60,9 +60,21 @@ export function ArtifactShareDialog({ artifactId, version, neutral = false }: { 
         <Dialog.Description size="2">Anyone who can access this link can view this artifact. The link can be forwarded, and the artifact may contain sensitive information.</Dialog.Description>
         <Flex direction="column" gap="3" style={{ marginTop: 'var(--space-4)' }}>
           <Text size="2">Sharing version {version}</Text>
-          <label><Text size="2">Expires after</Text>
-            <Select.Root value={days} onValueChange={setDays}><Select.Trigger aria-label="Expiration" /><Select.Content className="artifact-share-expiration-select"><Select.Item value="1">1 day</Select.Item><Select.Item value="7">7 days</Select.Item><Select.Item value="30">30 days</Select.Item></Select.Content></Select.Root>
-          </label>
+          <Flex asChild align="center" gap="3">
+            <label>
+              <Text size="2">Expires after</Text>
+              <select
+                aria-label="Expiration"
+                value={days}
+                onChange={(event) => setDays(event.target.value)}
+                style={{ padding: 'var(--space-2)', border: '1px solid var(--gray-7)', borderRadius: 'var(--radius-2)', background: 'var(--color-panel-solid)', color: 'var(--gray-12)', font: 'inherit', cursor: 'pointer' }}
+              >
+                <option value="1">1 day</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+              </select>
+            </label>
+          </Flex>
           <Button onClick={create} disabled={busy}>Create link</Button>
           {link && <Flex direction="column" gap="2"><Text size="2">Expires {new Date(expires).toLocaleString()}. Copy this link now; it cannot be shown again.</Text><TextField.Root aria-label="Share link" value={link} readOnly /><Button variant="soft" onClick={() => { void navigator.clipboard.writeText(link).then(() => setMessage('Link copied.')).catch(() => setMessage('Could not copy link.')); }}>Copy link</Button></Flex>}
           {shares.map((share) => <Flex key={share._id} align="center" justify="between" gap="2"><Text size="2">Version {share.version} · expires {new Date(share.expiresAt).toLocaleString()}</Text><Button variant="soft" color="red" disabled={busy} onClick={() => revoke(share._id)}>Stop sharing</Button></Flex>)}

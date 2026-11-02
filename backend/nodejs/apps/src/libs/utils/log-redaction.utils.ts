@@ -44,6 +44,9 @@ const PLACEHOLDER_ORIGIN = 'http://placeholder.invalid';
  * value is exactly the case where a secret could survive a naive regex.
  */
 export function redactSensitiveQueryParams(url: string): string {
+  // Artifact share paths contain a bearer token; redact even malformed tokens
+  // and absolute Referers before applying the usual query-string protection.
+  url = url.replace(/^((?:https?:\/\/[^/?#]+)?\/share\/)[^/?#]+/i, '$1[REDACTED]');
   if (!url || !url.includes('?')) {
     return url;
   }

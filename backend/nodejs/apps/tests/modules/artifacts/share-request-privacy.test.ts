@@ -1,7 +1,10 @@
 import { expect } from 'chai';
 import express from 'express';
 import { AddressInfo } from 'net';
-import { suppressShareBodyParserError, isShareTokenRequest, isShareViewerRequest } from '../../../src/modules/artifacts/services/share-request-privacy';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
+import { suppressShareBodyParserError, isShareTokenRequest, isShareViewerRequest, sendShareViewerShell } from '../../../src/modules/artifacts/services/share-request-privacy';
 import { ErrorMiddleware } from '../../../src/libs/middlewares/error.middleware';
 
 describe('share bearer request privacy', () => {
@@ -16,12 +19,36 @@ describe('share bearer request privacy', () => {
   it('recognizes the static share viewer and hides query credentials from error logs', () => {
     expect(isShareViewerRequest('/share/')).to.equal(true);
     expect(isShareViewerRequest('/share')).to.equal(true);
-    expect(isShareViewerRequest('/share/other')).to.equal(false);
+    expect(isShareViewerRequest('/share/other')).to.equal(true);
+    expect(isShareViewerRequest('/share/other/nested')).to.equal(false);
     const context = (ErrorMiddleware as any).getRequestContext({
       method: 'GET', path: '/share/', query: { token: 'private-token' }, params: {},
       headers: { referer: 'https://example.com/share/?token=private-token' },
     });
     expect(JSON.stringify(context)).not.to.include('private-token');
+    const pathContext = (ErrorMiddleware as any).getRequestContext({
+      method: 'GET', path: '/share/private-token', query: {}, params: { token: 'private-token' },
+      headers: { referer: 'https://example.com/share/private-token' },
+    });
+    expect(JSON.stringify(pathContext)).not.to.include('private-token');
+  });
+
+  it('serves the share shell at a token path without a redirect or caching', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'share-viewer-'));
+    mkdirSync(path.join(dir, 'share'));
+    writeFileSync(path.join(dir, 'share', 'index.html'), '<html>share shell</html>');
+    const app = express();
+    app.get('*', (req, res) => { if (!sendShareViewerShell(req, res, dir)) res.sendStatus(404); });
+    const server = app.listen(0);
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const response = await fetch(`http://127.0.0.1:${port}/share/${'A'.repeat(43)}`, { redirect: 'manual' });
+      expect(response.status).to.equal(200);
+      expect(response.headers.get('location')).to.equal(null);
+      expect(response.headers.get('cache-control')).to.include('no-store');
+      expect(response.headers.get('referrer-policy')).to.equal('no-referrer');
+      expect(await response.text()).to.include('share shell');
+    } finally { server.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it('suppresses malformed JSON body errors on token endpoints', async () => {

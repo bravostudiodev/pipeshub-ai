@@ -23,12 +23,24 @@ describe('artifact sharing dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/artifacts/artifact/shares', { version: 2, expiresInDays: 7 }));
     const link = (await screen.findByLabelText('Share link') as HTMLInputElement).value;
-    expect(link).toContain('/share/?token=secret');
+    expect(link).toContain('/share/secret');
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(link));
     expect(await screen.findByText('Link copied.')).toBeTruthy();
+  });
+
+  it('allows changing expiration before creating a link', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { shares: [] } });
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { id: 'share', token: 'secret', expiresAt: '2030-01-01T00:00:00Z' } });
+    render(<Theme><ArtifactShareDialog artifactId="artifact" version={1} /></Theme>);
+    fireEvent.click(screen.getByRole('button', { name: 'Share artifact' }));
+    const expiration = await screen.findByRole('combobox', { name: 'Expiration' });
+    fireEvent.change(expiration, { target: { value: '30' } });
+    expect((expiration as HTMLSelectElement).value).toBe('30');
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/v1/artifacts/artifact/shares', { version: 1, expiresInDays: 30 }));
   });
 
   it('lists active links and can stop sharing', async () => {

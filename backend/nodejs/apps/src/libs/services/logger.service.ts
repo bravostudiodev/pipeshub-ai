@@ -4,6 +4,8 @@ import { injectable } from 'inversify';
 import path from 'path';
 import { threadId } from 'worker_threads';
 import { currentDisplayId, getRequestContext } from '../context/request-context';
+import { redactSensitiveQueryParams } from '../utils/log-redaction.utils';
+import { isShareViewerRequest } from '../../modules/artifacts/services/share-request-privacy';
 
 export enum LogLevel {
   Debug = 'debug',
@@ -267,11 +269,11 @@ export class Logger {
 
   logRequest(req: Request, meta?: any) {
     const callerInfo = this.getCallerInfo();
-    this.info(`${req.method} ${req.path}`, {
+    this.info(`${req.method} ${redactSensitiveQueryParams(req.path)}`, {
       ...meta,
       ...callerInfo,
-      query: req.query,
-      params: req.params,
+      query: isShareViewerRequest(req.path) ? {} : req.query,
+      params: isShareViewerRequest(req.path) ? {} : req.params,
       headers: this.sanitizeHeaders(req.headers),
     });
   }
@@ -280,6 +282,9 @@ export class Logger {
     const sanitized = { ...headers };
     delete sanitized.authorization;
     delete sanitized.cookie;
+    for (const key of ['referer', 'referrer']) {
+      if (typeof sanitized[key] === 'string') sanitized[key] = redactSensitiveQueryParams(sanitized[key]);
+    }
     return sanitized;
   }
 }

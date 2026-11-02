@@ -27,6 +27,11 @@ describe('log-redaction.utils', () => {
       )
     })
 
+    it('redacts bearer tokens in relative and absolute share paths', () => {
+      expect(redactSensitiveQueryParams('/share/private-token')).to.equal('/share/[REDACTED]')
+      expect(redactSensitiveQueryParams('https://example.com/share/private-token?x=1')).to.equal('https://example.com/share/[REDACTED]?x=1')
+    })
+
     it('redacts presigned-url signatures', () => {
       const out = redactSensitiveQueryParams(
         '/f.pdf?X-Amz-Signature=deadbeef&X-Amz-Credential=AKIA',

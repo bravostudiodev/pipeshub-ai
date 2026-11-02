@@ -26,6 +26,9 @@ const nextConfig = {
             { source: '/connectors/oauth/callback/:slug/', destination: '/connectors/oauth/callback/' },
             { source: '/mcp-servers/oauth/callback/:slug', destination: '/mcp-servers/oauth/callback/' },
             { source: '/mcp-servers/oauth/callback/:slug/', destination: '/mcp-servers/oauth/callback/' },
+            // The share viewer is one static shell; retain the bearer in the visible path.
+            { source: '/share/:token', destination: '/share/' },
+            { source: '/share/:token/', destination: '/share/' },
             // `/record/<recordId>` URLs can't ship a dynamic `[recordId]` segment
             // under `output: 'export'`, so the build emits a single `/record/` shell.
             // Rewrite every `/record/:id` to that shell for `next dev`; the page reads

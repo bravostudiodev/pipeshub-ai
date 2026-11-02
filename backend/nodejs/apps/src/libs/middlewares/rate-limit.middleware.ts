@@ -6,6 +6,7 @@ import { TokenScopes } from '../enums/token-scopes.enum';
 import { Logger } from '../services/logger.service';
 import { TooManyRequestsError } from '../errors/http.errors';
 import { AuthenticatedUserRequest, AuthenticatedServiceRequest } from './types';
+import { redactSensitiveQueryParams } from '../utils/log-redaction.utils';
 
 /**
  * Never read X-Forwarded-For / X-Real-IP directly: the client controls them.
@@ -117,7 +118,7 @@ export function createGlobalRateLimiter(
 
       logger.warn('Rate limit exceeded', {
         key: rateLimitKey,
-        path: req.path,
+        path: redactSensitiveQueryParams(req.path),
         method: req.method,
         ip: getClientIp(req),
         retryAfter,
@@ -187,7 +188,7 @@ export function createKeyedRateLimiter(
       const retryAfter = res.getHeader('Retry-After');
       logger.warn('Rate limit exceeded', {
         key: keyFor(req),
-        path: req.path,
+        path: redactSensitiveQueryParams(req.path),
         method: req.method,
         ip: getClientIp(req),
         retryAfter,

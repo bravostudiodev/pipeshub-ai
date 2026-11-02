@@ -110,7 +110,7 @@ import { ProjectsContainer } from './modules/projects/container/project.containe
 import { createProjectsRouter } from './modules/projects/routes/project.routes';
 import { createArtifactsRouter } from './modules/artifacts/routes/artifacts.routes';
 import { createShareContentRouter } from './modules/artifacts/routes/share-content.routes';
-import { isShareTokenRequest, isShareViewerRequest, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
+import { isShareTokenRequest, isShareViewerRequest, sendShareViewerShell, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
 import { createMCPRouter } from './modules/mcp/routes/mcp.routes';
 // Side-effect import: registers edition-specific Redis providers for this process.
 import './redisProviders';
@@ -383,6 +383,10 @@ export class Application {
         // the id from `window.location.pathname` — so the URL stays intact
         // (no redirect, no visible `?recordId=` query param) and matches the
         // pattern used above for OAuth callback slugs.
+        // Share tokens live in the path so gateway sign-in preserves them. Serve
+        // the static viewer without redirecting or putting the token in a query.
+        if (sendShareViewerShell(_req, res, publicDir)) return;
+
         const recordMatch = _req.path.match(/^\/record\/[^/]+(?:\/.*)?$/);
         if (recordMatch) {
           sendShell(res, 'record');
@@ -485,7 +489,7 @@ export class Application {
     this.app.use((req, res, next) => {
       // Bearer inputs are strictly validated by the share token parser. Avoid
       // generic sanitizer error logs that could include malformed token bodies.
-      if (isShareTokenRequest(req.path) || (req.method === 'GET' && isShareViewerRequest(req.path))) return next();
+      if (isShareTokenRequest(req.path) || isShareViewerRequest(req.path)) return next();
       return xssSanitizationMiddleware(req, res, next);
     });
 

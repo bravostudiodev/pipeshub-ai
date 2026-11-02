@@ -74,7 +74,7 @@ const createRequestContext = (req: Request): RequestContext => {
     timestamp: Date.now(),
     headers,
     meta: {
-      path: req.path,
+      path: redactSensitiveQueryParams(req.path),
       method: req.method,
       protocol: req.protocol,
       originalUrl: redactSensitiveQueryParams(req.originalUrl),

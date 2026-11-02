@@ -6,7 +6,7 @@ import * as api from './api';
 vi.mock('./api', () => ({ getShareMetadata: vi.fn(), getShareContent: vi.fn(), downloadShare: vi.fn() }));
 vi.mock('@/app/components/file-preview/renderers/html-renderer', () => ({ HtmlRenderer: ({ fileName }: { fileName: string }) => <div>Existing HTML preview: {fileName}</div> }));
 
-afterEach(() => { cleanup(); vi.resetAllMocks(); window.history.replaceState(null, '', '/'); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); window.history.replaceState(null, '', '/share/'); });
 
 describe('shared artifact viewer', () => {
   it('shows an unavailable message for a malformed link', async () => {
@@ -26,6 +26,23 @@ describe('shared artifact viewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download' }));
     await waitFor(() => expect(api.downloadShare).toHaveBeenCalledWith(token, 'report.txt'));
     expect(api.getShareMetadata).toHaveBeenCalledWith(token);
+  });
+
+  it('loads a path token without removing it from the URL', async () => {
+    const token = 'C'.repeat(43);
+    window.history.replaceState(null, '', `/share/${token}`);
+    vi.mocked(api.getShareMetadata).mockResolvedValue({ version: 1, name: 'report.txt', mimeType: 'application/octet-stream' });
+    render(<SharedArtifactPage />);
+    expect(await screen.findByText(/Version 1/)).toBeTruthy();
+    expect(api.getShareMetadata).toHaveBeenCalledWith(token);
+    expect(window.location.pathname).toBe(`/share/${token}`);
+  });
+
+  it('rejects a path token combined with another token', async () => {
+    window.history.replaceState(null, '', `/share/${'A'.repeat(43)}?token=${'B'.repeat(43)}`);
+    render(<SharedArtifactPage />);
+    expect(await screen.findByText('This artifact is unavailable.')).toBeTruthy();
+    expect(api.getShareMetadata).not.toHaveBeenCalled();
   });
 
   it('accepts a gateway-preserved query token and moves it out of the query', async () => {

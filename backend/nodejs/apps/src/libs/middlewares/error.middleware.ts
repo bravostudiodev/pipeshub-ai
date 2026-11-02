@@ -180,9 +180,9 @@ export class ErrorMiddleware {
   private static getRequestContext(req: Request) {
     return {
       method: req.method,
-      path: req.path,
+      path: redactSensitiveQueryParams(req.path),
       query: isShareViewerRequest(req.path) ? {} : req.query,
-      params: req.params,
+      params: isShareViewerRequest(req.path) ? {} : req.params,
       ip: req.ip,
       headers: this.sanitizeHeaders(req.headers),
     };

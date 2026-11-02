@@ -27,9 +27,13 @@ export default function SharedArtifactPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const supplied = params.getAll('token');
-    // Query links survive gateway sign-in. Once the page loads, remove the
-    // bearer from the query so refreshes and subsequent navigation use a fragment.
-    const value = supplied.length === 1 ? supplied[0] : supplied.length === 0 ? window.location.hash.slice(1) : '';
+    const pathMatch = window.location.pathname.match(/^\/share\/([A-Za-z0-9_-]{43})\/?$/);
+    // New links keep the token in the path so gateway redirects preserve it.
+    // Continue accepting earlier query and fragment links; reject mixed inputs.
+    const isLegacyPath = /^\/share\/?$/.test(window.location.pathname);
+    const value = pathMatch
+      ? (supplied.length === 0 && !window.location.hash ? pathMatch[1] : '')
+      : !isLegacyPath ? '' : supplied.length === 1 ? supplied[0] : supplied.length === 0 ? window.location.hash.slice(1) : '';
     if (supplied.length > 0) {
       window.history.replaceState(null, '', `${window.location.pathname}${/^[A-Za-z0-9_-]{43}$/.test(value) ? `#${value}` : ''}`);
     }

@@ -75,10 +75,8 @@ html.dark .oauth-callback-shell { background: #111113; }
   color: #fff !important;
 }
 
-/* Share can be opened from the fullscreen preview (z-index 100). Keep its
-   dialog and expiration popup above that preview without changing other dialogs. */
+/* Share can be opened from the fullscreen preview (z-index 100). */
 .rt-DialogOverlay:has(.artifact-share-dialog) { z-index: 110; }
-[data-radix-popper-content-wrapper]:has(.artifact-share-expiration-select) { z-index: 120 !important; }
 
 /* Org logos may fail to load, leaving Radix's initials fallback visible. */
 .rt-AvatarRoot.oddjeeves-org-avatar {
