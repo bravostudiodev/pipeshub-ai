@@ -44,6 +44,14 @@ async def get_graph_provider(request: Request) -> IGraphDBProvider:
     return request.app.state.graph_provider
 
 
+def _is_deck_zip(name: object, mime_type: object) -> bool:
+    return mime_type in ("application/zip", "application/x-zip-compressed") or (
+        mime_type in ("application/octet-stream", None, "")
+        and isinstance(name, str)
+        and name.lower().endswith(".zip")
+    )
+
+
 def _parse_comma_separated_str(value: str | None) -> list[str] | None:
     if not value:
         return None
@@ -100,9 +108,7 @@ async def internal_share_content(
     actor = Actor(org_id=org_id, user_id=user_id)
     share_content = ArtifactShareContent(graph_provider, registry)
     if deck_path is not None:
-        if claims.get("name") != "slidev-presentation.zip" or claims.get(
-            "mimeType"
-        ) not in ("application/zip", "application/x-zip-compressed"):
+        if not _is_deck_zip(claims.get("name"), claims.get("mimeType")):
             raise HTTPException(status_code=404, detail="Artifact unavailable")
         try:
             deck_file = await share_content.get_deck_file(
@@ -177,9 +183,7 @@ async def internal_artifact_deck_file(
         raise HTTPException(status_code=401, detail="Invalid service token")
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
         raise HTTPException(status_code=401, detail="Invalid service token")
-    if claims.get("name") != "slidev-presentation.zip" or claims.get(
-        "mimeType"
-    ) not in ("application/zip", "application/x-zip-compressed"):
+    if not _is_deck_zip(claims.get("name"), claims.get("mimeType")):
         raise HTTPException(status_code=404, detail="Artifact unavailable")
     from app.modules.transformers.blob_storage import BlobStorage
     from app.services.artifact_registry.registry import ArtifactRegistryService
@@ -190,11 +194,8 @@ async def internal_artifact_deck_file(
     )
     try:
         detail = await ArtifactGalleryService(graph_provider).get(actor, artifact_id)
-        if detail.name != "slidev-presentation.zip" or detail.mime_type not in (
-            "application/zip",
-            "application/x-zip-compressed",
-        ):
-            raise InvalidDeckArchive("Artifact is not a Slidev presentation")
+        if not _is_deck_zip(detail.name, detail.mime_type):
+            raise InvalidDeckArchive("Artifact is not a ZIP archive")
         version_details = next(
             (item for item in detail.versions if item.version == version), None
         )

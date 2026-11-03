@@ -109,7 +109,10 @@ and pinned Slidev dependencies in `/opt/slidev`, and runs as the non-root
 `run_code` and the existing artifact delivery path; it does not use a separate
 renderer image or tool. The image also installs the Inter font family and
 provides OddBytes logos, icons, and stickers under `/opt/brand-assets/oddbytes/`
-for explicitly branded work. The Youngest accent font is not included. Browser
+for explicitly branded work. Logos and icons are available as self-contained SVGs
+and ready-to-use transparent PNGs; `README.md` in that directory lists the variants.
+Changes to those assets require rebuilding and publishing the sandbox image.
+The Youngest accent font is not included. Browser
 presentations must include any chosen fonts and icons in their delivered ZIP.
 Only the Docker sandbox image includes these assets and Slidev by default. The Slidev skill and vendored references are adapted from the
 MIT-licensed upstream Slidev skill at commit

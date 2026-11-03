@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.2
+    pack_version: 1.0.3
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -110,9 +110,10 @@ visually reviewed unless a separate browser review actually ran.
 
 When the user requests OddBytes branding, follow their design-system skill.
 The Docker sandbox includes the Inter typeface (`fc-list | grep -i Inter`) and
-the supplied OddBytes logos, icons, and stickers under
-`/opt/brand-assets/oddbytes/`. Use the black/white primary or monochrome
-variants as appropriate to the background, following the design-system skill.
+the ready-to-use OddBytes logos, icons, and stickers under
+`/opt/brand-assets/oddbytes/`. Read that directory's `README.md` for the exact
+SVG and transparent PNG filenames; no SVG repair or raster conversion is needed.
+Use the black/white primary or monochrome variants as appropriate to the background, following the design-system skill.
 The brand guide says to use the icon near the company name, not as a replacement
 for the full logo. Use stickers sparingly. Do not apply OddBytes branding to
 unrelated presentations by default.

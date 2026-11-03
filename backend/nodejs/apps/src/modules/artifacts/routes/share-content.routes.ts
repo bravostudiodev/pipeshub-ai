@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppConfig } from '../../tokens_manager/config/config';
-import { fetchPinnedShareContent } from '../services/share-content-client';
+import { fetchPinnedShareContent, fetchPinnedShareDeckFile } from '../services/share-content-client';
+import { isDeckZip } from './deck-preview.routes';
 import { resolveShare } from '../services/resolve-share';
 import { setShareDownloadHeaders, setShareResponsePrivacyHeaders } from '../services/share-response';
 
@@ -12,16 +13,23 @@ export function createShareContentRouter(appConfig: AppConfig): Router {
   router.post('/metadata', async (req, res) => {
     setShareResponsePrivacyHeaders(res);
     try {
+      let isDeck = false;
       const authority = await resolveShare(req.body?.token, async (share) => {
         const upstream = await fetchPinnedShareContent(appConfig.connectorBackend, appConfig.scopedJwtSecret, share);
         await upstream.body?.cancel().catch(() => undefined);
+        if (isDeckZip(share.name, share.mimeType)) {
+          try {
+            await fetchPinnedShareDeckFile(appConfig.connectorBackend, appConfig.scopedJwtSecret, share, 'index.html');
+            isDeck = true;
+          } catch { /* Ordinary ZIP files remain download-only. */ }
+        }
         return true;
       });
       if (!authority) {
         res.status(404).json({ message: 'This artifact is unavailable.' });
         return;
       }
-      res.json({ version: authority.version, name: authority.name, mimeType: authority.mimeType });
+      res.json({ version: authority.version, name: authority.name, mimeType: authority.mimeType, isDeck });
     } catch {
       res.status(404).json({ message: 'This artifact is unavailable.' });
     }

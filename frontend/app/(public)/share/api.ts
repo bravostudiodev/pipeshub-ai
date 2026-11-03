@@ -13,13 +13,13 @@ async function request(token: string, operation: 'metadata' | 'content', preview
   return response;
 }
 
-export interface ShareMetadata { version: number; name: string; mimeType: string }
+export interface ShareMetadata { version: number; name: string; mimeType: string; isDeck?: boolean }
 
 export async function getShareMetadata(token: string): Promise<ShareMetadata> {
   const response = await request(token, 'metadata');
   const body = await response.json();
   if (!Number.isSafeInteger(body.version) || body.version < 1 || typeof body.name !== 'string' || typeof body.mimeType !== 'string') throw new Error('Artifact unavailable');
-  return { version: body.version, name: body.name, mimeType: body.mimeType };
+  return { version: body.version, name: body.name, mimeType: body.mimeType, isDeck: body.isDeck === true };
 }
 
 export async function getShareContent(token: string, previewPdf = false): Promise<Blob> {

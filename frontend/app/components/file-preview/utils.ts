@@ -371,6 +371,11 @@ export function isDocxFile(
 /**
  * Determine if pagination controls should be visible
  */
+export function isPresentationPreview(fileType: string, fileName: string): boolean {
+  return fileType === 'application/vnd.oddjeeves.presentation-preview' ||
+    (fileType === 'application/pdf' && isPresentationFile(undefined, fileName));
+}
+
 export function shouldShowPagination(
   fileType: string,
   fileName: string,
@@ -381,6 +386,8 @@ export function shouldShowPagination(
   // Don't show during loading or error states
   if (isLoading) return { shouldShow: false, reason: 'loading' };
   if (hasError) return { shouldShow: false, reason: 'error' };
+  // Presentation previews have their own slide controls and page count.
+  if (isPresentationPreview(fileType, fileName)) return { shouldShow: false, reason: 'unsupported' };
 
   // Only PDFs support pagination currently
   const rendererType = getRendererType(fileType, fileName);

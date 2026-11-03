@@ -38,7 +38,7 @@ export default function SharedArtifactPage() {
       return () => { cancelled = true; };
     }
     getShareMetadata(value).then(async (info) => {
-      const isSlidev = ['application/zip', 'application/x-zip-compressed'].includes(info.mimeType) && info.name === 'slidev-presentation.zip';
+      const isSlidev = info.isDeck === true;
       const isPresentation = isPresentationFile(info.mimeType, info.name);
       const convertToPdf = isPresentation || isLegacyWordDocFile(info.mimeType, info.name);
       const renderer = getRendererType(info.mimeType, info.name);

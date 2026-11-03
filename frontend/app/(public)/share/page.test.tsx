@@ -68,10 +68,10 @@ describe('shared artifact viewer', () => {
     const token = 'D'.repeat(43);
     window.history.replaceState(null, '', `/share/${token}`);
     vi.mocked(api.getShareMetadata).mockResolvedValue({
-      version: 4, name: 'slidev-presentation.zip', mimeType: 'application/zip',
+      version: 4, name: 'jeeves-qa-slidev.zip', mimeType: 'application/zip', isDeck: true,
     });
     render(<SharedArtifactPage />);
-    const frame = await screen.findByTitle('Presentation preview: slidev-presentation.zip');
+    const frame = await screen.findByTitle('Presentation preview: jeeves-qa-slidev.zip');
     expect(frame.getAttribute('src')).toBe(`/decks/shared/${token}/index.html`);
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(api.getShareContent).not.toHaveBeenCalled();

@@ -15,6 +15,11 @@ interface DeckPreviewClaims extends JwtPayload {
   mimeType?: string;
 }
 
+export function isDeckZip(name: unknown, mimeType: unknown): boolean {
+  return mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed' ||
+    ((mimeType === 'application/octet-stream' || !mimeType) && typeof name === 'string' && name.toLowerCase().endsWith('.zip'));
+}
+
 function sendDeckHeaders(res: Response, index: boolean): void {
   res.set({
     'Cache-Control': 'private, no-store',
@@ -46,12 +51,7 @@ export function createDeckPreviewRouter(appConfig: AppConfig): Router {
         (req.params as unknown as Record<number, string>)[0] || 'index.html';
       let deckFile: { bytes: Buffer; contentType: string } | undefined;
       const authority = await resolveShare(shareToken, async (share) => {
-        if (
-          share.name !== 'slidev-presentation.zip' ||
-          (share.mimeType !== 'application/zip' &&
-            share.mimeType !== 'application/x-zip-compressed')
-        )
-          return false;
+        if (!isDeckZip(share.name, share.mimeType)) return false;
         deckFile = await fetchPinnedShareDeckFile(
           appConfig.connectorBackend,
           appConfig.scopedJwtSecret,
@@ -100,9 +100,7 @@ export function createDeckPreviewRouter(appConfig: AppConfig): Router {
       }) as DeckPreviewClaims;
       if (
         claims.purpose !== 'deck-preview' ||
-        claims.name !== 'slidev-presentation.zip' ||
-        (claims.mimeType !== 'application/zip' &&
-          claims.mimeType !== 'application/x-zip-compressed') ||
+        !isDeckZip(claims.name, claims.mimeType) ||
         claims.artifactId !== artifactId ||
         claims.version !== numericVersion ||
         typeof claims.userId !== 'string' ||

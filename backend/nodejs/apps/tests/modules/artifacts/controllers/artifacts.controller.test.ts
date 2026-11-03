@@ -188,12 +188,13 @@ describe('Artifacts Controller', () => {
       sinon.stub(connectorUtils, 'executeConnectorCommand').resolves({
         statusCode: 200,
         data: {
-          name: 'slidev-presentation.zip',
+          name: 'jeeves-qa-slidev.zip',
           mimeType: 'application/zip',
           version: 3,
           versions: [{ version: 1 }, { version: 2 }, { version: 3 }],
         },
       });
+      sinon.stub(globalThis, 'fetch').resolves(new globalThis.Response('<html>slidev</html>'));
       const secret = 'preview-test-secret';
       const handler = createDeckPreview({
         ...createMockAppConfig(),
@@ -233,6 +234,7 @@ describe('Artifacts Controller', () => {
           versions: [{ version: 1 }],
         },
       });
+      sinon.stub(globalThis, 'fetch').resolves(new globalThis.Response('not a deck', { status: 404 }));
       const handler = createDeckPreview({
         ...createMockAppConfig(),
         scopedJwtSecret: 'preview-test-secret',

@@ -128,6 +128,9 @@ global.fetch = async (input, init) => {
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
       ".woff2": "font/woff2",
+      ".woff": "font/woff",
+      ".otf": "font/otf",
+      ".ttf": "font/ttf",
     }[extension] || "application/octet-stream";
   return new Response(content, { headers: { "content-type": contentType } });
 };

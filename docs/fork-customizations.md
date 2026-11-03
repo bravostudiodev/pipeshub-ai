@@ -359,8 +359,10 @@ meta refresh.
 ### Slidev presentation previews
 
 The Slidev skill builds a static site in the sandbox and registers
-`slidev-presentation.zip`, containing both `dist/` and the editable source. Chat
-opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
+`slidev-presentation.zip`, containing both `dist/` and the editable source.
+ZIPs with other filenames can also be previewed when the selected version
+contains a valid built site under `dist/`; ordinary ZIPs remain download-only.
+Chat opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
 shared links use `/decks/shared/<share-token>/...` and are resolved against the
 share's pinned version. The chat artifact card continues to download the
 original ZIP; the preview panel runs the built site rather than converting it

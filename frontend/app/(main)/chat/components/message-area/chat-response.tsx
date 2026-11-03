@@ -302,8 +302,8 @@ export const ChatResponse = React.memo(function ChatResponse({
         try {
           const { KnowledgeBaseApi } = await import('@/app/(main)/knowledge-base/api');
           if (
-            ['application/zip', 'application/x-zip-compressed'].includes(artifact.mimeType) &&
-            artifact.fileName === 'slidev-presentation.zip' &&
+            (['application/zip', 'application/x-zip-compressed'].includes(artifact.mimeType) ||
+              (artifact.mimeType === 'application/octet-stream' && artifact.fileName.toLowerCase().endsWith('.zip'))) &&
             version !== undefined
           ) {
             const previewUrl = await KnowledgeBaseApi.createDeckPreview(recordId, version);
@@ -343,6 +343,8 @@ export const ChatResponse = React.memo(function ChatResponse({
             streamAsPdf,
           );
           const isDocx = isDocxFile(artifact.mimeType, artifact.fileName);
+          const isPresentationPdf = isPresentationFile(artifact.mimeType, artifact.fileName) &&
+            (resolvedType === 'application/pdf' || await blob.slice(0, 5).text() === '%PDF-');
           const objectUrl = isDocx ? '' : URL.createObjectURL(blob);
 
           // Release the previous blob URL now that nothing references it —
@@ -355,9 +357,7 @@ export const ChatResponse = React.memo(function ChatResponse({
             url: objectUrl,
             blob: isDocx ? blob : undefined,
             name: artifact.fileName,
-            type: resolvedType === 'application/pdf' && isPresentationFile(artifact.mimeType, artifact.fileName)
-              ? 'application/vnd.oddjeeves.presentation-preview'
-              : resolvedType,
+            type: isPresentationPdf ? 'application/vnd.oddjeeves.presentation-preview' : resolvedType,
             size: artifact.sizeBytes,
             hideFileDetails: true,
             showDownload: true,

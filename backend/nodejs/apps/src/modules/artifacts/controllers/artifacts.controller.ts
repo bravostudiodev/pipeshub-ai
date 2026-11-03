@@ -13,6 +13,7 @@ import {
   handleBackendError,
 } from '../../tokens_manager/utils/connector.utils';
 import { ConversationTitleService } from '../services/conversation-title.service';
+import { isDeckZip } from '../routes/deck-preview.routes';
 
 const logger = Logger.getInstance({
   service: 'Artifacts Controller',
@@ -225,12 +226,7 @@ export const createDeckPreview =
         detail.version === version ||
         versions.some((item) => item.version === version);
       const mimeType = detail.mimeType;
-      if (
-        detail.name !== 'slidev-presentation.zip' ||
-        (mimeType !== 'application/zip' &&
-          mimeType !== 'application/x-zip-compressed') ||
-        !knownVersion
-      ) {
+      if (!isDeckZip(detail.name, mimeType) || typeof detail.name !== 'string' || !knownVersion) {
         res.status(404).json({ message: 'Presentation is unavailable.' });
         return;
       }
@@ -241,12 +237,27 @@ export const createDeckPreview =
           version,
           userId,
           orgId,
-          name: 'slidev-presentation.zip',
+          name: detail.name,
           mimeType,
         },
         appConfig.scopedJwtSecret,
         { algorithm: 'HS256' },
       );
+      // Validate the selected version's built archive before treating a ZIP as
+      // a deck, so ordinary ZIP files retain their usual download-only view.
+      const serviceToken = jwt.sign(
+        { orgId, userId, artifactId, version, name: detail.name, mimeType, scopes: ['artifact-deck:content'] },
+        appConfig.scopedJwtSecret,
+        { algorithm: 'HS256', expiresIn: '60s' },
+      );
+      const probeUrl = new URL('/api/v1/internal/artifact-deck/file', appConfig.connectorBackend);
+      probeUrl.searchParams.set('path', 'index.html');
+      const probe = await fetch(probeUrl, { headers: { Authorization: `Bearer ${serviceToken}` }, redirect: 'error', signal: AbortSignal.timeout(120_000) });
+      await probe.body?.cancel().catch(() => undefined);
+      if (!probe.ok) {
+        res.status(404).json({ message: 'Presentation is unavailable.' });
+        return;
+      }
       res.set({
         'Cache-Control': 'no-store',
         'Referrer-Policy': 'no-referrer',

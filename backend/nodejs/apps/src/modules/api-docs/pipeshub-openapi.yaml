@@ -25095,6 +25095,9 @@ paths:
                     type: string
                   mimeType:
                     type: string
+                  isDeck:
+                    type: boolean
+                    description: The pinned ZIP contains a previewable built site.
         '404':
           description: The artifact is unavailable.
   /artifact-shares/content:

@@ -16,7 +16,7 @@ import { DocumentPreview, UnknownPreview } from './index';
 // PDFRenderer is intentionally NOT re-exported from ./index for the same reason.
 const PDFRenderer = dynamic(() => import('./pdf-renderer').then((m) => m.PDFRenderer), { ssr: false });
 const PresentationPdfRenderer = dynamic(() => import('./presentation-pdf-renderer').then((m) => m.PresentationPdfRenderer), { ssr: false });
-import { getRendererType, isPresentationFile } from '../utils';
+import { getRendererType, isPresentationPreview } from '../utils';
 import type { FilePreviewRendererProps } from '../types';
 
 export function FilePreviewRenderer({ fileUrl, fileName, fileType, fileBlob, pagination, highlightBox, highlightPage, citations, activeCitationId, citationClickVersion, onHighlightClick, webUrl, previewRenderable }: FilePreviewRendererProps) {
@@ -24,7 +24,7 @@ export function FilePreviewRenderer({ fileUrl, fileName, fileType, fileBlob, pag
     return <SlidevRenderer fileUrl={fileUrl} fileName={fileName} />;
   }
 
-  if (fileType === 'application/vnd.oddjeeves.presentation-preview' || (fileType === 'application/pdf' && isPresentationFile(undefined, fileName))) {
+  if (isPresentationPreview(fileType, fileName)) {
     return <PresentationPdfRenderer fileUrl={fileUrl} />;
   }
 
