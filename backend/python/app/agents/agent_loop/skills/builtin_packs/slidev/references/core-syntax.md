@@ -22,6 +22,6 @@ Right column
 Use fenced code blocks for syntax highlighting. Add `{2,3}` after a language
 to highlight lines, or `{1|2-3|all}` for click-based highlighting. `v-click`
 and `v-clicks` reveal content incrementally. Use `<<< ./file.ts` to include a
-local file after adding it as a renderer supporting file.
+local file after adding it to the sandbox project.
 
 Full upstream guide: https://sli.dev/guide/syntax

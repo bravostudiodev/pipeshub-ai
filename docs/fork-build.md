@@ -97,14 +97,28 @@ describe the private Bravo build.
 
 The code execution sandbox is built separately from the application image
 using [`deployment/sandbox/Dockerfile`](../deployment/sandbox/Dockerfile). The
-wrapper Helm chart uses this image reference:
+updated sandbox image should be published under a new reference, for example:
 
 ```text
-doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1
+doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1-2
 ```
 
-The sandbox Dockerfile includes Python's `python-pptx` and
-Node's `pptxgenjs`, and runs as the non-root `sandbox` user.
+The sandbox Dockerfile includes Python's `python-pptx`, Node's `pptxgenjs`,
+and pinned Slidev dependencies in `/opt/slidev`, and runs as the non-root
+`sandbox` user. Node 22 is required by Slidev. The built-in Slidev skill uses
+`run_code` and the existing artifact delivery path; it does not use a separate
+renderer image or tool. The image also installs the Inter font family and
+provides OddBytes logos, icons, and stickers under `/opt/brand-assets/oddbytes/`
+for explicitly branded work. The Youngest accent font is not included. Browser
+presentations must include any chosen fonts and icons in their delivered ZIP.
+Only the Docker sandbox image includes these assets and Slidev by default. The Slidev skill and vendored references are adapted from the
+MIT-licensed upstream Slidev skill at commit
+`a42aff28dd75f26eb5abbf3d616ea022c3d08924`; its license is in the skill pack.
+
+Rebuild and publish both the application and sandbox images before switching
+deployments to this workflow. The external wrapper chart must point to the new
+sandbox image and remove its separate Slidev image pull and smoke test. The
+previous sandbox image does not contain Slidev.
 
 Package requests still use separate networked installer containers. Python
 packages use `SANDBOX_PIP_INDEX_URL` (default `https://pypi.org/simple`), and
@@ -117,15 +131,15 @@ generated-code networking.
 To build and publish it manually from the repository root:
 
 ```bash
-docker build -f deployment/sandbox/Dockerfile -t doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1 deployment/sandbox
-docker push doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1
+docker build -f deployment/sandbox/Dockerfile -t doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1-2 deployment/sandbox
+docker push doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1-2
 ```
 
 After the image is available locally, verify the prebaked document libraries
 and generate/read a PowerPoint file without network access or running as root:
 
 ```bash
-docker run --rm --network none --user sandbox --entrypoint sh doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1 -ec '
+docker run --rm --network none --user sandbox --entrypoint sh doc.oddbytes.com/platform/pipeshubai-sandbox:0.9.1.oddyssey1-2 -ec '
 python -c "import pptx; print(\"python-pptx:\", pptx.__version__)"
 node -e '\''(async () => { const pptxgen = require("/home/sandbox/node_modules/pptxgenjs"); const pptx = new pptxgen(); pptx.addSlide().addText("Sandbox smoke test"); await pptx.writeFile({ fileName: "/tmp/sandbox-smoke.pptx" }); })().catch((err) => { console.error(err); process.exit(1); });'\''
 python -c "from pptx import Presentation; p = Presentation(\"/tmp/sandbox-smoke.pptx\"); assert len(p.slides) == 1; print(\"PowerPoint smoke test passed\")"

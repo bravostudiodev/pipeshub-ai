@@ -11,7 +11,7 @@ assets. To review it locally, extract the ZIP and run:
 python3 -m http.server 8000 --directory dist
 ```
 
-Then open `http://localhost:8000/`. The renderer does not publish or host the
-site. Remote images and fonts are disabled; include local copies instead.
+Then open `http://localhost:8000/`. The sandbox does not publish or host the
+site. Do not use remote images or fonts; include local copies instead.
 
 Full upstream hosting guide: https://sli.dev/guide/hosting

@@ -14,6 +14,8 @@ RUN apt-get update && \
         libpango-1.0-0 \
         libpangocairo-1.0-0 \
         fonts-dejavu-core \
+        fonts-inter \
+        fontconfig \
         sqlite3 \
         postgresql-client \
         curl \
@@ -22,13 +24,20 @@ RUN apt-get update && \
         iptables \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 via nodesource
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+# Node.js 22 is required by the pinned Slidev and Mermaid dependencies.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Global Node tools
 RUN npm install -g tsx && npm cache clean --force
+
+# Slidev and its themes are pinned separately from the general-purpose packages.
+# Projects can link /opt/slidev/node_modules to use these without network access.
+COPY slidev-package.json /opt/slidev/package.json
+COPY slidev-package-lock.json /opt/slidev/package-lock.json
+COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/
+RUN cd /opt/slidev && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 # Install uv for fast Python package management
 RUN pip install --no-cache-dir uv

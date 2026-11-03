@@ -340,7 +340,7 @@ DOMAIN_AGENT_DEFINITIONS: tuple[DomainAgentDefinition, ...] = (
             "and paths of files it generated."
         ),
         tool_names=frozenset({
-            "run_code", "install_packages", "read_sandbox_file", "render_slidev",
+            "run_code", "install_packages", "read_sandbox_file",
             # Real AI image generation belongs with the domain that owns
             # file/asset generation: a goal like "generate 7 images then
             # build a deck from them" must not be answerable only by
@@ -356,9 +356,9 @@ DOMAIN_AGENT_DEFINITIONS: tuple[DomainAgentDefinition, ...] = (
             "NOT draw them programmatically with PIL/matplotlib shapes. "
             "Generated images are saved as artifacts automatically; pass their "
             "file names into run_code's input_artifacts to embed them in a "
-            "document, or render_slidev's input_artifacts for browser slide decks. "
-            "Use render_slidev for browser presentation deliverables; it only "
-            "supports offline default/seriph themes and returns a ZIP, not PPTX/PDF. "
+            "document or browser slide deck. Use the slidev skill and run_code "
+            "for browser presentation deliverables; package the static site and "
+            "editable source as a ZIP, not PPTX/PDF. "
             "Draw with code only for charts/graphs of "
             "data. run_code always sets $OUTPUT_DIR — write ONLY the final "
             "deliverable(s) there and they are attached to the response "
