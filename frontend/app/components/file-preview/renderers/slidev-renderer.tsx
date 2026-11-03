@@ -19,7 +19,7 @@ export function SlidevRenderer({ fileUrl, fileName }: SlidevRendererProps) {
         title={`Presentation preview: ${fileName}`}
         src={fileUrl}
         sandbox="allow-scripts"
-        allow="fullscreen"
+        allow="fullscreen; screen-wake-lock"
         allowFullScreen
         referrerPolicy="no-referrer"
         style={{ display: 'block', width: '100%', height: '100%', minHeight: '65vh', border: 0, background: '#fff' }}

@@ -372,7 +372,11 @@ recipient receives no conversation access.
 Both private and shared files are served by Node from the current application
 origin and backed by the Python artifact registry. Private preview capabilities
 name one user, organization, artifact, and immutable version, and Python checks
-the caller's artifact ACL on each file request. Shared requests revalidate the
+the caller's artifact ACL on each file request. Node calls Python with an
+`artifact-deck:content` service token, which must stay in
+`ACCEPTED_SERVICE_SCOPES` (`backend/python/app/api/middlewares/token_policy.py`);
+without it every in-chat preview fails as "Presentation is unavailable" while
+shared links, which use `artifact-share:content`, still work. Shared requests revalidate the
 share and owner and read the exact pinned hash/version. A bounded in-memory
 cache stores validated file bytes keyed by organization, user, artifact, version,
 and content hash; authorization and active-account checks happen before every
@@ -381,7 +385,9 @@ served; source files are retained for download. ZIP path traversal, duplicate
 paths, symlinks, encryption, unsupported entry kinds, and archive/member size
 limits are checked without extracting files to disk. Styles, scripts, fonts,
 images, and transitions inside the built site are not filtered or altered, aside
-from the storage compatibility shim.
+from the storage compatibility shim. The skill tells the agent to put deck-wide
+CSS in `style.css`: Slidev scopes `<style>` blocks in `slides.md` to one slide,
+so brand variables declared there never apply and the deck builds unstyled.
 
 Slidev runs in an iframe with `sandbox="allow-scripts"` and no
 `allow-same-origin`; the served index also carries a sandbox CSP. A small

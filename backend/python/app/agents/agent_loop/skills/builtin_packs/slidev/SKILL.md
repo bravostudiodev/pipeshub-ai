@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.3
+    pack_version: 1.0.4
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -78,7 +78,7 @@ import os, shutil, subprocess, zipfile
 
 project = Path('deck')
 project.mkdir(exist_ok=True)
-# Write project / 'slides.md' and any project / 'public' assets here.
+# Write project / 'slides.md', project / 'style.css' and any project / 'public' assets here.
 modules = project / 'node_modules'
 modules.mkdir(exist_ok=True)
 for dependency in Path('/opt/slidev/node_modules').iterdir():
@@ -99,6 +99,29 @@ with zipfile.ZipFile(Path(os.environ['OUTPUT_DIR']) / 'slidev-presentation.zip',
             archive.write(path, path.relative_to(project))
 ```
 
+## Styling: global CSS goes in `style.css`
+
+Slidev scopes every `<style>` block inside `slides.md` to the single slide that
+contains it. A `:root { --brand: ... }` or a reusable class declared there
+compiles to a selector that never matches, so colors, backgrounds and fonts
+silently disappear from the built deck. Put all deck-wide CSS (custom
+properties, `@font-face`, shared classes, layout overrides) in
+`deck/style.css`; Slidev loads that file globally. Use a `<style>` block in
+`slides.md` only for a rule that must affect one slide. Reference files in
+`public/` by absolute paths such as `/fonts/Inter-Regular.otf` or
+`/logo/name.svg`; the build rewrites them for the relative base.
+
+```css
+/* deck/style.css */
+:root { --brand: #FC4539; --ink: #212121; }
+.cover { position: absolute; inset: 0; background: var(--brand); color: #fff; padding: 56px 64px; }
+.card { background: #F3F3F3; padding: 22px 24px; }
+```
+
+Set a deck-wide `transition:` in the headmatter (for example `slide-left` or
+`fade`), override it per slide in that slide's frontmatter when needed, and use
+`v-click` / `v-clicks` for reveals.
+
 Pass existing artifacts via `run_code`'s `input_artifacts`; they are staged at
 `input/artifacts/<name>`. Copy needed files into `deck/public/input/` and refer
 to them as `/input/<name>` in the Markdown. Include local components and other
@@ -118,9 +141,10 @@ The brand guide says to use the icon near the company name, not as a replacement
 for the full logo. Use stickers sparingly. Do not apply OddBytes branding to
 unrelated presentations by default.
 
-For a self-contained browser deck, copy the selected Inter font files into the
-project and declare them with CSS `@font-face` using paths relative to the CSS;
-the build must bundle or copy the files into `dist/`. Include the font license
+For a self-contained browser deck, copy the selected Inter font files into
+`deck/public/fonts/` and declare them with `@font-face` in `deck/style.css`
+(not in a `<style>` block in `slides.md`), e.g.
+`src: url('/fonts/Inter-Regular.otf') format('opentype')`. Include the font license
 from `/usr/share/doc/fonts-inter/copyright` in the ZIP. Copy selected logos,
 icons, and stickers into `public/` so they are included in the ZIP and build. The accent font
 The Youngest is not installed; do not fetch it over the network or claim it is
@@ -170,3 +194,4 @@ respect reduced-motion preferences where possible. Consult the local
 5. Use hash navigation and relative references so the exported ZIP works from
    a local HTTP server without rewrite rules.
 6. Check that all assets and source files are included in the project.
+7. Keep deck-wide CSS in `style.css`; `<style>` in `slides.md` is per-slide only.

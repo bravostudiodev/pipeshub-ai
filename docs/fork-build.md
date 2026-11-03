@@ -1,32 +1,23 @@
 # OddJeeves build pipeline
 
-The fork uses two prebuilt images to keep the normal application image build
-from reinstalling Python packages and operating system dependencies on every
-commit. Their contents are defined by [`Dockerfile.base`](../Dockerfile.base):
+The application [`Dockerfile`](../Dockerfile) builds `FROM` one prebuilt
+image, `pipeshubai-base:app`, so a normal commit only builds, pushes, and scans
+its application-code layers. That image is assembled from two intermediate
+images. All three are defined by [`Dockerfile.base`](../Dockerfile.base):
 
 | Image tag | Docker target | Contents | Rebuild when |
 | --- | --- | --- | --- |
 | `pipeshubai-base:python-deps` | `python-deps` | Python dependencies from `backend/python/pyproject.toml`, CPU PyTorch, Crawl4AI, Chromium, and bundled language/model assets | Python dependencies, browser setup, or bundled model choices change |
 | `pipeshubai-base:runtime` | `runtime-base` | Runtime OS libraries, Node.js 20, LibreOffice, fonts, and Cypher Shell | Runtime packages, Node major version, or document conversion requirements change |
+| `pipeshubai-base:app` | `app-base` | `runtime` plus everything from `python-deps`, the runtime user, and runtime environment | Either of the two above is rebuilt |
 
-The application [`Dockerfile`](../Dockerfile) currently defaults to these full
-image references:
+The application Dockerfile defaults to
+`doc.lan.dc11.us/platform/pipeshubai-base:app` (override with the
+`APP_BASE_IMAGE` build argument). Earlier fork build instructions used
+`doc.oddbytes.com/platform/pipeshubai-base`; check which registry name resolves
+in the build environment before publishing or changing the default.
 
-```text
-doc.lan.dc11.us/platform/pipeshubai-base:python-deps
-doc.lan.dc11.us/platform/pipeshubai-base:runtime
-```
-
-Earlier fork build instructions used `doc.oddbytes.com/platform/pipeshubai-base`
-for the same two tags. Check which registry name resolves in the build
-environment before publishing or changing the Dockerfile defaults. These are
-two distinct image references unless the registry is explicitly configured to
-serve both names. `PYTHON_DEPS_IMAGE` and `RUNTIME_BASE_IMAGE` are Docker build
-arguments that override the defaults for a build; the Bravo image build stage
-does not currently pass overrides.
-
-To rebuild and push the base images to the registry named in the current
-Dockerfile, from the repository root:
+To rebuild and push the base images, from the repository root:
 
 ```bash
 docker build -f Dockerfile.base --target python-deps --build-arg PYTHON_DEPS_BASE=build-base --build-arg BUNDLE_BGE_EMBEDDING=0 -t doc.lan.dc11.us/platform/pipeshubai-base:python-deps .
@@ -35,16 +26,27 @@ docker build -f Dockerfile.base --target runtime-base -t doc.lan.dc11.us/platfor
 docker push doc.lan.dc11.us/platform/pipeshubai-base:runtime
 ```
 
-Publish a new base before starting an application image build that depends on
-it. A normal application code change should only rebuild the application
-image. The default Python base omits the large local BGE dense embedding model;
-see `BUNDLE_BGE_EMBEDDING` in `Dockerfile.base` when local embedding is needed.
+Then assemble `app` from the published images without rebuilding them:
+
+```bash
+docker build -f Dockerfile.base --target app-base \
+  --build-arg PYTHON_DEPS_SOURCE=doc.lan.dc11.us/platform/pipeshubai-base:python-deps \
+  --build-arg RUNTIME_BASE_SOURCE=doc.lan.dc11.us/platform/pipeshubai-base:runtime \
+  -t doc.lan.dc11.us/platform/pipeshubai-base:app .
+docker push doc.lan.dc11.us/platform/pipeshubai-base:app
+```
+
+Publish a new `app` base before starting an application image build that
+depends on it. A normal application code change should only rebuild the
+application image. The default Python base omits the large local BGE dense
+embedding model; see `BUNDLE_BGE_EMBEDDING` in `Dockerfile.base` when local
+embedding is needed.
 
 ## MCP SDK dependency checkpoint
 
 The MCP runtime now requires `mcp==2.3.0` and `httpx2==2.12.0` rather than
-FastMCP. Rebuild/publish `python-deps` from the changed manifest before building
-the application image. Rebuilding only application code against the old base
+FastMCP. Rebuild/publish `python-deps`, then `app`, from the changed manifest before
+building the application image. Rebuilding only application code against the old base
 will not install these packages. The runtime OS base does not need a rebuild
 for this dependency change. Ensure the application build pulls the newly
 published dependency image rather than reusing a cached older tag.
@@ -79,19 +81,18 @@ Cache restore/save overhead can be substantial, so compare warm build times on
 Bravo before assuming a speedup. The stage leaves `backend/nodejs/apps/dist`, its production
 `node_modules`, and `frontend/out` in the build workspace.
 
-The **Image build** stage builds the root Dockerfile from that workspace. It
-pulls the two prebuilt base images, copies Python packages and model/browser
-assets from `python-deps`, and copies the already built Node and frontend
-artifacts. It does not run `npm ci`, `npm run build`, or a fresh Python
-dependency resolution. The image stage still spends time transferring and
-copying large assets; the base images mainly avoid repeating dependency and
-OS package installation. If the base images are rebuilt, update their tags or
-deployment process so the image build consumes the intended versions.
+The **Image build** stage builds the root Dockerfile from that workspace on top
+of `pipeshubai-base:app`, copying only the built Node and frontend artifacts
+and the Python application code (about 800 MB, most of it Node
+`node_modules`). The base layers already exist in the registry and are not
+pushed again. If the base images are rebuilt, update their tags or deployment
+process so the image build consumes the intended versions.
 
 The upstream Docker Compose examples in `deployment/docker-compose/` default
 to public `pipeshubai/pipeshub-ai-base` images and can override them using
-`PYTHON_DEPS_IMAGE` and `RUNTIME_BASE_IMAGE`. Those Compose defaults do not
-describe the private Bravo build.
+`PYTHON_DEPS_IMAGE` and `RUNTIME_BASE_IMAGE`. The fork's Dockerfile no longer
+reads those arguments, so Compose builds from source use the `APP_BASE_IMAGE`
+default unless it is passed explicitly.
 
 ## Sandbox image
 

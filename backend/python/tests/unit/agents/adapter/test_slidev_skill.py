@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[6]
 
 def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     skill = (ROOT / "backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/SKILL.md").read_text()
-    assert "pack_version: 1.0.3" in skill
+    assert "pack_version: 1.0.4" in skill
     assert "run_code" in skill
     assert "/opt/slidev/node_modules" in skill
     assert "render_slidev" not in skill
@@ -16,6 +16,8 @@ def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     assert "slidev-presentation.zip" in skill
     assert "/opt/brand-assets/oddbytes/" in skill
     assert "The Youngest is not installed" in skill
+    # <style> in slides.md is slide-scoped; deck-wide CSS must live in style.css.
+    assert "deck/style.css" in skill
 
 
 def test_sandbox_slidev_dependencies_are_pinned() -> None:
@@ -35,9 +37,12 @@ def test_sandbox_slidev_dependencies_are_pinned() -> None:
     assert "fonts-inter" in dockerfile
     assert "COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/" in dockerfile
     assets = root / "brand-assets/oddbytes"
-    assert {path.name for path in assets.iterdir()} == {
-        "OB_Black_Icon.svg", "OB_Black_Logo.svg", "OB_Black_Primary_Icon.svg",
-        "OB_Black_Primary_Logo.svg", "OB_White_Icon.svg", "OB_White_Logo.svg",
-        "OB_White_Primary_Icon.svg", "_OB_White_Primary_Logo.svg",
-        "Sticker-Curiosity.png", "Sticker-HB.png", "Sticker-Logo.png",
+    logos = {
+        f"OB_{color}_{kind}.{ext}"
+        for color in ("Black", "White")
+        for kind in ("Icon", "Logo", "Primary_Icon", "Primary_Logo")
+        for ext in ("svg", "png")
+    }
+    assert {path.name for path in assets.iterdir()} == logos | {
+        "README.md", "Sticker-Curiosity.png", "Sticker-HB.png", "Sticker-Logo.png",
     }
