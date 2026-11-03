@@ -13,6 +13,7 @@ import {
 } from '../validators/artifacts.validators';
 import { createArtifactShare, getArtifactShareLink, listArtifactShares, revokeArtifactShare } from '../controllers/share-owner.controller';
 import {
+  createDeckPreview,
   getArtifact,
   listArtifactVersions,
   listArtifacts,
@@ -58,6 +59,14 @@ export function createArtifactsRouter(container: Container): Router {
     requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
     ValidationMiddleware.validate(shareIdParamsSchema),
     revokeArtifactShare(),
+  );
+
+  router.post(
+    '/:artifactId/deck-preview',
+    authMiddleware.authenticate,
+    requireScopes(OAuthScopeNames.KB_READ, OAuthScopeNames.CONNECTOR_READ),
+    ValidationMiddleware.validate(artifactIdParamsSchema),
+    createDeckPreview(appConfig),
   );
 
   router.get(

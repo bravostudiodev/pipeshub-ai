@@ -737,6 +737,21 @@ export const KnowledgeBaseApi = {
   },
 
   /**
+   * Create a same-origin, artifact-version-scoped presentation preview URL.
+   * The server capability is never cached or included in share/download URLs.
+   */
+  async createDeckPreview(recordId: string, version: number): Promise<string> {
+    const { data } = await apiClient.post<{ previewUrl?: unknown }>(
+      `/api/v1/artifacts/${encodeURIComponent(recordId)}/deck-preview`,
+      { version },
+    );
+    if (typeof data.previewUrl !== 'string' || !data.previewUrl.startsWith('/decks/')) {
+      throw new Error('Presentation preview is unavailable');
+    }
+    return data.previewUrl;
+  },
+
+  /**
    * Stream record file using recordId
    * Returns blob that can be converted to object URL
    * Works for both UPLOAD (collection) and CONNECTOR (external) sources

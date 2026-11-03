@@ -25101,11 +25101,13 @@ paths:
     post:
       tags:
         - Artifacts
-      summary: Download a published artifact version
+      summary: Download or preview a published artifact version
       description: |
         Validates the bearer share token on every request. Access to this
         endpoint must be protected by the deployment's zero-trust gateway.
-        The token is sent in the request body, never the URL.
+        The token is sent in the request body, never the URL. Set previewPdf
+        only to preview a PowerPoint or legacy Word file as PDF; downloads
+        always return the original pinned artifact.
       security: []
       requestBody:
         required: true
@@ -25117,9 +25119,12 @@ paths:
               properties:
                 token:
                   type: string
+                previewPdf:
+                  type: boolean
+                  default: false
       responses:
         '200':
-          description: Artifact bytes, served as an attachment.
+          description: Original artifact bytes or converted PDF bytes, served as an attachment.
           content:
             application/octet-stream:
               schema:
@@ -25248,6 +25253,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /artifacts/{artifactId}/deck-preview:
+    post:
+      tags: [Artifacts]
+      summary: Create a private preview capability for one artifact version
+      description: Returns a no-expiry, artifact-scoped viewer URL. Do not log, cache, or share this URL; artifact access is rechecked for every requested file.
+      operationId: createArtifactDeckPreview
+      security:
+        - bearerAuth: []
+        - oauth2: [kb:read]
+      parameters:
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Private preview URL for the requested version.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [previewUrl]
+                properties:
+                  previewUrl:
+                    type: string
+                    description: Bearer capability scoped to one artifact and version; never log or share.
+        '404':
+          description: Artifact or version unavailable.
 
   /artifacts/{artifactId}/versions:
     get:

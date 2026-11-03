@@ -4,7 +4,7 @@ import SharedArtifactPage from './page';
 import * as api from './api';
 
 vi.mock('./api', () => ({ getShareMetadata: vi.fn(), getShareContent: vi.fn(), downloadShare: vi.fn() }));
-vi.mock('@/app/components/file-preview/renderers/html-renderer', () => ({ HtmlRenderer: ({ fileName }: { fileName: string }) => <div>Existing HTML preview: {fileName}</div> }));
+vi.mock('@/app/components/file-preview/renderers/file-preview-renderer', () => ({ FilePreviewRenderer: ({ fileName, fileType, fileUrl }: { fileName: string; fileType: string; fileUrl: string }) => fileType === 'application/vnd.oddjeeves.slidev-preview' ? <iframe title={`Presentation preview: ${fileName}`} sandbox="allow-scripts" src={fileUrl} /> : <div>Existing preview: {fileName} ({fileType})</div> }));
 
 afterEach(() => { cleanup(); vi.resetAllMocks(); window.history.replaceState(null, '', '/share/'); });
 
@@ -64,13 +64,37 @@ describe('shared artifact viewer', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('previews a pinned Slidev ZIP through the isolated deck route', async () => {
+    const token = 'D'.repeat(43);
+    window.history.replaceState(null, '', `/share/${token}`);
+    vi.mocked(api.getShareMetadata).mockResolvedValue({
+      version: 4, name: 'slidev-presentation.zip', mimeType: 'application/zip',
+    });
+    render(<SharedArtifactPage />);
+    const frame = await screen.findByTitle('Presentation preview: slidev-presentation.zip');
+    expect(frame.getAttribute('src')).toBe(`/decks/shared/${token}/index.html`);
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(api.getShareContent).not.toHaveBeenCalled();
+  });
+
   it('previews HTML inside an isolated sandbox', async () => {
     window.location.hash = `#${'A'.repeat(43)}`;
     vi.mocked(api.getShareMetadata).mockResolvedValue({ version: 1, name: 'report.html', mimeType: 'text/html' });
     vi.mocked(api.getShareContent).mockResolvedValue(new Blob(['<p>hello</p>']));
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn() }));
     render(<SharedArtifactPage />);
-    expect(await screen.findByText('Existing HTML preview: report.html')).toBeTruthy();
+    expect(await screen.findByText('Existing preview: report.html (text/html)')).toBeTruthy();
+  });
+
+  it('converts the pinned PowerPoint to PDF and uses the chat preview renderer', async () => {
+    const token = 'P'.repeat(43);
+    window.location.hash = `#${token}`;
+    vi.mocked(api.getShareMetadata).mockResolvedValue({ version: 3, name: 'slides.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+    vi.mocked(api.getShareContent).mockResolvedValue(new Blob(['%PDF-1.4']));
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:slides'), revokeObjectURL: vi.fn() }));
+    render(<SharedArtifactPage />);
+    expect(await screen.findByText('Existing preview: slides.pptx (application/vnd.oddjeeves.presentation-preview)')).toBeTruthy();
+    expect(api.getShareContent).toHaveBeenCalledWith(token, true);
   });
 
   it('shows unavailable after a revoked download', async () => {

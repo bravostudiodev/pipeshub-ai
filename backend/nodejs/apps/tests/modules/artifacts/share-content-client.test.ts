@@ -10,7 +10,7 @@ describe('share content connector client', () => {
   it('requests the pinned version using a short-lived dedicated service token', async () => {
     const fetch = sinon.stub(globalThis, 'fetch').resolves(new Response('pinned'));
     const result = await fetchPinnedShareContent('http://connector:8088', 'secret', authority);
-    expect(result.toString()).to.equal('pinned');
+    expect(await result.text()).to.equal('pinned');
     const [url, options] = fetch.firstCall.args;
     expect(String(url)).to.equal('http://connector:8088/api/v1/internal/artifact-share/content');
     const bearer = (options?.headers as Record<string, string>).Authorization;

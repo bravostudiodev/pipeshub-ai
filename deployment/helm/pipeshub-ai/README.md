@@ -113,6 +113,8 @@ helm upgrade --install pipeshub-ai ./deployment/helm/pipeshub-ai \
   --set 'ingress.hosts[0].host=pipeshub.example.com' \
   --set 'ingress.hosts[0].paths[0].path=/' \
   --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
+  --set 'ingress.hosts[0].paths[1].path=/decks' \
+  --set 'ingress.hosts[0].paths[1].pathType=Prefix' \
   --set config.frontendPublicUrl=https://pipeshub.example.com \
   --set config.allowedOrigins=https://pipeshub.example.com \
   --set secretKey="$(openssl rand -hex 32)" \
@@ -130,7 +132,7 @@ want to point at a different Service or expose port 8088 (see below).
 
 ### Public exposure
 
-Only **port 3001** (UI + Node API) is exposed via the Ingress by default. Query (8000), indexing (8091), embedding (8002), docling (8081), and connector (8088) stay on the in-cluster `ClusterIP` Service because the Node API calls them directly inside the cluster.
+Only **port 3001** (UI + Node API) is exposed via the Ingress by default. Use the same host and Service for `/` and `/decks` (both Prefix paths); `/decks` must reach the Node app without stripping its prefix. Query (8000), indexing (8091), embedding (8002), docling (8081), and connector (8088) stay on the in-cluster `ClusterIP` Service because the Node API calls them directly inside the cluster. Gateway access logs and traces must redact `/decks/<artifact>/<version>/<capability>/...` and `/decks/shared/<share-token>/...`; the chart cannot configure an external gateway's logging policy.
 
 **When to expose 8088:** if you use OAuth-based connectors (Google, Microsoft, Slack, ...) or receive provider webhooks. Add a second ingress host *and* set `config.connectorPublicBackend` to that public URL so OAuth callbacks resolve correctly:
 

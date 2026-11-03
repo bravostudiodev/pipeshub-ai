@@ -8,16 +8,26 @@ import { MediaRenderer } from './media-renderer';
 import { SpreadsheetRenderer } from './spreadsheet-renderer';
 import { DocxRenderer } from './docx-renderer';
 import { HtmlRenderer } from './html-renderer';
+import { SlidevRenderer } from './slidev-renderer';
 import { DocumentPreview, UnknownPreview } from './index';
 
 // react-pdf-highlighter bundles pdfjs-dist which accesses `document` at module
 // init — it must be excluded from the server bundle with ssr:false.
 // PDFRenderer is intentionally NOT re-exported from ./index for the same reason.
 const PDFRenderer = dynamic(() => import('./pdf-renderer').then((m) => m.PDFRenderer), { ssr: false });
-import { getRendererType } from '../utils';
+const PresentationPdfRenderer = dynamic(() => import('./presentation-pdf-renderer').then((m) => m.PresentationPdfRenderer), { ssr: false });
+import { getRendererType, isPresentationFile } from '../utils';
 import type { FilePreviewRendererProps } from '../types';
 
 export function FilePreviewRenderer({ fileUrl, fileName, fileType, fileBlob, pagination, highlightBox, highlightPage, citations, activeCitationId, citationClickVersion, onHighlightClick, webUrl, previewRenderable }: FilePreviewRendererProps) {
+  if (fileType === 'application/vnd.oddjeeves.slidev-preview') {
+    return <SlidevRenderer fileUrl={fileUrl} fileName={fileName} />;
+  }
+
+  if (fileType === 'application/vnd.oddjeeves.presentation-preview' || (fileType === 'application/pdf' && isPresentationFile(undefined, fileName))) {
+    return <PresentationPdfRenderer fileUrl={fileUrl} />;
+  }
+
   const rendererType = getRendererType(fileType || '', fileName);
 
   // Callers skip the stream for non-previewable records, so there is no content to

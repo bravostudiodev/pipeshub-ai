@@ -38,15 +38,23 @@ const PLACEHOLDER_ORIGIN = 'http://placeholder.invalid';
  * origin, since dropping it would strip the very thing that makes a referrer
  * worth logging; a relative one is rebuilt as path + query.
  *
- * The path is left intact so logs stay useful for routing and latency work;
- * only the values that authorize something are removed. A URL that fails to
- * parse is reduced to its path rather than passed through — an unparseable
- * value is exactly the case where a secret could survive a naive regex.
+ * Paths stay intact except for share/deck capability segments, which are
+ * bearer credentials. A URL that fails to parse is reduced to its path rather
+ * than passed through — an unparseable value is exactly where a secret could
+ * survive a naive query-string regex.
  */
 export function redactSensitiveQueryParams(url: string): string {
-  // Artifact share paths contain a bearer token; redact even malformed tokens
-  // and absolute Referers before applying the usual query-string protection.
-  url = url.replace(/^((?:https?:\/\/[^/?#]+)?\/share\/)[^/?#]+/i, '$1[REDACTED]');
+  // Redact bearer tokens even in malformed URLs and absolute Referers.
+  url = url
+    .replace(/^((?:https?:\/\/[^/?#]+)?\/share\/)[^/?#]+/i, '$1[REDACTED]')
+    .replace(
+      /^((?:https?:\/\/[^/?#]+)?\/decks\/shared\/)[^/?#]+/i,
+      '$1[REDACTED]',
+    )
+    .replace(
+      /^((?:https?:\/\/[^/?#]+)?\/decks\/[^/?#]+\/\d+\/)[^/?#]+/i,
+      '$1[REDACTED]',
+    );
   if (!url || !url.includes('?')) {
     return url;
   }

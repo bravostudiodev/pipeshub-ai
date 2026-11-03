@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.1
+    pack_version: 1.0.2
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -92,7 +92,7 @@ shutil.rmtree(modules)  # Don't transfer dependency links and build caches back.
     'Serve locally: python3 -m http.server 8000 --directory dist\n'
     'Then open http://localhost:8000/. The source is slides.md.\n'
 )
-with zipfile.ZipFile(Path(os.environ['OUTPUT_DIR']) / 'presentation.zip', 'w',
+with zipfile.ZipFile(Path(os.environ['OUTPUT_DIR']) / 'slidev-presentation.zip', 'w',
                      zipfile.ZIP_DEFLATED) as archive:
     for path in project.rglob('*'):
         if path.is_file() and 'node_modules' not in path.parts:

@@ -45,6 +45,8 @@ INGRESS=(
   --set 'ingress.hosts[0].host=pipeshub.example.com'
   --set 'ingress.hosts[0].paths[0].path=/'
   --set 'ingress.hosts[0].paths[0].pathType=Prefix'
+  --set 'ingress.hosts[0].paths[1].path=/decks'
+  --set 'ingress.hosts[0].paths[1].pathType=Prefix'
 )
 LOCAL=(-f values-local.yaml)
 
@@ -108,6 +110,41 @@ expect() { # variant, grep -F pattern, "present" | "absent" [, only in the docum
     echo "ok $1: '$2' $3${4:+ in $4}"
   fi
 }
+check_decks_ingress() { # variant; require same host, backend, and preserved Prefix paths
+  local file="$OUT/$1.yaml"
+  if python3 - "$file" <<'PY'
+import sys
+import yaml
+
+docs = [doc for doc in yaml.safe_load_all(open(sys.argv[1])) if doc]
+ingresses = [doc for doc in docs if doc.get("kind") == "Ingress"]
+for ingress in ingresses:
+    for rule in ingress.get("spec", {}).get("rules", []):
+        paths = rule.get("http", {}).get("paths", [])
+        root = next((p for p in paths if p.get("path") == "/"), None)
+        decks = next((p for p in paths if p.get("path") == "/decks"), None)
+        if not root or not decks:
+            continue
+        if root.get("pathType") != "Prefix" or decks.get("pathType") != "Prefix":
+            continue
+        if root.get("backend") == decks.get("backend"):
+            sys.exit(0)
+print(f"{sys.argv[1]}: / and /decks must be Prefix paths to the same app backend", file=sys.stderr)
+sys.exit(1)
+PY
+  then
+    echo "ok $1: /decks reaches the same app backend on the same host"
+  else
+    failed=1
+  fi
+}
+
+for ingress_variant in local-extras cloud eks; do
+  if [[ -f "$OUT/$ingress_variant.yaml" ]]; then
+    check_decks_ingress "$ingress_variant"
+  fi
+done
+
 if [[ -f "$OUT/cloud.yaml" ]]; then
   # shellcheck disable=SC2016 # the literal template text, not an expansion
   expect cloud 'export ZOOKEEPER_SERVERS="$servers"' present

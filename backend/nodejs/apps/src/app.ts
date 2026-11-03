@@ -109,6 +109,7 @@ import { createMcpServersRouter } from './modules/mcp_servers/routes/mcp_servers
 import { ProjectsContainer } from './modules/projects/container/project.container';
 import { createProjectsRouter } from './modules/projects/routes/project.routes';
 import { createArtifactsRouter } from './modules/artifacts/routes/artifacts.routes';
+import { createDeckPreviewRouter } from './modules/artifacts/routes/deck-preview.routes';
 import { createShareContentRouter } from './modules/artifacts/routes/share-content.routes';
 import { isShareTokenRequest, isShareViewerRequest, sendShareViewerShell, suppressShareBodyParserError } from './modules/artifacts/services/share-request-privacy';
 import { createMCPRouter } from './modules/mcp/routes/mcp.routes';
@@ -656,9 +657,11 @@ export class Application {
       createArtifactsRouter(this.knowledgeBaseContainer),
     );
 
+    const appConfig = this.knowledgeBaseContainer.get<AppConfig>('AppConfig');
+    this.app.use('/decks', createDeckPreviewRouter(appConfig));
     this.app.use(
       '/api/v1/artifact-shares',
-      createShareContentRouter(this.knowledgeBaseContainer.get<AppConfig>('AppConfig')),
+      createShareContentRouter(appConfig),
     );
 
     this.app.use(

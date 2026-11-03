@@ -335,33 +335,95 @@ version, visibility, and ownership. The connector receives a short-lived,
 dedicated service token, rechecks artifact authority, uses the existing blob
 storage and version mapping, and verifies the bytes against the SHA-256 hash
 recorded at publication. Missing or changed hashes fail closed; no signed
-storage URL is returned to the viewer. The content client limits responses to
-25 MiB. Metadata checks currently fetch and verify the artifact bytes too, so
-opening a link can be expensive. The filename and MIME type are captured at
+storage URL is returned to the viewer. Node streams the verified response to
+the viewer rather than imposing a separate 25 MiB share limit or buffering an
+additional copy. Metadata checks currently fetch and verify the artifact bytes
+too, so opening a link can be expensive. The filename and MIME type are captured at
 publication from current artifact metadata; historical versions do not have
 independently versioned MIME metadata and may be labelled incorrectly.
 
-HTML uses the existing artifact HTML renderer, including inline scripts and CSS,
-in an opaque-origin iframe. **This is not a complete network-isolation boundary:**
-its CSP blocks common subresource and fetch requests, but untrusted HTML can
-navigate the iframe, including through meta refresh. SVG uses the existing image
-renderer. PDF pages render to canvas with a bundled same-origin PDF.js worker,
-without annotation or form layers. Plain text, CSV, JSON, and signature-checked
-PNG, JPEG, and WebP also have previews. Supported previews have a browser
-full-screen control. PPTX, Word documents, and spreadsheets are download-only.
+The shared viewer uses the same preview renderer selection as chat, including
+HTML, images, text, Markdown, audio/video, spreadsheets, DOCX, and PDF. For
+PowerPoint and legacy Word, a share-content request asks the connector to convert
+the verified pinned bytes to PDF using LibreOffice; the original download remains
+unchanged. Conversion failure leaves the download available. PowerPoint previews
+in chat and shares offer a slide-by-slide **Present** mode using the browser's
+Fullscreen API, with arrow-key navigation and Escape to exit. Slidev also offers
+**Present** on its isolated iframe. Browsers or embedding policies may refuse
+fullscreen; browser security indicators and OS behavior remain browser-controlled.
+HTML uses the existing artifact HTML renderer in an opaque-origin iframe. **This
+is not a complete network-isolation boundary:** its CSP blocks common subresource
+and fetch requests, but untrusted HTML can navigate the iframe, including through
+meta refresh.
+
+### Slidev presentation previews
+
+The Slidev skill builds a static site in the sandbox and registers
+`slidev-presentation.zip`, containing both `dist/` and the editable source. Chat
+opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
+shared links use `/decks/shared/<share-token>/...` and are resolved against the
+share's pinned version. The chat artifact card continues to download the
+original ZIP; the preview panel runs the built site rather than converting it
+to a single HTML document. The existing artifact share link is used, so a
+recipient receives no conversation access.
+
+Both private and shared files are served by Node from the current application
+origin and backed by the Python artifact registry. Private preview capabilities
+name one user, organization, artifact, and immutable version, and Python checks
+the caller's artifact ACL on each file request. Shared requests revalidate the
+share and owner and read the exact pinned hash/version. A bounded in-memory
+cache stores validated file bytes keyed by organization, user, artifact, version,
+and content hash; authorization and active-account checks happen before every
+cache lookup, so access decisions are never cached. Only `dist/` files are
+served; source files are retained for download. ZIP path traversal, duplicate
+paths, symlinks, encryption, unsupported entry kinds, and archive/member size
+limits are checked without extracting files to disk. Styles, scripts, fonts,
+images, and transitions inside the built site are not filtered or altered, aside
+from the storage compatibility shim.
+
+Slidev runs in an iframe with `sandbox="allow-scripts"` and no
+`allow-same-origin`; the served index also carries a sandbox CSP. A small
+in-memory `localStorage`/`sessionStorage` shim is injected before Slidev boots,
+because the opaque origin otherwise causes Slidev to fail. Cross-origin
+resource headers let its built modules, fonts, and assets load from the same
+`/decks/` path. No wildcard domain or separate preview deployment is required:
+`/decks/` is an Express route on the existing application origin, before the
+static SPA fallback. In the contributor split setup, Next proxies `/decks/` to
+Express on port 3000 so the browser still uses its current origin. The bundled
+Helm values and AWS installer add `/decks` as a Prefix path to the same Node
+Service/port as `/`; chart rendering verifies the backend mapping. Responses use
+no-store/no-referrer headers. Shared tokens are redacted from Node request logs;
+`/decks/` asset requests are excluded from those logs. Preview URLs are bearer
+credentials for one artifact version; do not copy or log them. The Helm ingress
+example routes `/decks/` to Node; any separate external zero-trust gateway must
+also protect this path and redact capability/share-token segments.
+
+This work does not add vision-model QA, Docker live tests, or a broad browser
+test suite. A focused headless-Chrome route smoke is reproducible with a built
+Slidev `dist/` using `SLIDEV_DIST=/path/to/dist CHROME_BIN=/path/to/chrome
+TS_NODE_PROJECT=tsconfig.test.json node -r ts-node/register
+../../../scripts/smoke-slidev-route.cjs` from `backend/nodejs/apps`. It loads
+private and shared decks through the real Express `/decks` router, checks their
+scoped service tokens, requests built assets, and advances a slide; the internal
+Python fetch and share database are mocked. Python tests separately verify the
+archive validation and authorization paths.
 
 ### Deployment and verification
 
 The administrator must protect the viewer **and both direct share APIs** with
 the external zero-trust gateway and prevent bypassing it. The application does
 not detect or verify that gateway; recipients do not need an OddJeeves login.
-Node suppresses parser-error details and redacts share viewer path and query credentials
-from request context and error logs. Gateways, proxies, identity providers,
-analytics, and other observability systems must redact `/share/<token>` paths and the `token` query
-parameter (including nested authentication return URLs) and must not record
-share request bodies or bearer tokens. Gateway redirect preservation and log
-redaction must be verified in deployment; they cannot be enforced by OddJeeves.
-Responses use no-store and no-referrer policies.
+Node suppresses parser-error details and redacts share/deck capabilities from
+request context and error logs. The bundled Helm values and AWS installer route
+`/decks` as a Prefix to the same Node Service as `/`, verified by rendered chart
+configuration; Node access logs omit `/decks`. The separate external zero-trust
+gateway is not configured in this repository. Before deployment, verify that it
+protects the viewer and both direct share APIs, preserves `/decks/` unchanged,
+and redacts `/share/<token>`, `/decks/<artifact>/<version>/<capability>/...`,
+`/decks/shared/<share-token>/...`, and the `token` query parameter from logs and
+traces. Do not record share request bodies or bearer tokens. Gateway redirect
+preservation and these external policies cannot be enforced or tested by
+OddJeeves here. Responses use no-store and no-referrer policies.
 
 The viewer calls share APIs on the current origin. In the contributor split
 setup, the Next development server proxies those calls to Node on port 3000 (or
@@ -371,11 +433,10 @@ Implementation lives under `backend/nodejs/apps/src/modules/artifacts/`,
 `frontend/app/(main)/chat/components/message-area/artifact-share-dialog.tsx`,
 and `frontend/app/(public)/share/`.
 
-Focused tests cover the token, owner policy, request handling, UI, and selected
-browser preview behavior. The browser tests use mocked share APIs and can be run
-with `cd frontend && npx playwright test -c playwright.share.config.ts`.
-They do not establish full end-to-end behavior across running services, storage
-backends, restarts, replicas, or the deployed gateway; those checks remain open.
+Focused tests cover token and owner policy, request privacy, UI rendering,
+archive validation, and the private/shared browser route smoke. They do not
+establish full end-to-end behavior across running services, storage backends,
+restarts, replicas, or the deployed external gateway; those checks remain open.
 
 ## Chat source lookup
 

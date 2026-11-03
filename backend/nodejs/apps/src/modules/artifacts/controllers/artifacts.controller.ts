@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import { AuthenticatedUserRequest } from '../../../libs/middlewares/types';
 import { Logger } from '../../../libs/services/logger.service';
 import {
@@ -177,6 +178,84 @@ export const getArtifact =
     } catch (error: unknown) {
       logger.error('Error getting artifact', { error });
       next(handleBackendError(error, 'get artifact'));
+    }
+  };
+
+export const createDeckPreview =
+  (appConfig: AppConfig) =>
+  async (
+    req: AuthenticatedUserRequest,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const { userId, orgId } = requireIdentity(req);
+      const artifactId = req.params.artifactId;
+      if (!artifactId) {
+        res.status(404).json({ message: 'Presentation is unavailable.' });
+        return;
+      }
+      const requestBody = req.body as { version?: unknown } | undefined;
+      const version = requestBody?.version;
+      if (
+        typeof version !== 'number' ||
+        !Number.isSafeInteger(version) ||
+        version < 1 ||
+        !appConfig.scopedJwtSecret
+      ) {
+        res.status(400).json({ message: 'Invalid presentation version.' });
+        return;
+      }
+      const response = await executeConnectorCommand<Record<string, unknown>>(
+        artifactUri(appConfig.connectorBackend, artifactId),
+        HttpMethod.GET,
+        req.headers as Record<string, string>,
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw handleBackendError(response, 'get presentation artifact');
+      }
+      const detail = requirePayload(
+        response.data,
+        'Failed to load presentation artifact',
+      );
+      const versions = Array.isArray(detail.versions)
+        ? (detail.versions as Array<{ version?: unknown }>)
+        : [];
+      const knownVersion =
+        detail.version === version ||
+        versions.some((item) => item.version === version);
+      const mimeType = detail.mimeType;
+      if (
+        detail.name !== 'slidev-presentation.zip' ||
+        (mimeType !== 'application/zip' &&
+          mimeType !== 'application/x-zip-compressed') ||
+        !knownVersion
+      ) {
+        res.status(404).json({ message: 'Presentation is unavailable.' });
+        return;
+      }
+      const capability = jwt.sign(
+        {
+          purpose: 'deck-preview',
+          artifactId,
+          version,
+          userId,
+          orgId,
+          name: 'slidev-presentation.zip',
+          mimeType,
+        },
+        appConfig.scopedJwtSecret,
+        { algorithm: 'HS256' },
+      );
+      res.set({
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      });
+      res.json({
+        previewUrl: `/decks/${encodeURIComponent(artifactId)}/${version}/${capability}/index.html`,
+      });
+    } catch (error: unknown) {
+      next(handleBackendError(error, 'create presentation preview'));
     }
   };
 

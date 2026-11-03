@@ -8,11 +8,12 @@ ROOT = Path(__file__).resolve().parents[6]
 
 def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     skill = (ROOT / "backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/SKILL.md").read_text()
-    assert "pack_version: 1.0.1" in skill
+    assert "pack_version: 1.0.2" in skill
     assert "run_code" in skill
     assert "/opt/slidev/node_modules" in skill
     assert "render_slidev" not in skill
     assert "OUTPUT_DIR" in skill
+    assert "slidev-presentation.zip" in skill
     assert "/opt/brand-assets/oddbytes/" in skill
     assert "The Youngest is not installed" in skill
 

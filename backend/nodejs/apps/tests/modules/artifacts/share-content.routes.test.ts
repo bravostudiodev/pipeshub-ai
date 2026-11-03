@@ -30,7 +30,7 @@ describe('share content over HTTP', () => {
       await authorize(authority);
       return authority;
     });
-    sinon.stub(client, 'fetchPinnedShareContent').resolves(Buffer.from('pinned'));
+    sinon.stub(client, 'fetchPinnedShareContent').resolves(new Response('pinned'));
     const response = await request('secret');
     expect(response.status).to.equal(200);
     expect(await response.text()).to.equal('pinned');

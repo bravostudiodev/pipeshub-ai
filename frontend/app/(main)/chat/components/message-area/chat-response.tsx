@@ -301,6 +301,30 @@ export const ChatResponse = React.memo(function ChatResponse({
         }
         try {
           const { KnowledgeBaseApi } = await import('@/app/(main)/knowledge-base/api');
+          if (
+            ['application/zip', 'application/x-zip-compressed'].includes(artifact.mimeType) &&
+            artifact.fileName === 'slidev-presentation.zip' &&
+            version !== undefined
+          ) {
+            const previewUrl = await KnowledgeBaseApi.createDeckPreview(recordId, version);
+            const previous = useChatStore.getState().previewFile;
+            if (previous?.url?.startsWith('blob:')) URL.revokeObjectURL(previous.url);
+            setPreviewFile({
+              id: recordId,
+              url: previewUrl,
+              name: artifact.fileName,
+              type: 'application/vnd.oddjeeves.slidev-preview',
+              size: artifact.sizeBytes,
+              hideFileDetails: true,
+              showDownload: false,
+              shareArtifactId: recordId,
+              version,
+              latestVersion: effectiveLatest,
+              onVersionChange,
+              isSwitchingVersion: false,
+            });
+            return;
+          }
           const streamAsPdf =
             isPresentationFile(artifact.mimeType, artifact.fileName) ||
             isLegacyWordDocFile(artifact.mimeType, artifact.fileName);
@@ -331,7 +355,9 @@ export const ChatResponse = React.memo(function ChatResponse({
             url: objectUrl,
             blob: isDocx ? blob : undefined,
             name: artifact.fileName,
-            type: resolvedType,
+            type: resolvedType === 'application/pdf' && isPresentationFile(artifact.mimeType, artifact.fileName)
+              ? 'application/vnd.oddjeeves.presentation-preview'
+              : resolvedType,
             size: artifact.sizeBytes,
             hideFileDetails: true,
             showDownload: true,

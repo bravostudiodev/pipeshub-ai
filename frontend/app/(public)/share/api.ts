@@ -1,10 +1,10 @@
 const ENDPOINT = '/api/v1/artifact-shares';
 
-async function request(token: string, operation: 'metadata' | 'content'): Promise<Response> {
+async function request(token: string, operation: 'metadata' | 'content', previewPdf = false): Promise<Response> {
   const response = await fetch(`${ENDPOINT}/${operation}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, ...(previewPdf ? { previewPdf: true } : {}) }),
     credentials: 'same-origin', // The external gateway may use a same-origin cookie.
     referrerPolicy: 'no-referrer',
     cache: 'no-store',
@@ -22,8 +22,8 @@ export async function getShareMetadata(token: string): Promise<ShareMetadata> {
   return { version: body.version, name: body.name, mimeType: body.mimeType };
 }
 
-export async function getShareContent(token: string): Promise<Blob> {
-  return (await request(token, 'content')).blob();
+export async function getShareContent(token: string, previewPdf = false): Promise<Blob> {
+  return (await request(token, 'content', previewPdf)).blob();
 }
 
 export async function downloadShare(token: string, name: string): Promise<void> {

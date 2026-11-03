@@ -29,7 +29,7 @@ describe('share lifecycle over HTTP with mocked persistence and connector', () =
       active = false;
       return true;
     });
-    const fetchContent = sinon.stub(content, 'fetchPinnedShareContent').resolves(Buffer.from('version one'));
+    const fetchContent = sinon.stub(content, 'fetchPinnedShareContent').callsFake(async () => new Response('version one'));
     const app = express();
     app.use(express.json());
     app.use('/api/v1/artifact-shares', createShareContentRouter(config));

@@ -19,6 +19,7 @@ const nextConfig = {
             // on 3000, so proxy just these routes in development.
             ...(process.env.NODE_ENV === 'development' ? [
                 { source: '/api/v1/artifact-shares/:path*', destination: `${(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')}/api/v1/artifact-shares/:path*` },
+                { source: '/decks/:path*', destination: `${(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')}/decks/:path*` },
             ] : []),
             { source: '/toolsets/oauth/callback/:slug', destination: '/toolsets/oauth/callback/' },
             { source: '/toolsets/oauth/callback/:slug/', destination: '/toolsets/oauth/callback/' },

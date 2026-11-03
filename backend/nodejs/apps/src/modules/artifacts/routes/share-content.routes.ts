@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { AppConfig } from '../../tokens_manager/config/config';
 import { fetchPinnedShareContent } from '../services/share-content-client';
 import { resolveShare } from '../services/resolve-share';
@@ -11,7 +13,8 @@ export function createShareContentRouter(appConfig: AppConfig): Router {
     setShareResponsePrivacyHeaders(res);
     try {
       const authority = await resolveShare(req.body?.token, async (share) => {
-        await fetchPinnedShareContent(appConfig.connectorBackend, appConfig.scopedJwtSecret, share);
+        const upstream = await fetchPinnedShareContent(appConfig.connectorBackend, appConfig.scopedJwtSecret, share);
+        await upstream.body?.cancel().catch(() => undefined);
         return true;
       });
       if (!authority) {
@@ -27,22 +30,38 @@ export function createShareContentRouter(appConfig: AppConfig): Router {
     setShareResponsePrivacyHeaders(res);
     // Uniform failures avoid revealing whether a share or artifact exists.
     const unavailable = () => res.status(404).json({ message: 'This artifact is unavailable.' });
+    let upstream: globalThis.Response | undefined;
     try {
-      let bytes: Buffer | undefined;
       const authority = await resolveShare(req.body?.token, async (share) => {
-        bytes = await fetchPinnedShareContent(appConfig.connectorBackend, appConfig.scopedJwtSecret, share);
+        upstream = await fetchPinnedShareContent(appConfig.connectorBackend, appConfig.scopedJwtSecret, share, req.body?.previewPdf === true);
         return true;
       });
-      if (!authority || !bytes) {
+      if (!authority || !upstream?.body) {
+        await upstream?.body?.cancel().catch(() => undefined);
         unavailable();
         return;
       }
       setShareDownloadHeaders(res);
-      res.status(200).send(bytes);
+      res.status(200);
+      const body = upstream.body;
+      await pipeline(Readable.from((async function* () {
+        const reader = body.getReader();
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            yield value;
+          }
+        } finally {
+          await reader.cancel().catch(() => undefined);
+        }
+      })()), res);
     } catch {
       // Neither exceptions nor request bodies are logged here: they can contain
       // bearer secrets or upstream response details.
-      unavailable();
+      await upstream?.body?.cancel().catch(() => undefined);
+      if (!res.headersSent && !res.destroyed) unavailable();
+      else res.destroy();
     }
   });
   return router;

@@ -1,8 +1,10 @@
 import { expect } from 'chai';
 import { NextFunction, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { Types } from 'mongoose';
 import sinon from 'sinon';
 import {
+  createDeckPreview,
   getArtifact,
   listArtifactVersions,
   listArtifacts,
@@ -24,6 +26,7 @@ function createMockAppConfig(): AppConfig {
 type JsonResponseDouble = {
   status: sinon.SinonStub;
   json: sinon.SinonStub;
+  set: sinon.SinonStub;
 };
 
 function createMockRequest(
@@ -46,9 +49,11 @@ function createMockResponse(): JsonResponseDouble {
   const res: JsonResponseDouble = {
     status: sinon.stub(),
     json: sinon.stub(),
+    set: sinon.stub(),
   };
   res.status.returns(res);
   res.json.returns(res);
+  res.set.returns(res);
   return res;
 }
 
@@ -175,6 +180,74 @@ describe('Artifacts Controller', () => {
       expect(execStub.firstCall.args[0]).to.equal(
         'http://connector.local/api/v1/artifacts/..%2FknowledgeBase',
       );
+    });
+  });
+
+  describe('createDeckPreview', () => {
+    it('issues an unexpired capability for the selected Slidev ZIP version', async () => {
+      sinon.stub(connectorUtils, 'executeConnectorCommand').resolves({
+        statusCode: 200,
+        data: {
+          name: 'slidev-presentation.zip',
+          mimeType: 'application/zip',
+          version: 3,
+          versions: [{ version: 1 }, { version: 2 }, { version: 3 }],
+        },
+      });
+      const secret = 'preview-test-secret';
+      const handler = createDeckPreview({
+        ...createMockAppConfig(),
+        scopedJwtSecret: secret,
+      });
+      const req = createMockRequest({
+        params: { artifactId: 'artifact-1' },
+        body: { version: 2 },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      await invoke(handler, req, res, next);
+
+      expect(next.called).to.equal(false);
+      const previewUrl = res.json.firstCall.args[0].previewUrl as string;
+      expect(previewUrl).to.match(/^\/decks\/artifact-1\/2\//);
+      const capability = previewUrl.split('/')[4];
+      const claims = jwt.verify(capability, secret) as jwt.JwtPayload;
+      expect(claims).to.include({
+        purpose: 'deck-preview',
+        artifactId: 'artifact-1',
+        version: 2,
+        userId: '507f1f77bcf86cd799439011',
+        orgId: '507f1f77bcf86cd799439012',
+      });
+      expect(claims.exp).to.equal(undefined);
+    });
+
+    it('does not issue preview capabilities for unrelated ZIPs', async () => {
+      sinon.stub(connectorUtils, 'executeConnectorCommand').resolves({
+        statusCode: 200,
+        data: {
+          name: 'other.zip',
+          mimeType: 'application/zip',
+          version: 1,
+          versions: [{ version: 1 }],
+        },
+      });
+      const handler = createDeckPreview({
+        ...createMockAppConfig(),
+        scopedJwtSecret: 'preview-test-secret',
+      });
+      const req = createMockRequest({
+        params: { artifactId: 'artifact-1' },
+        body: { version: 1 },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      await invoke(handler, req, res, next);
+
+      expect(res.status.calledWith(404)).to.equal(true);
+      expect(next.called).to.equal(false);
     });
   });
 

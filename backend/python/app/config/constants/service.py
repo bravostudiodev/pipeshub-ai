@@ -50,6 +50,8 @@ class TokenScopes(Enum):
     RECORD_CONTENT = "record:content"
     # Node -> connectors, a single owner-checked published artifact version.
     ARTIFACT_SHARE_CONTENT = "artifact-share:content"
+    # Node -> connectors, an ACL-checked built file from one artifact version.
+    ARTIFACT_DECK_CONTENT = "artifact-deck:content"
     # Indexing's admin-level read of record bytes from the connectors service
     # (the name predates the route; it is not tied to signed URLs).
     CONNECTOR_SIGNED_URL = "connector:signedUrl"

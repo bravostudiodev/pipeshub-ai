@@ -24,5 +24,8 @@ export function sendShareViewerShell(req: Request, res: Response, publicDir: str
 
 export function isShareTokenRequest(path: string): boolean {
   const normalized = path.toLowerCase();
-  return normalized === '/api/v1/artifact-shares' || normalized.startsWith('/api/v1/artifact-shares/');
+  return normalized === '/api/v1/artifact-shares' ||
+    normalized.startsWith('/api/v1/artifact-shares/') ||
+    /^\/decks\/shared\/[^/]+(?:\/|$)/i.test(path) ||
+    /^\/decks\/[^/]+\/\d+\/[^/]+(?:\/|$)/i.test(path);
 }
