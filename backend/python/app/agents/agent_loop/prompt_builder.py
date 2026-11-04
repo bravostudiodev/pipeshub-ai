@@ -453,7 +453,7 @@ def _build_code_execution_section(*, composed: bool, networked: bool) -> str:
     heading = f"## Code Execution (MANDATORY for file generation; {network_state})"
 
     bullets = [
-        "Generating a downloadable file (PDF, DOCX, XLSX, CSV, image, chart, presentation).",
+        "Generating a downloadable file (PDF, DOCX, XLSX, CSV, image, chart, or a presentation/slide deck, which uses the slidev skill).",
         "Data processing that produces structured output (tables, aggregations, transformations) beyond what a single tool call returns.",
         'Any computation the user explicitly asks you to "run", "execute", or "code".',
     ]

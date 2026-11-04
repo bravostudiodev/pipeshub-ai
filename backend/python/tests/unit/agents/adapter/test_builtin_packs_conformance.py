@@ -26,7 +26,7 @@ _PACKS_ROOT = os.path.join(
 )
 
 _EXPECTED_PACK_NAMES = {
-    "office-utils", "docx", "pptx", "xlsx", "pdf",
+    "office-utils", "docx", "slidev", "xlsx", "pdf",
     "file-conversion", "data-analysis", "data-visualization",
 }
 

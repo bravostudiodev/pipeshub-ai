@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[6]
 
 def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     skill = (ROOT / "backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/SKILL.md").read_text()
-    assert "pack_version: 1.0.6" in skill
+    assert "pack_version: 1.0.9" in skill
     assert "run_code" in skill
     assert "/opt/slidev/build_deck.py" in skill
     assert "http.server" not in skill
@@ -20,6 +20,8 @@ def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     # <style> in slides.md is slide-scoped; deck-wide CSS must live in style.css.
     assert "deck/style.css" in skill
     assert "v-motion" in skill and "slidev-vclick-hidden" in skill
+    assert "do not save extra copies" in skill
+    assert "never inside\n`$OUTPUT_DIR`" in skill
     assert "data-layout-ignore" in skill and "headless Chromium" in skill
 
 
@@ -51,3 +53,20 @@ def test_sandbox_slidev_dependencies_are_pinned() -> None:
     assert {path.name for path in assets.iterdir()} == logos | {
         "README.md", "Sticker-Curiosity.png", "Sticker-HB.png", "Sticker-Logo.png",
     }
+
+
+def test_presentation_requests_are_routed_to_the_slidev_skill() -> None:
+    app = ROOT / "backend/python/app/agents/agent_loop"
+    skill = (app / "skills/builtin_packs/slidev/SKILL.md").read_text()
+    description = next(line for line in skill.splitlines() if line.startswith("description:"))
+    first_sentence = description.split(". ")[0]
+    for word in ("presentation", "slide deck", "pitch deck", "PowerPoint"):
+        assert word in description
+    # The skill list shows only the first sentence, capped at 200 characters.
+    assert "presentation" in first_sentence[:200] and "slide deck" in first_sentence[:200]
+    assert "developers" not in description
+
+    domain = (app / "domain_agents.py").read_text()
+    assert "use the slidev skill and run_code" in domain
+    assert "ANY request for a presentation" in domain
+    assert "slidev skill" in (app / "prompt_builder.py").read_text()

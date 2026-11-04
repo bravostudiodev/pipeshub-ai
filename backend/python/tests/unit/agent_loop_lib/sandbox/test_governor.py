@@ -74,8 +74,8 @@ class TestSandboxResourceGovernor:
 
     async def test_default_limits(self) -> None:
         limits = GovernorLimits()
-        assert limits.max_total_sandboxes == 50
-        assert limits.max_per_org == 10
+        assert limits.max_total_sandboxes == 100
+        assert limits.max_per_org == 30
 
     async def test_none_limits_mean_unlimited(self) -> None:
         gov = SandboxResourceGovernor(

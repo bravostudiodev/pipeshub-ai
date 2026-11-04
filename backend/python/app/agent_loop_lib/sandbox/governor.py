@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 class GovernorLimits(BaseModel):
     """``None`` on either cap means unlimited for that dimension."""
 
-    max_total_sandboxes: int | None = 50
-    max_per_org: int | None = 10
+    max_total_sandboxes: int | None = 100
+    max_per_org: int | None = 30
 
 
 @dataclass

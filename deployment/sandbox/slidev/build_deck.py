@@ -221,6 +221,13 @@ def _source_files(project: Path) -> list[Path]:
 
 def build_deck(project: Path, output: Path) -> list[str]:
     project = project.resolve()
+    output_dir = os.environ.get("OUTPUT_DIR")
+    if output_dir and project.is_relative_to(Path(output_dir).resolve()):
+        raise DeckBuildError(
+            f"The project folder {project} is inside $OUTPUT_DIR, so every source file would be "
+            "delivered as a separate artifact. Create the project in the working directory "
+            "(for example 'deck/') and write only the ZIP to $OUTPUT_DIR."
+        )
     if not (project / "slides.md").is_file():
         raise DeckBuildError(f"{project}/slides.md does not exist")
     if any((project / name).exists() for name in ("vite.config.ts", "vite.config.js", "vite.config.mjs")):

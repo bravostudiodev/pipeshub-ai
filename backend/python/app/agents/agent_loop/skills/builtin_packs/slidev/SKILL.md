@@ -1,6 +1,6 @@
 ---
 name: slidev
-description: Create and present web-based slidedecks for developers using Slidev with Markdown, Vue components, code highlighting, animations, and interactive features. Use when building technical presentations, conference talks, code walkthroughs, teaching materials, or developer decks.
+description: Use this skill whenever the user asks for a presentation, slide deck, slides, pitch deck, keynote or talk, for any audience (business, product, sales, training, technical), including requests for a PowerPoint. Builds a polished, animated web slide deck with Slidev in the code sandbox and delivers a ZIP that previews in chat and on share links. Also covers code walkthroughs, Mermaid diagrams, and presenter notes.
 license: MIT
 metadata:
   agent-loop:
@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.6
+    pack_version: 1.0.9
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -66,7 +66,12 @@ Content here
 More content
 ```
 
-Use `run_code` with Python and a generous timeout (e.g. 180 seconds). Write
+Use `run_code` with Python and a generous timeout (e.g. 180 seconds). Create
+the project folder in the working directory (`deck/`), never inside
+`$OUTPUT_DIR`: every file under `$OUTPUT_DIR` is delivered as its own artifact,
+so source files, fonts, and logos placed there appear as separate downloads
+and the helper refuses to build such a project. Only the finished ZIP goes in
+`$OUTPUT_DIR`. Write
 `slides.md`, `style.css`, any Vue components under `components/`, and assets
 under `public/` into a project directory, then build it with the preinstalled
 helper. Do not write your own build, bundling, or ZIP code, do not add a
@@ -89,6 +94,11 @@ fails with an explanation if anything still points at one; fix the source and
 run it again rather than working around it. Name the ZIP after the deck when
 useful (for example `quarterly-review.zip`). Pass any warnings it prints about
 unmatched image paths on to your fixes: they mean an image will not show.
+
+Each successful run writes a new artifact version the user sees, and the
+helper only writes the ZIP after its checks pass. Fix problems in the source
+and rebuild until it succeeds; do not rebuild afterwards for small polish, and
+do not save extra copies, drafts, or PNG exports into `$OUTPUT_DIR`.
 
 The helper also opens every slide in headless Chromium with all clicks
 revealed and fails if any text runs off the slide, is cut off by its box, or

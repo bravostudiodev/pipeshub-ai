@@ -302,6 +302,9 @@ async def build_coding_sandbox_manager(
             max_concurrent=max_concurrent,
             max_lifetime_s=max_lifetime_s,
             provision_timeout_s=settings.provision_timeout_s,
+            # Agents iterate with run_code and no sandbox_id; recycle an idle
+            # sandbox instead of failing the deliverable at the cap.
+            evict_idle=True,
         ),
         ctx=sandbox_ctx,
     )

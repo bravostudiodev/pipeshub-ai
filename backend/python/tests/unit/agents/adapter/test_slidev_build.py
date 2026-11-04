@@ -98,6 +98,16 @@ def test_zip_holds_source_and_a_preview_ready_index(tmp_path: Path, monkeypatch:
     assert set(files) == {"index.html"}
 
 
+def test_refuses_a_project_inside_the_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "out"
+    project = output_dir / "deck"
+    project.mkdir(parents=True)
+    (project / "slides.md").write_text("# Hi")
+    monkeypatch.setenv("OUTPUT_DIR", str(output_dir))
+    with pytest.raises(build_deck.DeckBuildError, match="inside \\$OUTPUT_DIR"):
+        build_deck.build_deck(project, output_dir / "deck.zip")
+
+
 def test_refuses_a_project_vite_config(tmp_path: Path) -> None:
     (tmp_path / "slides.md").write_text("# Hi")
     (tmp_path / "vite.config.ts").write_text("export default {}")

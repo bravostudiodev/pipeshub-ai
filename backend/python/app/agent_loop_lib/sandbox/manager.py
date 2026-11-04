@@ -101,6 +101,9 @@ class SandboxLimits:
     max_concurrent: int | None = None
     max_lifetime_s: float | None = None
     provision_timeout_s: float | None = 60.0
+    # At `max_concurrent`, destroy the least recently used sandbox no call
+    # holds (see `get_or_create(reserve=True)`) instead of refusing.
+    evict_idle: bool = False
 
 
 @dataclass
@@ -122,6 +125,7 @@ class _InstanceRecord:
     created_at: float
     last_used_at: float
     governor_lease: Any | None = None  # GovernorLease
+    busy: int = 0
 
 
 class SandboxManager:
@@ -196,6 +200,8 @@ class SandboxManager:
         sandbox_id: str | None = None,
         *,
         ctx: "SandboxContext | None" = None,
+        reserve: bool = False,
+        reuse_idle: bool = False,
     ) -> tuple[str, Any]:
         """Resolve an existing sandbox by id, or create a new one when
         `sandbox_id` is `None`. Raises `UnknownSandboxError` for an
@@ -214,6 +220,8 @@ class SandboxManager:
             if record is None:
                 raise UnknownSandboxError(f"no {type.value!r} sandbox with id {sandbox_id!r}")
             record.last_used_at = time.monotonic()
+            if reserve:
+                record.busy += 1
             return sandbox_id, record.backend
 
         entry = self._factories.get(type)
@@ -224,6 +232,16 @@ class SandboxManager:
         lease = None
         async with self._lock:
             await self._sweep_stale(type, entry.limits)
+            if reuse_idle:
+                idle = [(k[1], v) for k, v in self._instances.items() if k[0] == type and v.busy == 0]
+                if idle:
+                    reused_id, record = max(idle, key=lambda item: item[1].last_used_at)
+                    record.last_used_at = time.monotonic()
+                    if reserve:
+                        record.busy += 1
+                    return reused_id, record.backend
+            if entry.limits.evict_idle:
+                await self._evict_idle(type, entry.limits)
             self._check_concurrency(type, entry.limits)
 
             if self._governor is not None:
@@ -251,6 +269,7 @@ class SandboxManager:
         record = _InstanceRecord(
             backend=backend, created_at=now, last_used_at=now,
             governor_lease=lease,
+            busy=1 if reserve else 0,
         )
         for t in entry.capabilities:
             self._instances[(t, new_id)] = record
@@ -373,6 +392,31 @@ class SandboxManager:
             if ref is not None:
                 result.append(ref)
         return result
+
+    def release(self, type: SandboxType, sandbox_id: str) -> None:
+        """End a `get_or_create(reserve=True)` hold so the sandbox can be evicted."""
+        record = self._instances.get((type, sandbox_id))
+        if record is not None:
+            record.busy = max(0, record.busy - 1)
+            record.last_used_at = time.monotonic()
+
+    async def _evict_idle(self, type: SandboxType, limits: SandboxLimits) -> None:
+        if limits.max_concurrent is None:
+            return
+        while self.active_count(type) + self._in_flight.get(type, 0) >= limits.max_concurrent:
+            idle = [v for k, v in self._instances.items() if k[0] == type and v.busy == 0]
+            if not idle:
+                return
+            record = min(idle, key=lambda v: v.last_used_at)
+            await self._safe_destroy(record.backend)
+            await self._release_lease(record.governor_lease)
+            evicted = [k for k, v in self._instances.items() if v is record]
+            for key in evicted:
+                del self._instances[key]
+            logger.info(
+                "sandbox evicted to stay under max_concurrent: type=%s ids=%s",
+                type.value, [key[1] for key in evicted],
+            )
 
     def _check_concurrency(self, type: SandboxType, limits: SandboxLimits) -> None:
         if limits.max_concurrent is None:
