@@ -10,5 +10,7 @@ describe('SlidevRenderer', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.hasAttribute('allowfullscreen')).toBe(true);
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer');
+    expect(screen.getByRole('button', { name: 'Present' })).toBeTruthy();
+    expect(frame.parentElement?.style.aspectRatio).toBe('16 / 9');
   });
 });

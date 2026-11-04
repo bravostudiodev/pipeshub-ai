@@ -9,6 +9,9 @@ const singleFile = {
     config.build.assetsInlineLimit = () => true
     config.build.cssCodeSplit = false
     config.build.modulePreload = false
+    // The `?print#/print` view, which build_deck.py's layout check renders, only exists
+    // in builds with `download` on; enable it without showing a download button.
+    config.define = { ...config.define, __SLIDEV_FEATURE_PRINT__: 'true' }
     for (const key of ['rollupOptions', 'rolldownOptions']) {
       const options = (config.build[key] ??= {})
       const outputs = Array.isArray(options.output) ? options.output : [(options.output ??= {})]

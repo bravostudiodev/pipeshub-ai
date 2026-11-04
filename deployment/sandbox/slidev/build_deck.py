@@ -12,6 +12,8 @@ dist/index.html, then refuses to write a deck that still references another file
 from __future__ import annotations
 
 import base64
+import html as html_lib
+import json
 import mimetypes
 import os
 import posixpath
@@ -25,6 +27,9 @@ from pathlib import Path
 
 SLIDEV_ROOT = Path(os.environ.get("SLIDEV_ROOT", "/opt/slidev"))
 VITE_CONFIG = Path(__file__).with_name("single-file.vite.mjs")
+LAYOUT_CHECK = Path(__file__).with_name("layout_check.js")
+BROWSERS = ("chromium", "chromium-browser", "google-chrome")
+MAX_LAYOUT_ISSUES = 15
 # Matches MAX_MEMBER_BYTES in app/services/artifact_registry/deck_archive.py.
 MAX_INDEX_BYTES = 20 * 1024 * 1024
 SKIPPED_SOURCE_PARTS = {"node_modules", "dist", ".slidev", ".git", "__pycache__"}
@@ -50,6 +55,7 @@ _STYLESHEET = re.compile(
 _RESOURCE_HINT = re.compile(
     r'<link\b[^>]*\brel="(?:modulepreload|preload|prefetch|icon)"[^>]*>\s*', re.IGNORECASE
 )
+_LAYOUT_REPORT = re.compile(r'<pre id="oddjeeves-layout-report">(.*?)</pre>', re.DOTALL)
 
 mimetypes.add_type("font/otf", ".otf")
 mimetypes.add_type("font/ttf", ".ttf")
@@ -59,6 +65,10 @@ mimetypes.add_type("image/avif", ".avif")
 
 class DeckBuildError(RuntimeError):
     """The deck cannot be delivered as a self-contained presentation."""
+
+
+class LayoutCheckUnavailable(RuntimeError):
+    """The browser layout check could not run; the deck itself may be fine."""
 
 
 def _data_uris(dist: Path) -> dict[str, str]:
@@ -111,10 +121,7 @@ def inline_dist(dist: Path) -> tuple[str, list[str]]:
     html = _RESOURCE_HINT.sub("", html)
     html = _embed(html, "", uris)
 
-    unresolved = {
-        reference
-        for reference in _LOCAL_ATTR.findall(html)
-    } | {
+    unresolved = set(_LOCAL_ATTR.findall(html)) | {
         match.group(2)
         for match in _ASSET_REF.finditer(html)
         if _resolve(match.group(2), "assets") in uris or _resolve(match.group(2), "") in uris
@@ -125,6 +132,55 @@ def inline_dist(dist: Path) -> tuple[str, list[str]]:
     # image paths in the source; report them without failing the build.
     warnings = sorted({match.group(2) for match in _ASSET_REF.finditer(html)})
     return html, warnings
+
+
+def _describe(issue: dict) -> str:
+    where = f"Slide {issue.get('slide', '?')}"
+    text = issue.get("text", "")
+    if issue.get("kind") == "outside":
+        return f"{where}: \"{text}\" extends {issue.get('px')}px past the {issue.get('side')} edge of the slide"
+    if issue.get("kind") == "clipped":
+        return f"{where}: \"{text}\" is cut off by {issue.get('px')}px because its box is too small"
+    return f"{where}: \"{text}\" overlaps \"{issue.get('other', '')}\""
+
+
+def check_layout(index_html: str, work: Path) -> list[str]:
+    """Render every slide with all clicks revealed and return layout problems."""
+    browser = next((path for name in BROWSERS if (path := shutil.which(name))), None)
+    if browser is None:
+        raise LayoutCheckUnavailable("no Chromium browser is installed")
+    script = "<script>" + LAYOUT_CHECK.read_text(encoding="utf-8") + "</script>"
+    # The last </body> is the document's; the inlined bundle may contain the string too.
+    head, tag, tail = index_html.rpartition("</body>")
+    page_html = head + script + tag + tail if tag else index_html + script
+    page = work / "layout-check.html"
+    page.write_text(page_html, encoding="utf-8")
+    try:
+        result = subprocess.run(
+            [
+                browser, "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                "--no-first-run", "--disable-extensions", "--hide-scrollbars", "--mute-audio",
+                f"--user-data-dir={work / 'chromium-profile'}", "--window-size=1920,1080",
+                "--virtual-time-budget=30000", "--dump-dom", page.as_uri() + "?print#/print",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise LayoutCheckUnavailable(f"Chromium did not finish: {error}") from error
+    match = _LAYOUT_REPORT.search(result.stdout)
+    if match is None:
+        detail = result.stderr.strip().splitlines()[-1:] or ["no report"]
+        raise LayoutCheckUnavailable(f"Chromium returned no layout report ({detail[0]})")
+    try:
+        report = json.loads(html_lib.unescape(match.group(1)))
+    except ValueError as error:
+        raise LayoutCheckUnavailable(f"unreadable layout report: {error}") from error
+    if report.get("error") or not report.get("slides"):
+        raise LayoutCheckUnavailable(report.get("error") or "the print view rendered no slides")
+    return list(dict.fromkeys(_describe(issue) for issue in report.get("issues", [])))
 
 
 def _copy_source(project: Path, work: Path) -> None:
@@ -174,6 +230,21 @@ def build_deck(project: Path, output: Path) -> list[str]:
         _copy_source(project, work)
         _run_slidev(work)
         html, warnings = inline_dist(work / "dist")
+        try:
+            problems = check_layout(html, Path(temporary))
+        except LayoutCheckUnavailable as error:
+            problems = []
+            warnings.append(f"layout check skipped: {error}")
+    if problems:
+        shown = "\n".join(f"  - {problem}" for problem in problems[:MAX_LAYOUT_ISSUES])
+        more = len(problems) - MAX_LAYOUT_ISSUES
+        raise DeckBuildError(
+            "Some slide content does not fit (checked with every click revealed):\n"
+            + shown
+            + (f"\n  ... and {more} more" if more > 0 else "")
+            + "\nSplit crowded slides, shorten text, or shrink type and spacing, then rebuild. "
+            "Mark deliberate decorative overlaps with data-layout-ignore."
+        )
     index = html.encode("utf-8")
     if len(index) > MAX_INDEX_BYTES:
         raise DeckBuildError(
@@ -205,7 +276,10 @@ def main(argv: list[str]) -> int:
         print(f"Deck build failed: {error}", file=sys.stderr)
         return 1
     for warning in warnings:
-        print(f"Warning: '{warning}' does not match any file in the deck; that image or font will not show.")
+        if warning.startswith("layout check skipped"):
+            print(f"Warning: {warning}.")
+        else:
+            print(f"Warning: '{warning}' does not match any file in the deck; that image or font will not show.")
     print(f"Wrote {argv[2]} ({Path(argv[2]).stat().st_size:,} bytes) with a self-contained dist/index.html")
     return 0
 

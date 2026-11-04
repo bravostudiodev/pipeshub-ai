@@ -94,7 +94,7 @@ export default function SharedArtifactPage() {
           <Flex direction="column" gap="4" style={{ marginTop: 'var(--space-4)' }}>
             <Text>{metadata?.name} · Version {metadata?.version}</Text>
             <Box ref={previewRef} style={{ background: 'var(--color-panel-solid)', overflow: 'auto', ...(fullscreen ? { width: '100%', height: '100%', padding: 'var(--space-4)' } : {}) }}>
-              {(preview || deckUrl) && <Button variant="soft" onClick={toggleFullscreen}>{fullscreen ? 'Exit full screen' : 'Full screen'}</Button>}
+              {preview && !deckUrl && <Button variant="soft" onClick={toggleFullscreen}>{fullscreen ? 'Exit full screen' : 'Full screen'}</Button>}
               {deckUrl ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={deckUrl} fileName={metadata?.name || 'shared deck'} fileType="application/vnd.oddjeeves.slidev-preview" /></Box> : preview ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={preview.url} fileBlob={preview.blob} fileName={metadata?.name || 'artifact'} fileType={preview.type} /></Box> : <Text size="2" color="gray">Preview is not available. Download the artifact to view it.</Text>}
             </Box>
             <Button onClick={download} disabled={busy}>{busy ? 'Downloading…' : 'Download'}</Button>

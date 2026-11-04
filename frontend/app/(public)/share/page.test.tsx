@@ -75,6 +75,8 @@ describe('shared artifact viewer', () => {
     expect(frame.getAttribute('src')).toBe(`/decks/shared/${token}/index.html`);
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(api.getShareContent).not.toHaveBeenCalled();
+    // The deck's own Present control replaces the page-level full screen button.
+    expect(screen.queryByRole('button', { name: 'Full screen' })).toBeNull();
   });
 
   it('previews HTML inside an isolated sandbox', async () => {

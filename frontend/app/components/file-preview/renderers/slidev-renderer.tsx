@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { Box, Button } from '@radix-ui/themes';
+import { Box, Button, Flex } from '@radix-ui/themes';
 
 interface SlidevRendererProps {
   fileUrl: string;
@@ -12,18 +12,25 @@ interface SlidevRendererProps {
 export function SlidevRenderer({ fileUrl, fileName }: SlidevRendererProps) {
   const iframe = useRef<HTMLIFrameElement>(null);
   return (
-    <Box style={{ width: '100%', height: '100%', minHeight: '65vh', overflow: 'hidden', position: 'relative' }}>
-      <Button variant="soft" onClick={() => { iframe.current?.focus(); void iframe.current?.requestFullscreen().catch(() => {}); }} style={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>Present</Button>
-      <iframe
-        ref={iframe}
-        title={`Presentation preview: ${fileName}`}
-        src={fileUrl}
-        sandbox="allow-scripts"
-        allow="fullscreen; screen-wake-lock"
-        allowFullScreen
-        referrerPolicy="no-referrer"
-        style={{ display: 'block', width: '100%', height: '100%', minHeight: '65vh', border: 0, background: '#fff' }}
-      />
-    </Box>
+    <Flex direction="column" gap="2" style={{ width: '100%', height: '100%', minHeight: '40vh' }}>
+      <Flex justify="end">
+        <Button variant="soft" onClick={() => { iframe.current?.focus(); void iframe.current?.requestFullscreen().catch(() => {}); }}>Present</Button>
+      </Flex>
+      {/* A 16:9 frame that fits the available box; any other shape makes Slidev letterbox with black bars. */}
+      <Flex data-testid="slidev-stage" align="start" justify="center" style={{ flex: 1, minHeight: 0, containerType: 'size' }}>
+        <Box style={{ width: 'min(100cqw, calc(100cqh * 16 / 9))', aspectRatio: '16 / 9' }}>
+          <iframe
+            ref={iframe}
+            title={`Presentation preview: ${fileName}`}
+            src={fileUrl}
+            sandbox="allow-scripts"
+            allow="fullscreen; screen-wake-lock"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+            style={{ display: 'block', width: '100%', height: '100%', border: 0, background: '#000' }}
+          />
+        </Box>
+      </Flex>
+    </Flex>
   );
 }

@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.5
+    pack_version: 1.0.6
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -89,6 +89,33 @@ fails with an explanation if anything still points at one; fix the source and
 run it again rather than working around it. Name the ZIP after the deck when
 useful (for example `quarterly-review.zip`). Pass any warnings it prints about
 unmatched image paths on to your fixes: they mean an image will not show.
+
+The helper also opens every slide in headless Chromium with all clicks
+revealed and fails if any text runs off the slide, is cut off by its box, or
+overlaps other text (for example a footer). The error names the slide and the
+text. Fix the layout as described below and run the helper again; do not
+deliver a deck from a failed build.
+
+## Layout: everything must fit the slide
+
+Each slide is a fixed canvas of about 980 x 552 px. Nothing scrolls, so content
+that does not fit is cut off or runs under the footer. Plan for the slide with
+every click revealed:
+
+- Keep each slide to one title plus at most about 40 words of body text, or at
+  most 4 rows, cards, or bullets, or 2 short columns. Split anything larger
+  across slides (for example "Action items (1/2)" and "(2/2)").
+- Keep titles to one line of about 6 words on content slides, at 40-56 px.
+  Reserve larger type for cover and section slides.
+- Reserve room for the footer. Give content slides a grid layout such as
+  `display: grid; grid-template-rows: auto 1fr auto; height: 100%` with the
+  footer in the last row, or bottom padding of at least the footer's height
+  plus 24 px.
+- Do not give text boxes fixed heights, and do not hide overflow with
+  `overflow: hidden`; the check still reports clipped text. Fix it by
+  splitting or shortening content, not by shrinking body text below 16 px.
+- Add `data-layout-ignore` only to a deliberate decorative overlap, such as a
+  large background numeral behind a title, never to real content.
 
 ## Styling: global CSS goes in `style.css`
 
@@ -224,3 +251,5 @@ animation disabled.
    `/opt/slidev/build_deck.py`.
 6. Check that all assets and source files are included in the project.
 7. Keep deck-wide CSS in `style.css`; `<style>` in `slides.md` is per-slide only.
+8. Keep every slide within its canvas and clear of the footer with all clicks
+   revealed; the helper's layout check must pass.

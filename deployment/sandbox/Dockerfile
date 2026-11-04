@@ -4,6 +4,7 @@ LABEL maintainer="pipeshub" \
       description="Unified sandbox for Python, TypeScript, SQLite, and PostgreSQL code execution"
 
 # System deps: Cairo/Pango for SVG/PDF rendering, SQLite, PostgreSQL client, curl for Node setup.
+# chromium: headless layout check for Slidev decks (/opt/slidev/build_deck.py).
 # iptables: containers on the egress bridge install their egress firewall at start
 # (app/agent_loop_lib/sandbox/coding/egress_firewall.py), then drop to `sandbox`
 # with no capabilities via setpriv (util-linux). Without iptables, networked runs
@@ -22,6 +23,7 @@ RUN apt-get update && \
         gnupg \
         tzdata \
         iptables \
+        chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 22 is required by the pinned Slidev and Mermaid dependencies.
@@ -38,8 +40,9 @@ COPY slidev-package.json /opt/slidev/package.json
 COPY slidev-package-lock.json /opt/slidev/package-lock.json
 COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/
 RUN cd /opt/slidev && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
-# Builds decks into a self-contained dist/index.html for the gateway-protected preview.
-COPY slidev/build_deck.py slidev/single-file.vite.mjs /opt/slidev/
+# Builds decks into a self-contained dist/index.html for the gateway-protected preview
+# and checks the layout of every slide in headless Chromium.
+COPY slidev/build_deck.py slidev/single-file.vite.mjs slidev/layout_check.js /opt/slidev/
 
 # Install uv for fast Python package management
 RUN pip install --no-cache-dir uv

@@ -365,7 +365,12 @@ opaque origin, so its requests for separate JS, CSS, font, or image files carry
 no Cloudflare Access cookie and get 401, leaving a blank frame. The helper
 builds without code splitting, embeds every file as inline code or a `data:`
 URI (including backtick-quoted paths in minified JS), and refuses to write a
-deck that still references another file. Decks built before this helper load
+deck that still references another file. Because the agent cannot see the
+slides, the helper also renders Slidev's print view (every slide, every click
+revealed) in headless Chromium and fails the build on text that runs off the
+slide, is cut off by its box, or overlaps other text; `data-layout-ignore`
+exempts deliberate decorative overlaps. The Vite config enables that print view
+without enabling Slidev's download button. Decks built before this helper load
 separate files and do not preview behind the gateway; regenerate them.
 ZIPs with other filenames can also be previewed when the selected version
 contains `dist/index.html`; ordinary ZIPs remain download-only.

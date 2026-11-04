@@ -111,7 +111,10 @@ and pinned Slidev dependencies in `/opt/slidev`, and runs as the non-root
 renderer image or tool. Decks are built only through
 `/opt/slidev/build_deck.py` (source in `deployment/sandbox/slidev/`), which
 disables code splitting and embeds all JS, CSS, fonts, and images into one
-`dist/index.html`. Changing that helper or its Vite config requires rebuilding
+`dist/index.html`. It then opens every slide in headless Chromium (installed in
+the image) with all clicks revealed and fails the build when text leaves the
+slide, is clipped, or overlaps other text, so the agent fixes the layout before
+delivering. Changing that helper, its Vite config, or `layout_check.js` requires rebuilding
 and publishing the sandbox image. The image also installs the Inter font family and
 provides OddBytes logos, icons, and stickers under `/opt/brand-assets/oddbytes/`
 for explicitly branded work. Logos and icons are available as self-contained SVGs
