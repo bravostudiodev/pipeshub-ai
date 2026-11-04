@@ -11,15 +11,16 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.4
+    pack_version: 1.0.5
 ---
 
 # Slidev - Presentation Slides for Developers
 
 Web-based slides made from Markdown and built as a static site. Use `run_code`
 with the preinstalled Slidev tools in the Docker coding sandbox. Deliver one
-ZIP containing editable source, static HTML/CSS/JavaScript, included assets,
-and local serving instructions.
+ZIP, produced by the build helper below, containing the editable source and a
+self-contained `dist/index.html` that OddJeeves previews in chat and on share
+links and that opens directly in a browser.
 
 These instructions take precedence over upstream references that describe
 package installation, network access, development servers, hosted previews,
@@ -35,7 +36,7 @@ the Docker sandbox image; other execution backends may not have it.
 - Technical presentations and code walkthroughs
 - Syntax-highlighted code, click animations, and presenter notes
 - Mermaid diagrams and mathematical equations
-- A static browser presentation the user can download and serve locally
+- A browser presentation the user can preview in chat, share, or open offline
 
 ## Quick start
 
@@ -65,39 +66,29 @@ Content here
 More content
 ```
 
-Use `run_code` with Python and a generous timeout (e.g. 120 seconds). Create a
-project under the sandbox working directory, write the Markdown to `slides.md`,
-and link the preinstalled dependencies before building. The `node_modules`
-directory itself must be writable for Slidev's generated cache; link its
-individual entries, not the directory. For example, after writing your
-Markdown and any support files into `deck/`:
+Use `run_code` with Python and a generous timeout (e.g. 180 seconds). Write
+`slides.md`, `style.css`, any Vue components under `components/`, and assets
+under `public/` into a project directory, then build it with the preinstalled
+helper. Do not write your own build, bundling, or ZIP code, do not add a
+`vite.config` file, and do not run `slidev build` directly:
 
 ```python
 from pathlib import Path
-import os, shutil, subprocess, zipfile
+import os, subprocess
 
 project = Path('deck')
-project.mkdir(exist_ok=True)
-# Write project / 'slides.md', project / 'style.css' and any project / 'public' assets here.
-modules = project / 'node_modules'
-modules.mkdir(exist_ok=True)
-for dependency in Path('/opt/slidev/node_modules').iterdir():
-    link = modules / dependency.name
-    if not link.exists():
-        link.symlink_to(dependency, target_is_directory=dependency.is_dir())
-subprocess.run(['/opt/slidev/node_modules/.bin/slidev', 'build', 'slides.md',
-                '--out', 'dist', '--base', './'], cwd=project, check=True)
-shutil.rmtree(modules)  # Don't transfer dependency links and build caches back.
-(project / 'README.md').write_text(
-    'Serve locally: python3 -m http.server 8000 --directory dist\n'
-    'Then open http://localhost:8000/. The source is slides.md.\n'
-)
-with zipfile.ZipFile(Path(os.environ['OUTPUT_DIR']) / 'slidev-presentation.zip', 'w',
-                     zipfile.ZIP_DEFLATED) as archive:
-    for path in project.rglob('*'):
-        if path.is_file() and 'node_modules' not in path.parts:
-            archive.write(path, path.relative_to(project))
+(project / 'public').mkdir(parents=True, exist_ok=True)
+# Write project / 'slides.md', project / 'style.css' and any public/ or components/ files here.
+subprocess.run(['python3', '/opt/slidev/build_deck.py', str(project),
+                str(Path(os.environ['OUTPUT_DIR']) / 'slidev-presentation.zip')], check=True)
 ```
+
+The helper builds the deck and embeds all JavaScript, CSS, fonts, and images
+into `dist/index.html`. The preview cannot load separate files, so the helper
+fails with an explanation if anything still points at one; fix the source and
+run it again rather than working around it. Name the ZIP after the deck when
+useful (for example `quarterly-review.zip`). Pass any warnings it prints about
+unmatched image paths on to your fixes: they mean an image will not show.
 
 ## Styling: global CSS goes in `style.css`
 
@@ -118,9 +109,6 @@ properties, `@font-face`, shared classes, layout overrides) in
 .card { background: #F3F3F3; padding: 22px 24px; }
 ```
 
-Set a deck-wide `transition:` in the headmatter (for example `slide-left` or
-`fade`), override it per slide in that slide's frontmatter when needed, and use
-`v-click` / `v-clicks` for reveals.
 
 Pass existing artifacts via `run_code`'s `input_artifacts`; they are staged at
 `input/artifacts/<name>`. Copy needed files into `deck/public/input/` and refer
@@ -178,20 +166,61 @@ concise text, generous whitespace, readable contrast and type sizes, and
 relevant visuals, diagrams, or charts when they help explain the content.
 Follow the user's design-system skill when applicable.
 
-Use tasteful, consistent slide transitions and click-triggered reveals where
-they improve pacing or understanding. Prefer subtle motion, and avoid
-excessive effects, distracting movement, or revealing every line separately.
-Ensure the complete content remains readable without relying on animation;
-respect reduced-motion preferences where possible. Consult the local
-[animation reference](references/core-animations.md) for supported syntax.
+Motion should make the deck feel alive and guide attention, not decorate.
+Use all three layers below, consistently, on most content slides. Consult the
+local [animation reference](references/core-animations.md) for more syntax.
+
+**1. Slide transitions.** Set a deck-wide transition in the headmatter, for
+example `transition: slide-left | slide-right` (forward | back), and give
+section dividers or the closing slide a different one in their frontmatter
+(`transition: fade` or `slide-up`).
+
+**2. Entrance animations.** Animate a slide's key elements in when it opens,
+staggered so the eye follows the hierarchy: title first, then supporting text,
+then cards or visuals. Use `v-motion` with increasing delays:
+
+```html
+<h1 v-motion :initial="{ y: 30, opacity: 0 }"
+    :enter="{ y: 0, opacity: 1, transition: { duration: 500 } }">Title</h1>
+<p v-motion :initial="{ y: 30, opacity: 0 }"
+   :enter="{ y: 0, opacity: 1, transition: { delay: 150, duration: 500 } }">Subtitle</p>
+<div v-motion :initial="{ x: -60, opacity: 0 }"
+     :enter="{ x: 0, opacity: 1, transition: { delay: 300, duration: 500 } }">Card</div>
+```
+
+Vary the direction by role (titles rise, side panels slide in from their side,
+stats or images scale up from `scale: 0.9`) and keep durations around
+400-700 ms with delays of 100-200 ms between elements.
+
+**3. Click reveals with movement.** Use `v-click` / `v-clicks` to build up
+lists, cards, and comparisons point by point, and `v-click` with `v-mark` to
+underline, circle, or highlight a key phrase when the speaker reaches it
+(`<span v-mark.underline.red="2">key phrase</span>`). Make reveals move as well
+as fade by putting this in `style.css` (it also respects reduced-motion
+settings):
+
+```css
+.slidev-vclick-target { transition: opacity 450ms ease, transform 450ms ease; }
+.slidev-vclick-hidden { opacity: 0; transform: translateY(18px); }
+@media (prefers-reduced-motion: reduce) {
+  .slidev-vclick-target { transition: none; }
+  .slidev-vclick-hidden { transform: none; }
+}
+```
+
+Animate a few meaningful elements per slide rather than every line, and keep
+the cover and closing slides calm but not static (a staggered entrance of
+logo, title, and subtitle works well). The deck must remain readable with
+animation disabled.
 
 ## Quality checklist
 
 1. Give each slide one clear takeaway, a deliberate hierarchy, and enough whitespace.
 2. Vary layouts and use relevant visuals rather than defaulting to bullet lists.
-3. Add purposeful, restrained transitions or reveals where they improve the deck.
+3. Use slide transitions, staggered `v-motion` entrances, and moving click
+   reveals on most content slides.
 4. Use the default or seriph theme and local assets only.
-5. Use hash navigation and relative references so the exported ZIP works from
-   a local HTTP server without rewrite rules.
+5. Keep hash navigation and the relative base, and build only with
+   `/opt/slidev/build_deck.py`.
 6. Check that all assets and source files are included in the project.
 7. Keep deck-wide CSS in `style.css`; `<style>` in `slides.md` is per-slide only.

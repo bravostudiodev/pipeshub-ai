@@ -108,7 +108,11 @@ The sandbox Dockerfile includes Python's `python-pptx`, Node's `pptxgenjs`,
 and pinned Slidev dependencies in `/opt/slidev`, and runs as the non-root
 `sandbox` user. Node 22 is required by Slidev. The built-in Slidev skill uses
 `run_code` and the existing artifact delivery path; it does not use a separate
-renderer image or tool. The image also installs the Inter font family and
+renderer image or tool. Decks are built only through
+`/opt/slidev/build_deck.py` (source in `deployment/sandbox/slidev/`), which
+disables code splitting and embeds all JS, CSS, fonts, and images into one
+`dist/index.html`. Changing that helper or its Vite config requires rebuilding
+and publishing the sandbox image. The image also installs the Inter font family and
 provides OddBytes logos, icons, and stickers under `/opt/brand-assets/oddbytes/`
 for explicitly branded work. Logos and icons are available as self-contained SVGs
 and ready-to-use transparent PNGs; `README.md` in that directory lists the variants.

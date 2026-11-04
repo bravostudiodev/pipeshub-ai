@@ -358,10 +358,17 @@ meta refresh.
 
 ### Slidev presentation previews
 
-The Slidev skill builds a static site in the sandbox and registers
-`slidev-presentation.zip`, containing both `dist/` and the editable source.
+The Slidev skill builds the deck in the sandbox with `/opt/slidev/build_deck.py`
+and registers a ZIP containing a self-contained `dist/index.html` plus the
+editable source. The deck must be self-contained: the preview iframe has an
+opaque origin, so its requests for separate JS, CSS, font, or image files carry
+no Cloudflare Access cookie and get 401, leaving a blank frame. The helper
+builds without code splitting, embeds every file as inline code or a `data:`
+URI (including backtick-quoted paths in minified JS), and refuses to write a
+deck that still references another file. Decks built before this helper load
+separate files and do not preview behind the gateway; regenerate them.
 ZIPs with other filenames can also be previewed when the selected version
-contains a valid built site under `dist/`; ordinary ZIPs remain download-only.
+contains `dist/index.html`; ordinary ZIPs remain download-only.
 Chat opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
 shared links use `/decks/shared/<share-token>/...` and are resolved against the
 share's pinned version. The chat artifact card continues to download the

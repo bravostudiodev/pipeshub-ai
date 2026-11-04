@@ -38,6 +38,8 @@ COPY slidev-package.json /opt/slidev/package.json
 COPY slidev-package-lock.json /opt/slidev/package-lock.json
 COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/
 RUN cd /opt/slidev && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+# Builds decks into a self-contained dist/index.html for the gateway-protected preview.
+COPY slidev/build_deck.py slidev/single-file.vite.mjs /opt/slidev/
 
 # Install uv for fast Python package management
 RUN pip install --no-cache-dir uv
