@@ -7,6 +7,7 @@ import { FileIcon } from '@/app/components/ui';
 import { formatSize } from '@/lib/utils/formatters';
 import { useTranslation } from 'react-i18next';
 import type { ArtifactListItem } from '../types';
+import { artifactDisplayName as displayName, isDeckItem } from '../deck-items';
 
 interface ArtifactsGridViewProps {
   items: ArtifactListItem[];
@@ -57,7 +58,7 @@ export function ArtifactsGridView({
             gap="2"
             role="button"
             tabIndex={0}
-            aria-label={item.name}
+            aria-label={displayName(item)}
             onClick={() => onPreview(item)}
             onKeyDown={activatePreview(item)}
             style={{
@@ -70,7 +71,7 @@ export function ArtifactsGridView({
             }}
           >
             <Flex justify="between" align="start">
-              <FileIcon filename={item.name} mimeType={item.mimeType || undefined} size={28} />
+              <FileIcon extension={isDeckItem(item) ? 'pptx' : undefined} filename={item.name} mimeType={item.mimeType || undefined} size={28} />
               <Flex gap="1" onClick={(e) => e.stopPropagation()}>
                 <IconButton
                   variant="ghost"
@@ -95,7 +96,7 @@ export function ArtifactsGridView({
               </Flex>
             </Flex>
             <Text size="2" weight="medium" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.name}
+              {displayName(item)}
             </Text>
             <Text size="1" style={{ color: 'var(--slate-10)' }}>
               {item.artifactType} · {formatSize(item.sizeInBytes ?? undefined)}

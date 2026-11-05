@@ -371,7 +371,9 @@ slides, the helper also renders Slidev's print view (every slide, every click
 revealed) in headless Chromium and refuses the deck on text that runs off the
 slide, is cut off by its box, overlaps other text, or has under 3:1 contrast
 with the colour behind it; on an OddBytes logo variant that does not suit its
-background (recognised by content after inlining); on images more than 10%
+background (recognised by content after inlining), an accent (`_Primary_`) logo
+on a red background, or a logo wider than 35% of the slide (15% for an icon);
+on images more than 10%
 outside the slide; and when fewer slides render than `slides.md` defines (it
 first inserts the blank line Slidev needs after each `---`). `data-layout-ignore`
 exempts deliberate decorative overlaps. The check is mandatory: if Chromium
@@ -386,10 +388,23 @@ ZIPs with other filenames can also be previewed when the selected version
 contains `dist/index.html`; ordinary ZIPs remain download-only.
 Chat opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
 shared links use `/decks/shared/<share-token>/...` and are resolved against the
-share's pinned version. The chat artifact card continues to download the
-original ZIP; the preview panel runs the built site rather than converting it
-to a single HTML document. The existing artifact share link is used, so a
-recipient receives no conversation access.
+share's pinned version. Decks are registered as `PRESENTATION` artifacts and
+shown by title (the chat card, artifacts gallery, preview panel, and share page
+never show `.zip`). Downloading a deck saves the built `index.html` as one
+self-contained HTML file; the source ZIP stays available as the fallback and as
+a secondary download on the share page. The existing artifact share link is
+used, so a recipient receives no conversation access.
+
+The helper names the ZIP after the deck's `title:` (or first heading) and pins
+that name in the project's `.oddjeeves-deck.json`, so every rebuild, including
+one in a later message, versions the same artifact instead of adding a card.
+Because each message gets a new sandbox, every build (pass or fail) also saves
+the project source to `.oddjeeves/deck-draft.zip`; the bridge stores it as a
+hidden (`STAGING`) artifact named `deck-draft.zip` and unpacks it into `deck/`
+before the first `run_code` of the next message
+(`backend/python/app/agents/agent_loop/deck_drafts.py`). The run-end scratch
+rescue skips deck project folders, so a failed deck never turns its fonts and
+source files into loose artifact cards.
 
 Both private and shared files are served by Node from the current application
 origin and backed by the Python artifact registry. Private preview capabilities
@@ -407,7 +422,8 @@ served; source files are retained for download. ZIP path traversal, duplicate
 paths, symlinks, encryption, unsupported entry kinds, and archive/member size
 limits are checked without extracting files to disk. Styles, scripts, fonts,
 images, and transitions inside the built site are not filtered or altered, aside
-from the storage compatibility shim. The skill tells the agent to put deck-wide
+from the storage compatibility shim, which also makes a click advance the deck
+like the right arrow. The skill tells the agent to put deck-wide
 CSS in `style.css`: Slidev scopes `<style>` blocks in `slides.md` to one slide,
 so brand variables declared there never apply and the deck builds unstyled.
 

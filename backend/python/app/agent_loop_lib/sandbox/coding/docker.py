@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import os
+import posixpath
 import shutil
 import tarfile
 import tempfile
@@ -923,11 +924,26 @@ def _tar_files(files: dict[str, bytes]) -> bytes:
     listing), this preserves whatever nested structure the paths encode
     (e.g. `input/artifacts/foo.png`) without touching disk beyond what the
     caller already read."""
+    # Entries are unpacked as root, but code runs as the unprivileged `sandbox`
+    # user, which must be able to overwrite files carried over from an earlier
+    # call (e.g. edit and rebuild a project) and add files beside them.
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
+        dirs: set[str] = set()
+        for rel_path in files:
+            parent = posixpath.dirname(rel_path)
+            while parent and parent not in dirs:
+                dirs.add(parent)
+                parent = posixpath.dirname(parent)
+        for d in sorted(dirs):
+            info = tarfile.TarInfo(name=d)
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o777
+            tar.addfile(info)
         for rel_path, content in files.items():
             info = tarfile.TarInfo(name=rel_path)
             info.size = len(content)
+            info.mode = 0o666
             tar.addfile(info, io.BytesIO(content))
     buf.seek(0)
     return buf.read()

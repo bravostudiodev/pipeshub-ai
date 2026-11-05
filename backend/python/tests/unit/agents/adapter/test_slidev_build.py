@@ -88,9 +88,9 @@ def test_zip_holds_source_and_a_preview_ready_index(tmp_path: Path, monkeypatch:
 
     monkeypatch.setattr(build_deck, "_run_slidev", fake_slidev)
     monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
-    output = tmp_path / "out/deck.zip"
-    build_deck.build_deck(project, output)
+    output, _ = build_deck.build_deck(project, tmp_path / "out/deck.zip")
 
+    assert output == tmp_path / "out/Hello.zip"
     with zipfile.ZipFile(output) as archive:
         names = set(archive.namelist())
     assert names == {"dist/index.html", "slides.md", "style.css", "public/logo.svg", "README.md"}
@@ -144,19 +144,17 @@ def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_layout_problems_fail_the_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(tmp_path, monkeypatch)
     monkeypatch.setattr(build_deck, "check_layout", lambda html, work: (['Slide 13: "Research" overlaps "Jeeves QA"'], 1))
-    output = tmp_path / "deck.zip"
     with pytest.raises(build_deck.DeckBuildError, match='Slide 13: "Research" overlaps'):
-        build_deck.build_deck(project, output)
-    assert not output.exists()
+        build_deck.build_deck(project, tmp_path / "deck.zip")
+    assert not list(tmp_path.glob("*.zip"))
 
 
 def test_an_unverifiable_deck_is_not_delivered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(tmp_path, monkeypatch)
     monkeypatch.setattr(build_deck.shutil, "which", lambda name: None)
-    output = tmp_path / "deck.zip"
     with pytest.raises(build_deck.DeckBuildError, match="could not be verified in a browser"):
-        build_deck.build_deck(project, output)
-    assert not output.exists()
+        build_deck.build_deck(project, tmp_path / "deck.zip")
+    assert not list(tmp_path.glob("*.zip"))
 
 
 def test_a_build_that_loses_slides_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,8 +179,8 @@ def test_brand_fingerprints_recognise_both_variants(tmp_path: Path) -> None:
     (tmp_path / "OB_White_Icon.png").write_bytes(b"\x89PNG" + bytes(200))
     (tmp_path / "Sticker-HB.png").write_bytes(b"\x89PNG")
     prints = build_deck.brand_fingerprints(tmp_path)
-    assert prints["svg"] == {"<svg><pathd='M00'/></svg>": "black"}
-    assert list(prints["png"].values()) == ["white"]
+    assert prints["svg"] == {"<svg><pathd='M00'/></svg>": "OB_Black_Logo"}
+    assert list(prints["png"].values()) == ["OB_White_Icon"]
 
 
 def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -194,6 +192,9 @@ def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pyte
         {"slide": 2, "kind": "contrast", "text": "Subtitle", "ratio": 1.2},
         {"slide": 1, "kind": "logo", "variant": "black", "background": "dark"},
         {"slide": 5, "kind": "image", "text": "hero", "pct": 40},
+        {"slide": 1, "kind": "logo", "asset": "OB_Black_Primary_Logo", "variant": "black", "background": "dark"},
+        {"slide": 1, "kind": "logo-accent", "asset": "OB_White_Primary_Logo"},
+        {"slide": 1, "kind": "logo-size", "asset": "OB_White_Logo", "pct": 92, "limit": 35, "px": 343},
     ]
     dom = '<pre id="oddjeeves-layout-report">' + html.escape(json.dumps({"slides": 14, "issues": issues})) + "</pre>"
     browser = tmp_path / "chromium"
@@ -212,6 +213,12 @@ def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pyte
         "Slide 1: the black OddBytes logo sits on a dark background; use the white variant there "
         "(black artwork on light backgrounds, white on dark or red)",
         'Slide 5: image "hero" has 40% of its area outside the slide',
+        "Slide 1: the black OddBytes logo sits on a dark background; use the white variant there "
+        "(OB_White_Primary_Logo.svg) (black artwork on light backgrounds, white on dark or red)",
+        "Slide 1: OB_White_Primary_Logo has an orange-red accent that disappears against this red background; "
+        "use the monochrome OB_White_Logo.svg on red",
+        "Slide 1: the OddBytes logo spans 92% of the slide width; keep it under 35% (about 343px wide) "
+        "so the title leads, for example a small logo in a corner",
     ]
 
 
@@ -243,10 +250,17 @@ body { margin: 0; font: 20px sans-serif; }
   <div style="position: absolute; top: 320px; background: #ffffff; padding: 20px"><img alt="white logo" src="WHITE_LOGO" style="width: 100px"></div>
   <img alt="hero" src="BLACK_LOGO" style="position: absolute; left: 900px; top: 400px; width: 200px">
 </div>
+<div class="print-slide-container" id="005-01" style="width: 980px; height: 552px; background: #FC4539">
+  <img alt="cover logo" src="PRIMARY_LOGO" style="position: absolute; left: 40px; top: 40px; width: 900px; height: 120px">
+</div>
+<div class="print-slide-container" id="006-01" style="width: 980px; height: 552px; background: #FC4539">
+  <img alt="corner logo" src="WHITE_LOGO" style="position: absolute; left: 40px; top: 40px; width: 180px">
+</div>
 </body></html>"""
 
 BLACK_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0h10v10z' fill='#000'/></svg>"
 WHITE_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0h10v10z' fill='#fff'/></svg>"
+PRIMARY_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0h10v10z' fill='#fff'/><circle r='2' fill='#FD533C'/></svg>"
 
 
 @pytest.mark.skipif(
@@ -259,13 +273,16 @@ def test_layout_check_script_finds_overflow_clipping_and_overlap(tmp_path: Path,
     brand.mkdir()
     (brand / "OB_Black_Logo.svg").write_text(BLACK_SVG)
     (brand / "OB_White_Logo.svg").write_text(WHITE_SVG)
+    (brand / "OB_White_Primary_Logo.svg").write_text(PRIMARY_SVG)
     monkeypatch.setattr(build_deck, "BRAND_DIR", brand)
     page = PRINT_VIEW.replace(
         "BLACK_LOGO", "data:image/svg+xml;base64," + base64.b64encode(BLACK_SVG.encode()).decode()
-    ).replace("WHITE_LOGO", "data:image/svg+xml," + WHITE_SVG.replace("#", "%23").replace("'", "%27"))
+    ).replace("WHITE_LOGO", "data:image/svg+xml," + WHITE_SVG.replace("#", "%23").replace("'", "%27")).replace(
+        "PRIMARY_LOGO", "data:image/svg+xml;base64," + base64.b64encode(PRIMARY_SVG.encode()).decode()
+    )
 
     problems, rendered = build_deck.check_layout(page, tmp_path)
-    assert rendered == 4
+    assert rendered == 6
 
     assert not any(problem.startswith("Slide 1:") for problem in problems)
     assert any(problem.startswith('Slide 2: "Row six" extends') and "bottom edge" in problem for problem in problems)
@@ -277,4 +294,53 @@ def test_layout_check_script_finds_overflow_clipping_and_overlap(tmp_path: Path,
     assert "Slide 4: the black OddBytes logo sits on a dark background" in "\n".join(problems)
     assert "Slide 4: the white OddBytes logo sits on a light background" in "\n".join(problems)
     assert any(problem.startswith('Slide 4: image "hero" has') for problem in problems)
-    assert len(problems) == 7, problems
+    assert "Slide 5: OB_White_Primary_Logo has an orange-red accent" in "\n".join(problems)
+    assert "Slide 5: the OddBytes logo spans 92% of the slide width" in "\n".join(problems)
+    assert not any(problem.startswith("Slide 6:") for problem in problems)
+    assert len(problems) == 9, problems
+
+
+def test_deck_title_prefers_headmatter_then_first_heading() -> None:
+    assert build_deck.deck_title("---\ntheme: default\ntitle: 'Q4 OKR Review'\n---\n\n# Cover\n") == "Q4 OKR Review"
+    assert build_deck.deck_title("```md\n# not this\n```\n\n# **OddBytes** <span>Q4</span>\n") == "OddBytes Q4"
+    assert build_deck.deck_title("no heading at all") is None
+
+
+def test_zip_name_is_readable_and_safe() -> None:
+    assert build_deck.zip_name("Q4 / OKRs: Review?", "fallback") == "Q4 OKRs Review.zip"
+    assert build_deck.zip_name("   ", "slidev-presentation") == "slidev-presentation.zip"
+    assert build_deck.zip_name("x" * 200, "f") == "x" * build_deck.MAX_NAME_CHARS + ".zip"
+
+
+def test_rebuilds_keep_the_first_name_even_if_the_title_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """One deck stays one artifact: a renamed title or another requested file
+    name must not start a second card."""
+    project = _project(tmp_path, monkeypatch)
+    (project / "slides.md").write_text("---\ntitle: Q4 Review\n---\n\n# Cover\n")
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
+    first, _ = build_deck.build_deck(project, tmp_path / "out/slidev-presentation.zip")
+
+    (project / "slides.md").write_text("---\ntitle: Q4 Review (final)\n---\n\n# Cover\n")
+    second, _ = build_deck.build_deck(project, tmp_path / "out/q4-deck.zip")
+
+    assert first == second == tmp_path / "out/Q4 Review.zip"
+    with zipfile.ZipFile(second) as archive:
+        assert build_deck.DECK_STATE not in archive.namelist()
+
+
+def test_a_failed_build_still_saves_the_draft(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path, monkeypatch)
+    (project / "style.css").write_text(":root{}")
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: (['Slide 1: "x" overlaps "y"'], 1))
+    with pytest.raises(build_deck.DeckBuildError):
+        build_deck.build_deck(project, tmp_path / "deck.zip")
+
+    with zipfile.ZipFile(tmp_path / build_deck.DRAFT_PATH) as draft:
+        assert set(draft.namelist()) == {"slides.md", "style.css", build_deck.DECK_STATE}
+
+
+def test_main_prints_the_path_it_actually_wrote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    project = _project(tmp_path, monkeypatch)
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
+    assert build_deck.main(["build_deck.py", str(project), str(tmp_path / "requested.zip")]) == 0
+    assert f"Wrote {tmp_path / 'Hello.zip'}" in capsys.readouterr().out

@@ -44,6 +44,7 @@ import { isPastedTextAttachment } from '../../utils/paste-attachment';
 import { useTranslation } from 'react-i18next';
 import { CitationMessageRowKeyContext } from './response-tabs/citations/citation-popover-control';
 import { useInlineCitationPopoverStore } from './response-tabs/citations/citation-popover-store';
+import { presentationTitle } from '@/app/components/file-preview/presentation';
 
 // Stable empty reference — avoids creating new objects in default params
 const EMPTY_CITATION_MAPS: CitationMaps = emptyCitationMaps();
@@ -312,7 +313,7 @@ export const ChatResponse = React.memo(function ChatResponse({
             setPreviewFile({
               id: recordId,
               url: previewUrl,
-              name: artifact.fileName,
+              name: presentationTitle(artifact.fileName),
               type: 'application/vnd.oddjeeves.slidev-preview',
               size: artifact.sizeBytes,
               hideFileDetails: true,

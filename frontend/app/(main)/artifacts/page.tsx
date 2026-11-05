@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { ServiceGate } from '@/app/components/ui/service-gate';
 import { FilePreviewSidebar } from '@/app/components/file-preview';
 import { KnowledgeBaseApi } from '@/app/(main)/knowledge-base/api';
+import { downloadPresentationHtml, presentationTitle } from '@/app/components/file-preview/presentation';
+import { isDeckItem } from './deck-items';
 import { toast } from '@/lib/store/toast-store';
 import { ArtifactsApi } from './api';
 import { useArtifactsStore, DEFAULT_PAGE_SIZE } from './store';
@@ -152,6 +154,15 @@ function ArtifactsPageContent() {
     setPreviewLoading(true);
     setPreviewError(undefined);
     try {
+      if (isDeckItem(item)) {
+        const deckUrl = await KnowledgeBaseApi.createDeckPreview(item.artifactId, version ?? item.version);
+        if (id !== previewRequestIdRef.current) return;
+        revokePreviewUrl();
+        setPreviewUrl(deckUrl);
+        setPreviewBlob(undefined);
+        setPreviewVersion(version ?? item.version);
+        return;
+      }
       const blob = await KnowledgeBaseApi.streamRecord(item.artifactId, {
         version,
         convertTo: needsPdfConversion(item) ? 'pdf' : undefined,
@@ -199,6 +210,15 @@ function ArtifactsPageContent() {
   }, [loadPreview, previewItem]);
 
   const handleDownload = useCallback(async (item: ArtifactListItem) => {
+    if (isDeckItem(item)) {
+      try {
+        const deckUrl = await KnowledgeBaseApi.createDeckPreview(item.artifactId, item.version);
+        await downloadPresentationHtml(deckUrl, presentationTitle(item.name));
+        return;
+      } catch {
+        // Fall back to the ZIP below.
+      }
+    }
     try {
       await KnowledgeBaseApi.streamDownloadRecord(item.artifactId, item.name, {
         version: item.version,
@@ -257,12 +277,14 @@ function ArtifactsPageContent() {
           open
           source="artifacts"
           hideFileDetails
-          showDownload
+          showDownload={!isDeckItem(previewItem)}
           file={{
             id: previewItem.artifactId,
-            name: previewItem.name,
+            name: isDeckItem(previewItem) ? presentationTitle(previewItem.name) : previewItem.name,
             url: previewUrl || '',
-            type: previewItem.mimeType || 'application/octet-stream',
+            type: isDeckItem(previewItem)
+              ? 'application/vnd.oddjeeves.slidev-preview'
+              : previewItem.mimeType || 'application/octet-stream',
             size: previewItem.sizeInBytes ?? undefined,
             blob: previewBlob,
             version: previewVersion,

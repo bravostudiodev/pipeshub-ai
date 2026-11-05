@@ -2,6 +2,12 @@
 
 Usage: python3 /opt/slidev/build_deck.py <project_dir> <output.zip>
 
+The ZIP is named after the deck's title (the headmatter `title:` or the first
+heading), not the name passed in, and keeps that name on every later rebuild,
+so a deck stays one artifact with new versions instead of a new card per build.
+Every run also saves the project source as a draft beside the project folder
+(`.oddjeeves/deck-draft.zip`), pass or fail, so a later message can continue.
+
 OddJeeves previews decks in an opaque-origin sandboxed iframe behind a
 zero-trust gateway. Requests made by that iframe carry no gateway cookie, so a
 deck that loads separate JS, CSS, font or image files renders blank. This
@@ -33,6 +39,10 @@ BRAND_DIR = Path(os.environ.get("BRAND_ASSETS_DIR", "/opt/brand-assets/oddbytes"
 MAX_LAYOUT_ISSUES = 15
 # Matches MAX_MEMBER_BYTES in app/services/artifact_registry/deck_archive.py.
 MAX_INDEX_BYTES = 20 * 1024 * 1024
+DECK_STATE = ".oddjeeves-deck.json"
+DRAFT_PATH = Path(".oddjeeves/deck-draft.zip")
+MAX_DRAFT_BYTES = 20 * 1024 * 1024
+MAX_NAME_CHARS = 80
 SKIPPED_SOURCE_PARTS = {"node_modules", "dist", ".slidev", ".git", "__pycache__"}
 
 # Minified JS quotes strings with backticks, so ` counts alongside " ' and url( ).
@@ -59,6 +69,7 @@ _RESOURCE_HINT = re.compile(
 # Per-slide frontmatter starts with a `key:` line; anything else directly after `---` is slide content.
 _FRONTMATTER_KEY = re.compile(r"^[A-Za-z_][\w-]*\s*:")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+_NAME_UNSAFE = re.compile(r"[^\w &()',.\-]+")
 _LAYOUT_REPORT = re.compile(r'<pre id="oddjeeves-layout-report">(.*?)</pre>', re.DOTALL)
 
 mimetypes.add_type("font/otf", ".otf")
@@ -150,9 +161,24 @@ def _describe(issue: dict) -> str:
         return (f"{where}: \"{text}\" has {issue.get('ratio')}:1 contrast with its background; "
                 "at least 3:1 is required (text must never be the same colour as what is behind it)")
     if kind == "logo":
-        other = "white" if issue.get("variant") == "black" else "black"
-        return (f"{where}: the {issue.get('variant')} OddBytes logo sits on a {issue.get('background')} background; "
-                f"use the {other} variant there (black artwork on light backgrounds, white on dark or red)")
+        variant = issue.get("variant")
+        other = "white" if variant == "black" else "black"
+        asset = issue.get("asset")
+        swap = ""
+        if asset:
+            target = asset.replace("OB_Black_", "OB_White_") if variant == "black" else asset.replace("OB_White_", "OB_Black_")
+            swap = f" ({target}.svg)"
+        return (f"{where}: the {variant} OddBytes logo sits on a {issue.get('background')} background; "
+                f"use the {other} variant there{swap} (black artwork on light backgrounds, white on dark or red)")
+    if kind == "logo-accent":
+        asset = issue.get("asset", "")
+        return (f"{where}: {asset} has an orange-red accent that disappears against this red background; "
+                f"use the monochrome {asset.replace('_Primary_', '_')}.svg on red")
+    if kind == "logo-size":
+        what = "icon" if str(issue.get("asset", "")).endswith("_Icon") else "logo"
+        return (f"{where}: the OddBytes {what} spans {issue.get('pct')}% of the slide width; keep it under "
+                f"{issue.get('limit')}% (about {issue.get('px')}px wide) so the title leads, for example a small "
+                f"{what} in a corner")
     if kind == "image":
         return f"{where}: image \"{text}\" has {issue.get('pct')}% of its area outside the slide"
     return f"{where}: \"{text}\" overlaps \"{issue.get('other', '')}\""
@@ -171,13 +197,12 @@ def brand_fingerprints(brand_dir: Path | None = None) -> dict[str, dict[str, str
         return fingerprints
     for path in brand_dir.iterdir():
         name = path.name
-        variant = "black" if name.startswith("OB_Black_") else "white" if name.startswith("OB_White_") else None
-        if variant is None:
+        if not name.startswith(("OB_Black_", "OB_White_")):
             continue
         if path.suffix == ".svg":
-            fingerprints["svg"]["".join(path.read_text(encoding="utf-8").split())] = variant
+            fingerprints["svg"]["".join(path.read_text(encoding="utf-8").split())] = path.stem
         elif path.suffix == ".png":
-            fingerprints["png"][base64.b64encode(path.read_bytes()).decode()[:120]] = variant
+            fingerprints["png"][base64.b64encode(path.read_bytes()).decode()[:120]] = path.stem
     return fingerprints
 
 
@@ -319,7 +344,72 @@ def _source_files(project: Path) -> list[Path]:
     )
 
 
-def build_deck(project: Path, output: Path) -> list[str]:
+def deck_title(markdown: str) -> str | None:
+    """The headmatter `title:`, else the first `# ` heading outside code fences."""
+    lines = markdown.split("\n")
+    index = 0
+    if lines and lines[0].strip() == "---":
+        index = 1
+        while index < len(lines) and lines[index].strip() != "---":
+            key, _, value = lines[index].partition(":")
+            if key.strip() == "title" and value.strip().strip("'\""):
+                return value.strip().strip("'\"")
+            index += 1
+        index += 1
+    in_fence = False
+    for line in lines[index:]:
+        if _FENCE.match(line):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("# "):
+            text = re.sub(r"<[^>]+>|[*_`]", "", line[2:]).strip()
+            if text:
+                return text
+    return None
+
+
+def zip_name(title: str | None, fallback: str) -> str:
+    """A readable, filesystem-safe file name for the deck, e.g. `OddBytes Q4 OKRs.zip`."""
+    cleaned = re.sub(r"\s+", " ", _NAME_UNSAFE.sub(" ", title or "")).strip(" .")[:MAX_NAME_CHARS].strip(" .")
+    return f"{cleaned or fallback}.zip"
+
+
+def resolve_output(project: Path, requested: Path, markdown: str) -> Path:
+    """Where the ZIP goes: the name pinned by an earlier build, else one from the title.
+
+    The name is pinned in the project so every rebuild, including one in a later
+    message from the restored draft, updates the same artifact.
+    """
+    state_path = project / DECK_STATE
+    name = None
+    try:
+        name = json.loads(state_path.read_text(encoding="utf-8")).get("zipName")
+    except (OSError, ValueError, AttributeError):
+        name = None
+    if not isinstance(name, str) or not name.endswith(".zip") or "/" in name or name.startswith("."):
+        name = zip_name(deck_title(markdown), requested.stem or "Presentation")
+        state_path.write_text(json.dumps({"zipName": name}), encoding="utf-8")
+    return requested.parent / name
+
+
+def save_draft(project: Path) -> Path | None:
+    """Snapshot the project source so a later message can restore and continue it."""
+    sources = _source_files(project)
+    if sum(path.stat().st_size for path in sources) > MAX_DRAFT_BYTES:
+        print("Note: the project is too large to save as a draft; drop unused fonts or images.", file=sys.stderr)
+        return None
+    draft = project.parent / DRAFT_PATH
+    try:
+        draft.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(draft, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in sources:
+                archive.write(path, path.relative_to(project).as_posix())
+    except OSError as error:
+        print(f"Note: the project draft could not be saved ({error}).", file=sys.stderr)
+        return None
+    return draft
+
+
+def build_deck(project: Path, output: Path) -> tuple[Path, list[str]]:
     project = project.resolve()
     output_dir = os.environ.get("OUTPUT_DIR")
     if output_dir and project.is_relative_to(Path(output_dir).resolve()):
@@ -334,6 +424,8 @@ def build_deck(project: Path, output: Path) -> list[str]:
     fixed_text, fixed = separate_slides(slides.read_text(encoding="utf-8"))
     if fixed:
         slides.write_text(fixed_text, encoding="utf-8")
+    output = resolve_output(project, output, fixed_text)
+    save_draft(project)
     if any((project / name).exists() for name in ("vite.config.ts", "vite.config.js", "vite.config.mjs")):
         raise DeckBuildError("Remove the project's vite.config file; build_deck.py supplies the build config")
     with tempfile.TemporaryDirectory() as temporary:
@@ -363,8 +455,9 @@ def build_deck(project: Path, output: Path) -> list[str]:
             "The deck was not delivered because some slides are not presentable (checked with every click revealed):\n"
             + shown
             + (f"\n  ... and {more} more" if more > 0 else "")
-            + "\nFix each item (split crowded slides, shorten text, move labels, change colours or the logo "
-            "variant), then rebuild. Mark a deliberate decorative overlap with data-layout-ignore."
+            + "\nFix every item in one pass, editing the files in this same project folder (split crowded "
+            "slides, shorten text, move labels, change colours, or change the logo file or size), then rebuild. "
+            "Mark a deliberate decorative overlap with data-layout-ignore."
         )
     index = html.encode("utf-8")
     if len(index) > MAX_INDEX_BYTES:
@@ -379,12 +472,12 @@ def build_deck(project: Path, output: Path) -> list[str]:
     )
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("dist/index.html", index)
-        sources = _source_files(project)
+        sources = [path for path in _source_files(project) if path.name != DECK_STATE]
         for path in sources:
             archive.write(path, path.relative_to(project).as_posix())
         if not any(path.relative_to(project).as_posix() == "README.md" for path in sources):
             archive.writestr("README.md", readme)
-    return warnings
+    return output, warnings
 
 
 def main(argv: list[str]) -> int:
@@ -392,13 +485,13 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
     try:
-        warnings = build_deck(Path(argv[1]), Path(argv[2]))
+        output, warnings = build_deck(Path(argv[1]), Path(argv[2]))
     except DeckBuildError as error:
         print(f"Deck build failed: {error}", file=sys.stderr)
         return 1
     for warning in warnings:
         print(f"Warning: '{warning}' does not match any file in the deck; that image or font will not show.")
-    print(f"Wrote {argv[2]} ({Path(argv[2]).stat().st_size:,} bytes) with a self-contained dist/index.html")
+    print(f"Wrote {output} ({output.stat().st_size:,} bytes) with a self-contained dist/index.html")
     return 0
 
 

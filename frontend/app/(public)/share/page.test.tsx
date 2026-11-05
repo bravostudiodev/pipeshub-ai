@@ -71,12 +71,17 @@ describe('shared artifact viewer', () => {
       version: 4, name: 'jeeves-qa-slidev.zip', mimeType: 'application/zip', isDeck: true,
     });
     render(<SharedArtifactPage />);
-    const frame = await screen.findByTitle('Presentation preview: jeeves-qa-slidev.zip');
+    const frame = await screen.findByTitle('Presentation preview: jeeves qa slidev');
     expect(frame.getAttribute('src')).toBe(`/decks/shared/${token}/index.html`);
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(api.getShareContent).not.toHaveBeenCalled();
     // The deck's own Present control replaces the page-level full screen button.
     expect(screen.queryByRole('button', { name: 'Full screen' })).toBeNull();
+    // Shown as a presentation, downloadable as one HTML file, with the ZIP secondary.
+    expect(screen.getByText('jeeves qa slidev · Version 4')).toBeTruthy();
+    expect(screen.queryByText(/jeeves-qa-slidev\.zip/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Download presentation' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Download source (.zip)' })).toBeTruthy();
   });
 
   it('previews HTML inside an isolated sandbox', async () => {

@@ -3,15 +3,20 @@
 // Writes a JSON report for headless Chromium's --dump-dom to hand back:
 // text that leaves its slide, is clipped, overlaps other text, or has too
 // little contrast; images that leave the slide; and OddBytes logos whose
-// variant does not suit the background behind them.
+// variant does not suit the background behind them, whose orange accent
+// vanishes on a red background, or that are blown up past a sensible size.
 //
 // build_deck.py prepends `window.__oddjeevesBrand = {svg: {normalizedSvgText:
-// variant}, png: {base64Prefix: variant}}` so logos can be recognised after
+// fileStem}, png: {base64Prefix: fileStem}}` so logos can be recognised after
 // inlining turned every file reference into a data: URI.
 (() => {
   const TOLERANCE = 2;
   const MIN_CONTRAST = 3;
   const IGNORE = '[data-layout-ignore]';
+  // Widest a logo may be, as a share of the slide width. A logo stretched
+  // across a cover reads as a mistake; the title should lead.
+  const MAX_LOGO_SHARE = 0.35;
+  const MAX_ICON_SHARE = 0.15;
   const brand = window.__oddjeevesBrand || { svg: {}, png: {} };
 
   const label = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -86,6 +91,9 @@
 
   // Solid colour painted behind `el` by its ancestors up to the slide; null
   // when an image or gradient is in the way, since its colour is unknown.
+  // The brand red and the logo's orange-red accent are nearly the same colour.
+  const reddish = ({ r, g, b }) => r >= 170 && r - Math.max(g, b) >= 90;
+
   const backgroundBehind = (el, slide) => {
     const layers = [];
     for (let node = el.parentElement; node; node = node.parentElement) {
@@ -124,7 +132,7 @@
     }
   };
 
-  const logoVariant = (uri) => {
+  const logoAsset = (uri) => {
     if (!uri || !uri.startsWith('data:')) return null;
     const decoded = decodeDataUri(uri);
     if (!decoded) return null;
@@ -152,13 +160,25 @@
       if (el.closest(IGNORE) || !visible(el)) continue;
 
       for (const source of imageSources(el)) {
-        const variant = logoVariant(source);
-        if (!variant) continue;
+        const asset = logoAsset(source);
+        if (!asset) continue;
+        const variant = asset.startsWith('OB_Black_') ? 'black' : 'white';
+        const icon = asset.endsWith('_Icon');
+        const logoBox = el.getBoundingClientRect();
+        const limit = icon ? MAX_ICON_SHARE : MAX_LOGO_SHARE;
+        if (box.width > 0 && logoBox.width / box.width > limit + 0.01) {
+          issues.push({
+            slide: no, kind: 'logo-size', asset, pct: Math.round((logoBox.width / box.width) * 100),
+            limit: Math.round(limit * 100), px: Math.round((limit * box.width) / scale),
+          });
+        }
         const behind = ownBackground(el) && el.tagName !== 'IMG' ? ownBackground(el) : backgroundBehind(el, slide);
         if (!behind) continue;
         const light = luminance(behind) >= 0.5;
         if ((variant === 'black' && !light) || (variant === 'white' && light)) {
-          issues.push({ slide: no, kind: 'logo', variant, background: light ? 'light' : 'dark' });
+          issues.push({ slide: no, kind: 'logo', asset, variant, background: light ? 'light' : 'dark' });
+        } else if (asset.includes('_Primary_') && reddish(behind)) {
+          issues.push({ slide: no, kind: 'logo-accent', asset });
         }
       }
 

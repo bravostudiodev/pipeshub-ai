@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.12
+    pack_version: 1.0.13
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -96,12 +96,19 @@ subprocess.run(['python3', '/opt/slidev/build_deck.py', str(project),
 The helper builds the deck and embeds all JavaScript, CSS, fonts, and images
 into `dist/index.html`. The preview cannot load separate files, so the helper
 fails with an explanation if anything still points at one; fix the source and
-run it again rather than working around it. Name the ZIP after the deck when
-useful (for example `quarterly-review.zip`), and keep that exact filename for
-every rebuild in the conversation: artifacts are versioned by filename, so a
-rebuild under a different name (`x.zip` then `x-deck.zip`) shows up as a second,
-duplicate artifact instead of a new version. Pass any warnings it prints about
+run it again rather than working around it. Pass any warnings it prints about
 unmatched image paths on to your fixes: they mean an image will not show.
+
+Set the deck's real title in the headmatter (`title: Q4 OKR Review`). The user
+sees the deck as a presentation named after that title. The helper names the
+ZIP itself and keeps that name for every later rebuild, so rebuilds update the
+same presentation; the file name you pass only chooses the folder, and the
+helper prints the path it wrote.
+
+Every run, pass or fail, also saves the project as a draft. When a later
+message continues a deck, the first `run_code` result says `deck_project_restored`
+and `deck/` already holds that project: edit it and rebuild instead of starting
+over. Start an unrelated new deck in a new folder.
 
 Each successful run writes a new artifact version the user sees, and the
 helper only writes the ZIP after its checks pass. Fix problems in the source
@@ -116,12 +123,27 @@ revealed and refuses to deliver the deck if:
   same or nearly the same colour as its background);
 - an OddBytes logo variant does not suit its background (black artwork belongs
   on light backgrounds; white artwork on dark or red ones);
+- a logo with the orange accent (`_Primary_`) sits on a red background, or a
+  logo is wider than 35% of the slide (15% for an icon);
 - an image has more than 10% of its area outside the slide;
 - the build rendered fewer slides than `slides.md` defines.
 
 The error names the slide and the element. Fix the source and run the helper
 again; there is no way to deliver a deck from a failed build, so never claim
 one was produced.
+
+### Fixing a failed build
+
+Every step counts against a fixed budget, so fix a rejected build in one call:
+
+- Files you wrote earlier in this answer are still there. Keep working in the
+  same `deck/` folder; never start a `deck2/` or rewrite the whole project.
+- Address every item the error lists at once, then rerun the helper in the
+  same call. Change only the named slides, for example by replacing text in
+  `deck/slides.md` with Python string edits, rather than resending the deck.
+- Omit `sandbox_id` on `run_code`; the call reuses this answer's sandbox.
+- Before the first build, check each slide against the layout, colour and logo
+  rules below. Those three checks cause almost every rejection.
 
 ## Layout: everything must fit the slide
 
@@ -156,6 +178,12 @@ every click revealed:
   only on dark or red backgrounds. A footer component that appears on every
   slide must pick the variant from that slide's background (for example a
   `dark` prop), not use one file everywhere.
+- On red or orange slides use only the monochrome `OB_White_Logo` or
+  `OB_White_Icon`: the orange-red accent of the `_Primary_` files disappears
+  against the brand red.
+- Keep logos small; the title leads. About 160-200 px wide on a cover, about
+  100 px in a footer, never more than 35% of the slide width (15% for an icon).
+  The helper rejects larger logos.
 
 ## Styling: global CSS goes in `style.css`
 
@@ -196,7 +224,8 @@ The brand guide says to use the icon near the company name, not as a replacement
 for the full logo. Use stickers sparingly. Do not apply OddBytes branding to
 unrelated presentations by default.
 
-For a self-contained browser deck, copy the selected Inter font files into
+For a self-contained browser deck, copy only the Inter weights the deck uses
+(usually Regular, Medium and Bold, not the whole family) into
 `deck/public/fonts/` and declare them with `@font-face` in `deck/style.css`
 (not in a `<style>` block in `slides.md`), e.g.
 `src: url('/fonts/Inter-Regular.otf') format('opentype')`. Include the font license

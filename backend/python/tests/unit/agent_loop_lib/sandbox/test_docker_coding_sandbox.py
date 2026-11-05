@@ -735,9 +735,23 @@ class TestTarFiles:
         tar_bytes = _tar_files(files)
 
         with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
-            assert set(tar.getnames()) == set(files)
+            assert {m.name for m in tar.getmembers() if m.isfile()} == set(files)
             for name, content in files.items():
                 assert tar.extractfile(name).read() == content
+
+    def test_entries_stay_writable_by_the_unprivileged_sandbox_user(self) -> None:
+        """put_archive unpacks as root; with default 0644 files and implicit
+        root-owned parents, a later call could not overwrite a file it wrote
+        earlier (PermissionError rebuilding a deck project in place)."""
+        tar_bytes = _tar_files({"deck/public/logo/a.svg": b"<svg/>", "deck/slides.md": b"# hi"})
+
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+            members = {m.name: m for m in tar.getmembers()}
+        assert {"deck", "deck/public", "deck/public/logo"} <= set(members)
+        names = list(members)
+        assert names.index("deck/public/logo") < names.index("deck/public/logo/a.svg")
+        for m in members.values():
+            assert m.mode == (0o777 if m.isdir() else 0o666)
 
     def test_empty_map_yields_empty_tar(self) -> None:
         tar_bytes = _tar_files({})

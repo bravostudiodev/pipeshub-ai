@@ -215,10 +215,9 @@ _DOMAIN_SHARED_NAV_TOOL_NAMES: frozenset[str] = frozenset({
     "knowledgegraph__lookup_record",
 })
 
-# Matches nodes.py's ReAct/planner loop cap (`MAX_ITERATIONS` — see
-# tool_system.py / react_agent_node's `recursion_limit`); kept as one named
-# constant here rather than a magic number in `create()`.
-_MAX_TURNS = 15
+# 15 ran out on real deliverables: gathering data from a few connectors and
+# then a deck build that the layout checker rejects twice uses all of them.
+_MAX_TURNS = 25
 
 
 DIRECT_TRANSPORT = "direct"

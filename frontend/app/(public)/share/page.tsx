@@ -5,6 +5,7 @@ import { Box, Button, Flex, Heading, Text } from '@radix-ui/themes';
 import { downloadShare, getShareContent, getShareMetadata, ShareMetadata } from './api';
 import { FilePreviewRenderer } from '@/app/components/file-preview/renderers/file-preview-renderer';
 import { getRendererType, isDocxFile, isLegacyWordDocFile, isPresentationFile } from '@/app/components/file-preview/utils';
+import { downloadPresentationHtml, presentationTitle } from '@/app/components/file-preview/presentation';
 type State = 'loading' | 'available' | 'unavailable';
 
 export default function SharedArtifactPage() {
@@ -83,6 +84,17 @@ export default function SharedArtifactPage() {
     finally { setBusy(false); }
   }
 
+  // A deck downloads as one HTML file that opens in any browser; the ZIP
+  // (source plus build) stays available as a secondary download.
+  async function downloadPresentation() {
+    setBusy(true);
+    try { await downloadPresentationHtml(deckUrl, presentationTitle(metadata?.name || '')); }
+    catch { await download(); return; }
+    finally { setBusy(false); }
+  }
+
+  const displayName = deckUrl ? presentationTitle(metadata?.name || '') : metadata?.name;
+
   return (
     <Flex align="center" justify="center" style={{ minHeight: '100vh', padding: 'var(--space-5)' }}>
       <meta name="referrer" content="no-referrer" />
@@ -92,12 +104,19 @@ export default function SharedArtifactPage() {
         {state === 'unavailable' && <Text as="p" style={{ marginTop: 'var(--space-4)' }}>This artifact is unavailable.</Text>}
         {state === 'available' && (
           <Flex direction="column" gap="4" style={{ marginTop: 'var(--space-4)' }}>
-            <Text>{metadata?.name} · Version {metadata?.version}</Text>
+            <Text>{displayName} · Version {metadata?.version}</Text>
             <Box ref={previewRef} style={{ background: 'var(--color-panel-solid)', overflow: 'auto', ...(fullscreen ? { width: '100%', height: '100%', padding: 'var(--space-4)' } : {}) }}>
               {preview && !deckUrl && <Button variant="soft" onClick={toggleFullscreen}>{fullscreen ? 'Exit full screen' : 'Full screen'}</Button>}
-              {deckUrl ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={deckUrl} fileName={metadata?.name || 'shared deck'} fileType="application/vnd.oddjeeves.slidev-preview" /></Box> : preview ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={preview.url} fileBlob={preview.blob} fileName={metadata?.name || 'artifact'} fileType={preview.type} /></Box> : <Text size="2" color="gray">Preview is not available. Download the artifact to view it.</Text>}
+              {deckUrl ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={deckUrl} fileName={displayName || 'shared deck'} fileType="application/vnd.oddjeeves.slidev-preview" /></Box> : preview ? <Box style={{ height: fullscreen ? 'calc(100vh - 100px)' : '70vh' }}><FilePreviewRenderer fileUrl={preview.url} fileBlob={preview.blob} fileName={metadata?.name || 'artifact'} fileType={preview.type} /></Box> : <Text size="2" color="gray">Preview is not available. Download the artifact to view it.</Text>}
             </Box>
-            <Button onClick={download} disabled={busy}>{busy ? 'Downloading…' : 'Download'}</Button>
+            {deckUrl ? (
+              <Flex direction="column" gap="2">
+                <Button onClick={downloadPresentation} disabled={busy}>{busy ? 'Downloading…' : 'Download presentation'}</Button>
+                <Button variant="ghost" size="1" onClick={download} disabled={busy} style={{ alignSelf: 'center' }}>Download source (.zip)</Button>
+              </Flex>
+            ) : (
+              <Button onClick={download} disabled={busy}>{busy ? 'Downloading…' : 'Download'}</Button>
+            )}
           </Flex>
         )}
       </Box>

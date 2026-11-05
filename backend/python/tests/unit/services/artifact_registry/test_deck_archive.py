@@ -78,7 +78,8 @@ def test_injects_opaque_origin_storage_shim_and_serves_requested_file() -> None:
     index = get_deck_file(data, "index.html")
     assert index.content_type == "text/html; charset=utf-8"
     assert b"Object.defineProperty(window,key" in index.content
-    assert b"key:.ArrowRight." in index.content or b"ArrowRight" in index.content
+    assert b"__slidev__" in index.content
+    assert b"setTimeout(()=>window.dispatchEvent(new KeyboardEvent('keyup'" in index.content
     assert (
         index.content.index(b"<head>")
         < index.content.index(b"Object.defineProperty")
