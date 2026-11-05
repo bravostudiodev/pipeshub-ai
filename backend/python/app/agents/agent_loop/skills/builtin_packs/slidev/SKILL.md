@@ -97,7 +97,10 @@ The helper builds the deck and embeds all JavaScript, CSS, fonts, and images
 into `dist/index.html`. The preview cannot load separate files, so the helper
 fails with an explanation if anything still points at one; fix the source and
 run it again rather than working around it. Name the ZIP after the deck when
-useful (for example `quarterly-review.zip`). Pass any warnings it prints about
+useful (for example `quarterly-review.zip`), and keep that exact filename for
+every rebuild in the conversation: artifacts are versioned by filename, so a
+rebuild under a different name (`x.zip` then `x-deck.zip`) shows up as a second,
+duplicate artifact instead of a new version. Pass any warnings it prints about
 unmatched image paths on to your fixes: they mean an image will not show.
 
 Each successful run writes a new artifact version the user sees, and the

@@ -56,9 +56,9 @@ pipeline:
               - CVE-2026-111497
               - CVE-2026-114820
           context: .
-          push: true # TODO
+          push: false
           tags:
-            - 0.9.1.oddyssey2-17 # TODO
+            - 0.9.1.oddyssey2
     "Image build and push":
       branch: "main"
       imageBuild:
@@ -73,12 +73,12 @@ pipeline:
           issueAllowlist:
             - CVE-2026-6653
         context: deployment/sandbox
-        push: true # todo set to false
+        push: false
         tags:
-          - 0.9.1.oddyssey2-7 # todo finalize
-#    "Sandbox image build and push":
-#      branch: "main"
-#      imageBuild:
-#        <<: *sandboxImageBuild
-#        push: true
+          - 0.9.1.oddyssey2
+    "Sandbox image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *sandboxImageBuild
+        push: true
 

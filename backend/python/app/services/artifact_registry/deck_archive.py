@@ -55,7 +55,7 @@ CONTENT_TYPES = {
     ".pdf": "application/pdf",
 }
 
-_STORAGE_SHIM = b"""<script>(function(){for(const key of ['localStorage','sessionStorage']){const values=new Map();const store={getItem:k=>values.has(String(k))?values.get(String(k)):null,setItem:(k,v)=>values.set(String(k),String(v)),removeItem:k=>values.delete(String(k)),clear:()=>values.clear(),key:i=>Array.from(values.keys())[i]??null,get length(){return values.size}};Object.defineProperty(window,key,{value:store,configurable:true});}})();</script>"""
+_STORAGE_SHIM = b"""<script>(function(){for(const key of ['localStorage','sessionStorage']){const values=new Map();const store={getItem:k=>values.has(String(k))?values.get(String(k)):null,setItem:(k,v)=>values.set(String(k),String(v)),removeItem:k=>values.delete(String(k)),clear:()=>values.clear(),key:i=>Array.from(values.keys())[i]??null,get length(){return values.size}};Object.defineProperty(window,key,{value:store,configurable:true});}window.addEventListener('click',e=>{if(e.button!==0||e.defaultPrevented||e.target.closest('a,button,input,textarea,select,summary,video,audio,[role=button],[contenteditable],.slidev-nav,.slidev-controls'))return;const s=getSelection();if(s&&!s.isCollapsed)return;for(const t of ['keydown','keyup'])window.dispatchEvent(new KeyboardEvent(t,{key:'ArrowRight',code:'ArrowRight',keyCode:39,bubbles:true}));});})();</script>"""
 
 
 class InvalidDeckArchive(ValueError):
