@@ -62,6 +62,7 @@ import {
   GmailConnectionCard,
   GoogleDriveConnectionCard,
   GoogleCalendarConnectionCard,
+  TabilityConnectionCard,
   NotionConnectionCard,
   SlackConnectionCard,
   SuperhumanDocsConnectionCard,
@@ -1166,6 +1167,7 @@ function ChatContent() {
           <GmailConnectionCard />
           <GoogleDriveConnectionCard />
           <GoogleCalendarConnectionCard />
+          <TabilityConnectionCard />
           <SuperhumanDocsConnectionCard />
         </Flex>
       </Box>

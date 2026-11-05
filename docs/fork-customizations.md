@@ -52,7 +52,8 @@ The current chat cards cover:
 | Jira | Live Atlassian Rovo MCP and per-user OAuth | Uses the designated Atlassian Rovo instance. The card is labeled Jira for employees. |
 | Gmail | Live Google MCP and per-user OAuth | Uses the organization-configured Gmail MCP instance. |
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
-| Google Calendar | Live Google MCP and per-user OAuth | Uses the official Calendar MCP instance. Employee consent requests the read scopes and `calendar.events.owned` for events on calendars they own. Existing users must reconnect to grant the new scope. Google controls the actual grant and write operations; the service is in Developer Preview. |
+| Google Calendar | Live Google MCP and per-user OAuth | Uses the official Calendar MCP instance. Employee consent requests the read scopes and `calendar.events`, which allows creating events with attendees (invitations) and responding to invitations; `calendar.events.owned` cannot invite others. Existing users must reconnect to grant the new scope. Google controls the actual grant and write operations; the service is in Developer Preview. |
+| Tability | Live custom MCP and per-user OAuth | Custom instance for `https://mcp.tability.app/mcp` (Streamable HTTP, OAuth, not shared admin auth); matched by URL, not by name. Tability issues only public OAuth clients, so dynamic registration for this instance sends `token_endpoint_auth_method: none`; every other server still registers with `client_secret_post`. Only the US cloud host is matched. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
 | OBSales | Custom Streamable HTTP MCP with one administrator-managed shared bearer/API token | Reserved custom instance name `OBSales` (case-insensitive), `typeId` absent, Streamable HTTP transport, API-token auth, and `useAdminAuth=true`. The credential is stored under the instance creator and resolved server-side for employees in that organization. No employee credential setup or Connect action. The card probes discovery and reports only connected/unavailable. Token changes rotate the credential generation; deleting the instance credential revokes the shared connection. |
 
@@ -367,10 +368,19 @@ builds without code splitting, embeds every file as inline code or a `data:`
 URI (including backtick-quoted paths in minified JS), and refuses to write a
 deck that still references another file. Because the agent cannot see the
 slides, the helper also renders Slidev's print view (every slide, every click
-revealed) in headless Chromium and fails the build on text that runs off the
-slide, is cut off by its box, or overlaps other text; `data-layout-ignore`
-exempts deliberate decorative overlaps. The Vite config enables that print view
-without enabling Slidev's download button. Decks built before this helper load
+revealed) in headless Chromium and refuses the deck on text that runs off the
+slide, is cut off by its box, overlaps other text, or has under 3:1 contrast
+with the colour behind it; on an OddBytes logo variant that does not suit its
+background (recognised by content after inlining); on images more than 10%
+outside the slide; and when fewer slides render than `slides.md` defines (it
+first inserts the blank line Slidev needs after each `---`). `data-layout-ignore`
+exempts deliberate decorative overlaps. The check is mandatory: if Chromium
+cannot run, the build fails rather than delivering an unverified deck. The Vite
+config enables the print view without enabling Slidev's download button. The
+sandbox applies the same idea to charts: `sitecustomize.py` patches matplotlib's
+`Figure.savefig` (`deployment/sandbox/python/`) so a figure with overflowing,
+overlapping, tiny or low-contrast text raises instead of writing a file.
+Decks built before this helper load
 separate files and do not preview behind the gateway; regenerate them.
 ZIPs with other filenames can also be previewed when the selected version
 contains `dist/index.html`; ordinary ZIPs remain download-only.

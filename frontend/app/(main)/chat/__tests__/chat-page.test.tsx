@@ -137,6 +137,7 @@ vi.mock('../components/slack-connection-card', () => ({
   GmailConnectionCard: () => <button type="button">Connect</button>,
   GoogleDriveConnectionCard: () => <button type="button">Connect</button>,
   GoogleCalendarConnectionCard: () => <button type="button">Connect</button>,
+  TabilityConnectionCard: () => <button type="button">Connect</button>,
   SuperhumanDocsConnectionCard: () => <button type="button">Connect</button>,
 }));
 
@@ -357,7 +358,7 @@ describe('Chat page — opening a conversation', () => {
     expect(screen.getByText('You get 25 days a year.')).toBeTruthy();
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Message composer' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(8);
+    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(9);
   });
 
   it('restores the collections the last question was scoped to', async () => {

@@ -11,7 +11,7 @@ metadata:
     source: builtin
     requires: [data-analysis]
     pack_name: data-visualization
-    pack_version: 1.0.4
+    pack_version: 1.0.5
 ---
 
 # Data visualization
@@ -50,75 +50,11 @@ Static images cannot be zoomed or fixed by the viewer, so unreadable or cut-off 
 - **Label zero and empty values** (`0`) on bars so a missing bar reads as zero, not as missing data.
 - **No text may overlap other text.** A title, subtitle, and eyebrow label stacked in a header need line gaps measured from their real heights (see `get_window_extent`), not guessed offsets; the check below reports every overlapping pair. Also keep annotations clear of bars and titles; offset them or drop them.
 
-## Check the figure before saving
+## The sandbox checks every saved figure
 
-Run this on the figure just before `savefig`. Do not rely on `analyze_image`: it only works on images the user attached to the chat, not on files you generate.
+Every matplotlib `savefig` (including `plt.savefig` and seaborn) checks the figure first. If any text runs past the image edge, overlaps other text, sticks out of or hides behind a bar or box, overlaps a neighbouring tick label, is smaller than 8 pt, or has less than 3:1 contrast with what is behind it, `savefig` raises `FigureLayoutError` listing each problem and **writes no file**. Read the list, fix the layout (more space between rows, a taller figure, fewer items, shorter text, labels moved clear of bars), and run again. Do not try to work around the check, and do not switch to another library to avoid it.
 
-**Every file written to `$OUTPUT_DIR` becomes a separate artifact version that the user sees**, so a chart saved, fixed, and saved again shows up as several near-identical files. Never save a draft there. Build the figure, run `check_figure`, and call `savefig` into `$OUTPUT_DIR` only when it returns no problems, all in the same `run_code` call. If it returns problems, print them, write nothing, fix the code, and run again. Save the final file exactly once.
-
-```python
-import matplotlib.colors as mc
-import os
-from pathlib import Path
-from matplotlib.patches import Patch
-from matplotlib.text import Text
-
-def _luminance(color):
-    channel = lambda v: v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
-    r, g, b = (channel(v) for v in mc.to_rgb(color))
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-
-def check_figure(fig, min_pt=9, min_contrast=4.5):
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    figure_box = fig.bbox
-    bars = {id(p) for ax in fig.axes for c in ax.containers for p in c}
-    bars |= {id(fig.patch)} | {id(ax.patch) for ax in fig.axes}
-    bars |= {id(fig.patch)} | {id(ax.patch) for ax in fig.axes}
-    boxes = [(p, p.get_window_extent(renderer)) for p in fig.findobj(Patch)
-             if id(p) not in bars and p.get_visible() and p.get_facecolor()[3] > 0.5
-             and p.get_window_extent(renderer).width > 20]
-    problems = []
-    placed = []
-    for text in fig.findobj(Text):
-        label = text.get_text().strip()
-        if not label or not text.get_visible():
-            continue
-        box = text.get_window_extent(renderer)
-        for other_label, other in placed:
-            width = min(box.x1, other.x1) - max(box.x0, other.x0)
-            height = min(box.y1, other.y1) - max(box.y0, other.y0)
-            if width > 4 and height > 0.25 * min(box.height, other.height):
-                problems.append(f"overlaps other text: {label[:40]!r} and {other_label[:40]!r}")
-        placed.append((label, box))
-        if (box.x0 < figure_box.x0 - 1 or box.y0 < figure_box.y0 - 1
-                or box.x1 > figure_box.x1 + 1 or box.y1 > figure_box.y1 + 1):
-            problems.append(f"outside the image: {label[:40]!r}")
-        if text.get_fontsize() < min_pt:
-            problems.append(f"too small ({text.get_fontsize():.0f} pt): {label[:40]!r}")
-        cx, cy = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
-        cards = [(p, b) for p, b in boxes if b.x0 <= cx <= b.x1 and b.y0 <= cy <= b.y1]
-        card = min(cards, key=lambda pb: pb[1].width * pb[1].height, default=None)
-        if card is not None and (box.x0 < card[1].x0 - 1 or box.x1 > card[1].x1 + 1
-                                 or box.y0 < card[1].y0 - 1 or box.y1 > card[1].y1 + 1):
-            problems.append(f"overflows its box: {label[:40]!r}")
-        axes = text.axes
-        inside_axes = axes is not None and axes.bbox.contains(box.x0, box.y0) and axes.bbox.contains(box.x1, box.y1)
-        background = (card[0].get_facecolor() if card is not None
-                      else axes.get_facecolor() if inside_axes else fig.get_facecolor())
-        lighter, darker = sorted((_luminance(text.get_color()), _luminance(background)), reverse=True)
-        if (lighter + 0.05) / (darker + 0.05) < min_contrast:
-            problems.append(f"low contrast against its background: {label[:40]!r}")
-    return problems
-
-problems = check_figure(fig)
-if problems:
-    print("FIX BEFORE SAVING:", *problems, sep="\n- ")
-else:
-    fig.savefig(Path(os.environ["OUTPUT_DIR"]) / "chart.png", dpi=150, bbox_inches="tight")
-```
-
-The check treats any filled rectangle behind text (a KPI card, a panel) as that text's box: it reports text that sticks out of the card and judges contrast against the card color. Bars are ignored. Draw cards as filled `Rectangle` or `FancyBboxPatch` patches so they are checked.
+**Every file written to `$OUTPUT_DIR` becomes a separate artifact version that the user sees**, so never save drafts there: save the final figure once, when it passes.
 
 ## Library choice
 
@@ -128,4 +64,4 @@ The check treats any filled rectangle behind text (a KPI card, a panel) as that 
 
 ## Before finishing
 
-Look at what you actually plotted against what was asked — a common failure mode is generating a technically-valid chart of the wrong slice of data (e.g. totals instead of averages, or the wrong grouping column) because a `data-analysis` step upstream computed something adjacent to, but not exactly, what was requested. Re-read the user's question once more against the chart's title and axes before presenting it. Also confirm `check_figure` printed no problems and that the file was saved only once.
+Look at what you actually plotted against what was asked — a common failure mode is generating a technically-valid chart of the wrong slice of data (e.g. totals instead of averages, or the wrong grouping column) because a `data-analysis` step upstream computed something adjacent to, but not exactly, what was requested. Re-read the user's question once more against the chart's title and axes before presenting it. Also confirm the figure was saved only once.

@@ -11,11 +11,9 @@ interface ChatItemMenuProps {
   /** Called when the dropdown open state changes (keep parent highlighted) */
   onOpenChange?: (open: boolean) => void;
   onRename: () => void;
-  onArchive: () => void;
   onDelete: () => void;
   /** Agent-scoped sidebar: only delete is supported by the API */
   showRename?: boolean;
-  showArchive?: boolean;
   /** Opens the move-to-project picker. Omit to hide the option entirely. */
   onMoveToProject?: () => void;
   /** Unlinks the conversation from its current project. Only shown when the row is already linked. */
@@ -25,17 +23,15 @@ interface ChatItemMenuProps {
 /**
  * Meatball (three-dot) dropdown menu for a chat sidebar item.
  *
- * Shows on hover of the parent row. Options: Rename, Archive, Delete.
+ * Shows on hover of the parent row. Options: Rename, Delete.
  * Matches Figma spec (node 2496:29091).
  */
 export function ChatItemMenu({
   isParentHovered,
   onOpenChange: onOpenChangeProp,
   onRename,
-  onArchive,
   onDelete,
   showRename = true,
-  showArchive = true,
   onMoveToProject,
   onRemoveFromProject,
 }: ChatItemMenuProps) {
@@ -93,19 +89,6 @@ export function ChatItemMenu({
             <Flex align="center" gap="1">
               <MaterialIcon name="drive_file_rename_outline" size={16} color="var(--slate-11)" />
               <Text size="2" style={{ color: 'var(--slate-11)' }}>{t('chat.rename')}</Text>
-            </Flex>
-          </DropdownMenu.Item>
-        )}
-        {showArchive && (
-          <DropdownMenu.Item
-            onClick={(e) => {
-              e.stopPropagation();
-              onArchive();
-            }}
-          >
-            <Flex align="center" gap="1">
-              <MaterialIcon name="archive" size={16} color="var(--slate-11)" />
-              <Text size="2" style={{ color: 'var(--slate-11)' }}>{t('chat.archive')}</Text>
             </Flex>
           </DropdownMenu.Item>
         )}

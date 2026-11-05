@@ -30,6 +30,7 @@ from app.api.routes.mcp_servers import (
     _get_config_service,
     _get_mcp_registry,
     _get_user_context,
+    _is_tability_mcp_instance,
     _mask_secret,
     _resolve_effective_user_auth,
     _resolve_oauth_endpoints,
@@ -717,8 +718,39 @@ class TestBuildOauthAuthorizationUrlDcrReuse:
             )
         scopes = parse_qs(urlparse(result["authorizationUrl"]).query)["scope"][0].split()
         assert "read" in scopes
-        assert ("https://www.googleapis.com/auth/calendar.events.owned" in scopes) is expects_write
+        assert ("https://www.googleapis.com/auth/calendar.events" in scopes) is expects_write
+        assert "https://www.googleapis.com/auth/calendar.events.owned" not in scopes
         assert instance["scopes"] == ["read"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("url", "expected_method"),
+        [
+            ("https://mcp.tability.app/mcp", "none"),
+            ("https://mcp.example.com/v1/sse", "client_secret_post"),
+        ],
+    )
+    async def test_dcr_registers_public_client_only_for_tability(self, url: str, expected_method: str) -> None:
+        instance = self._oauth_instance()
+        instance.update({"url": url, "transport": "streamable_http"})
+        discovered = DiscoveredOAuthMetadata(
+            authorization_endpoint="https://auth.example.com/authorize",
+            token_endpoint="https://auth.example.com/token",
+            registration_endpoint="https://auth.example.com/register",
+        )
+        registered = DCRClient(
+            client_id="cid", client_secret=None,
+            authorization_url="https://auth.example.com/authorize", token_url="https://auth.example.com/token",
+            registered_at=1,
+        )
+        patches = self._patched(discovered=discovered, registered=registered)
+        with patches[0], patches[1], patches[2] as register, patches[3], patches[4], patches[5], patches[6]:
+            await _build_oauth_authorization_url(
+                self._config_service(), instance, "inst-1", "user-1", "org-1", "https://app.example.com",
+                initiated_by="user-1", owner_type="user",
+            )
+
+        assert register.await_args.kwargs["token_endpoint_auth_method"] == expected_method
 
     @pytest.mark.asyncio
     async def test_reuses_shared_dcr_client_without_reregistering(self) -> None:
@@ -1112,3 +1144,35 @@ class TestMcpRetrievalTraceInspection:
             "/services/mcp/retrieval-traces/org-1/index/by-run/",
         )
         assert [run["runId"] for run in result["runs"]] == ["run-1"]
+
+
+class TestIsTabilityMcpInstance:
+    def _instance(self, **overrides) -> dict:
+        base = {"url": "https://mcp.tability.app/mcp", "transport": "streamable_http", "authMode": "oauth"}
+        base.update(overrides)
+        return base
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {},
+            {"url": "https://mcp.tability.app/mcp/"},
+            {"url": "https://MCP.TABILITY.APP/mcp"},
+        ],
+    )
+    def test_matches_per_user_oauth_instance(self, overrides: dict) -> None:
+        assert _is_tability_mcp_instance(self._instance(**overrides)) is True
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"url": "https://mcp-eu.tability.app/mcp"},
+            {"url": "https://mcp.tability.app/mcp?x=1"},
+            {"url": "http://mcp.tability.app/mcp"},
+            {"transport": "sse"},
+            {"authMode": "api_token"},
+            {"useAdminAuth": True},
+        ],
+    )
+    def test_rejects_other_shapes(self, overrides: dict) -> None:
+        assert _is_tability_mcp_instance(self._instance(**overrides)) is False

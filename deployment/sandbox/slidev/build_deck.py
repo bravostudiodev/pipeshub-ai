@@ -29,6 +29,7 @@ SLIDEV_ROOT = Path(os.environ.get("SLIDEV_ROOT", "/opt/slidev"))
 VITE_CONFIG = Path(__file__).with_name("single-file.vite.mjs")
 LAYOUT_CHECK = Path(__file__).with_name("layout_check.js")
 BROWSERS = ("chromium", "chromium-browser", "google-chrome")
+BRAND_DIR = Path(os.environ.get("BRAND_ASSETS_DIR", "/opt/brand-assets/oddbytes"))
 MAX_LAYOUT_ISSUES = 15
 # Matches MAX_MEMBER_BYTES in app/services/artifact_registry/deck_archive.py.
 MAX_INDEX_BYTES = 20 * 1024 * 1024
@@ -55,6 +56,9 @@ _STYLESHEET = re.compile(
 _RESOURCE_HINT = re.compile(
     r'<link\b[^>]*\brel="(?:modulepreload|preload|prefetch|icon)"[^>]*>\s*', re.IGNORECASE
 )
+# Per-slide frontmatter starts with a `key:` line; anything else directly after `---` is slide content.
+_FRONTMATTER_KEY = re.compile(r"^[A-Za-z_][\w-]*\s*:")
+_FENCE = re.compile(r"^\s*(```|~~~)")
 _LAYOUT_REPORT = re.compile(r'<pre id="oddjeeves-layout-report">(.*?)</pre>', re.DOTALL)
 
 mimetypes.add_type("font/otf", ".otf")
@@ -68,7 +72,7 @@ class DeckBuildError(RuntimeError):
 
 
 class LayoutCheckUnavailable(RuntimeError):
-    """The browser layout check could not run; the deck itself may be fine."""
+    """The browser layout check could not run, so the deck cannot be verified."""
 
 
 def _data_uris(dist: Path) -> dict[str, str]:
@@ -137,19 +141,86 @@ def inline_dist(dist: Path) -> tuple[str, list[str]]:
 def _describe(issue: dict) -> str:
     where = f"Slide {issue.get('slide', '?')}"
     text = issue.get("text", "")
-    if issue.get("kind") == "outside":
+    kind = issue.get("kind")
+    if kind == "outside":
         return f"{where}: \"{text}\" extends {issue.get('px')}px past the {issue.get('side')} edge of the slide"
-    if issue.get("kind") == "clipped":
+    if kind == "clipped":
         return f"{where}: \"{text}\" is cut off by {issue.get('px')}px because its box is too small"
+    if kind == "contrast":
+        return (f"{where}: \"{text}\" has {issue.get('ratio')}:1 contrast with its background; "
+                "at least 3:1 is required (text must never be the same colour as what is behind it)")
+    if kind == "logo":
+        other = "white" if issue.get("variant") == "black" else "black"
+        return (f"{where}: the {issue.get('variant')} OddBytes logo sits on a {issue.get('background')} background; "
+                f"use the {other} variant there (black artwork on light backgrounds, white on dark or red)")
+    if kind == "image":
+        return f"{where}: image \"{text}\" has {issue.get('pct')}% of its area outside the slide"
     return f"{where}: \"{text}\" overlaps \"{issue.get('other', '')}\""
 
 
-def check_layout(index_html: str, work: Path) -> list[str]:
-    """Render every slide with all clicks revealed and return layout problems."""
+def brand_fingerprints(brand_dir: Path | None = None) -> dict[str, dict[str, str]]:
+    """Recognisers for the OddBytes logo files once they are inlined as data: URIs.
+
+    SVGs are matched by their whitespace-stripped text (Vite inlines them as
+    URL-encoded text, our inliner as base64; both decode to the same file).
+    PNGs are matched by the start of their base64 payload.
+    """
+    brand_dir = brand_dir or BRAND_DIR
+    fingerprints: dict[str, dict[str, str]] = {"svg": {}, "png": {}}
+    if not brand_dir.is_dir():
+        return fingerprints
+    for path in brand_dir.iterdir():
+        name = path.name
+        variant = "black" if name.startswith("OB_Black_") else "white" if name.startswith("OB_White_") else None
+        if variant is None:
+            continue
+        if path.suffix == ".svg":
+            fingerprints["svg"]["".join(path.read_text(encoding="utf-8").split())] = variant
+        elif path.suffix == ".png":
+            fingerprints["png"][base64.b64encode(path.read_bytes()).decode()[:120]] = variant
+    return fingerprints
+
+
+def count_slides(markdown: str) -> int:
+    """Slides Slidev will render from `slides.md` (hidden/disabled ones excluded)."""
+    lines = markdown.split("\n")
+    in_fence = False
+    index = 0
+    if lines and lines[0].strip() == "---":
+        index = 1
+        while index < len(lines) and lines[index].strip() != "---":
+            index += 1
+        index += 1
+    shown = 1
+    hidden = 0
+    while index < len(lines):
+        line = lines[index]
+        if _FENCE.match(line):
+            in_fence = not in_fence
+        elif not in_fence and line.strip() == "---":
+            shown += 1
+            if index + 1 < len(lines) and _FRONTMATTER_KEY.match(lines[index + 1]):
+                index += 1
+                frontmatter = []
+                while index < len(lines) and lines[index].strip() != "---":
+                    frontmatter.append(lines[index].strip())
+                    index += 1
+                if any(entry.replace(" ", "") in ("hide:true", "disabled:true") for entry in frontmatter):
+                    hidden += 1
+        index += 1
+    return shown - hidden
+
+
+def check_layout(index_html: str, work: Path) -> tuple[list[str], int]:
+    """Render every slide with all clicks revealed; return problems and the slide count."""
     browser = next((path for name in BROWSERS if (path := shutil.which(name))), None)
     if browser is None:
         raise LayoutCheckUnavailable("no Chromium browser is installed")
-    script = "<script>" + LAYOUT_CHECK.read_text(encoding="utf-8") + "</script>"
+    brand = json.dumps(brand_fingerprints()).replace("</", "<\\/")
+    script = (
+        "<script>window.__oddjeevesBrand = " + brand + ";</script>"
+        "<script>" + LAYOUT_CHECK.read_text(encoding="utf-8") + "</script>"
+    )
     # The last </body> is the document's; the inlined bundle may contain the string too.
     head, tag, tail = index_html.rpartition("</body>")
     page_html = head + script + tag + tail if tag else index_html + script
@@ -180,7 +251,36 @@ def check_layout(index_html: str, work: Path) -> list[str]:
         raise LayoutCheckUnavailable(f"unreadable layout report: {error}") from error
     if report.get("error") or not report.get("slides"):
         raise LayoutCheckUnavailable(report.get("error") or "the print view rendered no slides")
-    return list(dict.fromkeys(_describe(issue) for issue in report.get("issues", [])))
+    return list(dict.fromkeys(_describe(issue) for issue in report.get("issues", []))), int(report["slides"])
+
+
+def separate_slides(markdown: str) -> tuple[str, int]:
+    """Insert a blank line after slide separators that are directly followed by content.
+
+    Slidev reads text right after `---` as that slide's frontmatter, so
+    `---\n<!-- 2 -->\n<div>` silently merges two slides into one. Returns the
+    fixed text and the number of separators fixed.
+    """
+    lines = markdown.split("\n")
+    output: list[str] = []
+    fixed = 0
+    in_fence = False
+    separators = 0
+    for index, line in enumerate(lines):
+        output.append(line)
+        if _FENCE.match(line):
+            in_fence = not in_fence
+        if in_fence or line.strip() != "---":
+            continue
+        separators += 1
+        # The first two separators open and close the deck headmatter.
+        if separators <= 2 and lines[0].strip() == "---":
+            continue
+        following = lines[index + 1] if index + 1 < len(lines) else ""
+        if following.strip() and not _FRONTMATTER_KEY.match(following):
+            output.append("")
+            fixed += 1
+    return "\n".join(output), fixed
 
 
 def _copy_source(project: Path, work: Path) -> None:
@@ -230,6 +330,10 @@ def build_deck(project: Path, output: Path) -> list[str]:
         )
     if not (project / "slides.md").is_file():
         raise DeckBuildError(f"{project}/slides.md does not exist")
+    slides = project / "slides.md"
+    fixed_text, fixed = separate_slides(slides.read_text(encoding="utf-8"))
+    if fixed:
+        slides.write_text(fixed_text, encoding="utf-8")
     if any((project / name).exists() for name in ("vite.config.ts", "vite.config.js", "vite.config.mjs")):
         raise DeckBuildError("Remove the project's vite.config file; build_deck.py supplies the build config")
     with tempfile.TemporaryDirectory() as temporary:
@@ -238,19 +342,29 @@ def build_deck(project: Path, output: Path) -> list[str]:
         _run_slidev(work)
         html, warnings = inline_dist(work / "dist")
         try:
-            problems = check_layout(html, Path(temporary))
+            problems, rendered = check_layout(html, Path(temporary))
         except LayoutCheckUnavailable as error:
-            problems = []
-            warnings.append(f"layout check skipped: {error}")
+            raise DeckBuildError(
+                f"The deck could not be verified in a browser ({error}), so it was not delivered. "
+                "This is an environment problem, not a problem with the slides; report it rather than "
+                "retrying with different content."
+            ) from error
+    expected = count_slides(fixed_text)
+    if rendered != expected:
+        raise DeckBuildError(
+            f"slides.md defines {expected} slides but the build rendered {rendered}. Slides are lost when "
+            "text follows a `---` separator directly or a separator sits inside unclosed HTML; put a blank "
+            "line after every `---` and close every tag."
+        )
     if problems:
         shown = "\n".join(f"  - {problem}" for problem in problems[:MAX_LAYOUT_ISSUES])
         more = len(problems) - MAX_LAYOUT_ISSUES
         raise DeckBuildError(
-            "Some slide content does not fit (checked with every click revealed):\n"
+            "The deck was not delivered because some slides are not presentable (checked with every click revealed):\n"
             + shown
             + (f"\n  ... and {more} more" if more > 0 else "")
-            + "\nSplit crowded slides, shorten text, or shrink type and spacing, then rebuild. "
-            "Mark deliberate decorative overlaps with data-layout-ignore."
+            + "\nFix each item (split crowded slides, shorten text, move labels, change colours or the logo "
+            "variant), then rebuild. Mark a deliberate decorative overlap with data-layout-ignore."
         )
     index = html.encode("utf-8")
     if len(index) > MAX_INDEX_BYTES:
@@ -283,10 +397,7 @@ def main(argv: list[str]) -> int:
         print(f"Deck build failed: {error}", file=sys.stderr)
         return 1
     for warning in warnings:
-        if warning.startswith("layout check skipped"):
-            print(f"Warning: {warning}.")
-        else:
-            print(f"Warning: '{warning}' does not match any file in the deck; that image or font will not show.")
+        print(f"Warning: '{warning}' does not match any file in the deck; that image or font will not show.")
     print(f"Wrote {argv[2]} ({Path(argv[2]).stat().st_size:,} bytes) with a self-contained dist/index.html")
     return 0
 

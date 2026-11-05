@@ -44,6 +44,7 @@ import {
   getGmailConnection,
   getGoogleDriveConnection,
   getGoogleCalendarConnection,
+  getTabilityConnection,
   getSuperhumanDocsConnection,
   getObSalesConnection,
   getMcpRetrievalTraces,
@@ -78,6 +79,7 @@ export function createMcpServersRouter(container: Container): Router {
   router.get('/gmail-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGmailConnection(config));
   router.get('/google-drive-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGoogleDriveConnection(config));
   router.get('/google-calendar-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getGoogleCalendarConnection(config));
+  router.get('/tability-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getTabilityConnection(config));
   router.get('/superhuman-docs-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getSuperhumanDocsConnection(config));
   router.get('/obsales-connection', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getObSalesConnection(config));
   router.get('/retrieval-traces', authMiddleware.authenticate, requireScopes(OAuthScopeNames.MCP_READ), getMcpRetrievalTraces(config));

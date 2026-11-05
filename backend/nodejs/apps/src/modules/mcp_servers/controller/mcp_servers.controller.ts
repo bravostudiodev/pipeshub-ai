@@ -298,6 +298,12 @@ export const getGoogleCalendarConnection = proxyMcp(
   'Get Google Calendar connection status',
 );
 
+export const getTabilityConnection = proxyMcp(
+  HttpMethod.GET,
+  () => '/tability-connection',
+  'Get Tability connection status',
+);
+
 export const getObSalesConnection = proxyMcp(
   HttpMethod.GET,
   () => '/obsales-connection',

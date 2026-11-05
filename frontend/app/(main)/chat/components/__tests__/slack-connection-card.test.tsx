@@ -88,6 +88,17 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('ObSalesConnectionCard', () => {
+  it('renders immediately as checking while the live status probe runs', async () => {
+    let finish: (status: { configured: boolean; isConnected: boolean }) => void = () => undefined;
+    getObSalesStatus.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<Theme><ObSalesConnectionCard /></Theme>);
+    expect(screen.getByText('OBSales')).toBeTruthy();
+    expect(screen.getByText('Checking…')).toBeTruthy();
+    finish({ configured: true, isConnected: true });
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    expect(screen.queryByText('Checking…')).toBeNull();
+  });
+
   it('shows connected when the shared connection is available and offers no Connect action', async () => {
     getObSalesStatus.mockResolvedValue({ configured: true, isConnected: true });
     render(<Theme><ObSalesConnectionCard /></Theme>);

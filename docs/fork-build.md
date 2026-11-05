@@ -113,8 +113,12 @@ renderer image or tool. Decks are built only through
 disables code splitting and embeds all JS, CSS, fonts, and images into one
 `dist/index.html`. It then opens every slide in headless Chromium (installed in
 the image) with all clicks revealed and fails the build when text leaves the
-slide, is clipped, or overlaps other text, so the agent fixes the layout before
-delivering. Changing that helper, its Vite config, or `layout_check.js` requires rebuilding
+slide, is clipped, overlaps other text or lacks contrast, when a logo variant
+does not suit its background, when an image leaves the slide, or when slides
+are lost, so the agent fixes the deck before delivering. The image also installs
+`deployment/sandbox/python/` into site-packages, which makes every matplotlib
+`savefig` refuse unreadable figures. Changing the helper, its Vite config,
+`layout_check.js`, or the figure check requires rebuilding
 and publishing the sandbox image. The image also installs the Inter font family and
 provides OddBytes logos, icons, and stickers under `/opt/brand-assets/oddbytes/`
 for explicitly branded work. Logos and icons are available as self-contained SVGs

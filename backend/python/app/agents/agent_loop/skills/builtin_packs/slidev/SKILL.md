@@ -11,7 +11,7 @@ metadata:
     status: active
     source: builtin
     pack_name: slidev
-    pack_version: 1.0.9
+    pack_version: 1.0.12
 ---
 
 # Slidev - Presentation Slides for Developers
@@ -66,7 +66,12 @@ Content here
 More content
 ```
 
-Use `run_code` with Python and a generous timeout (e.g. 180 seconds). Create
+Always leave a blank line after each `---` slide separator. Text directly
+after `---` is read as that slide's frontmatter, which silently merges two
+slides into one (the helper repairs this, but write it correctly).
+
+Use `run_code` with Python and `timeout: 600` (calls that run the build helper
+always get at least 600 seconds). Create
 the project folder in the working directory (`deck/`), never inside
 `$OUTPUT_DIR`: every file under `$OUTPUT_DIR` is delivered as its own artifact,
 so source files, fonts, and logos placed there appear as separate downloads
@@ -101,10 +106,19 @@ and rebuild until it succeeds; do not rebuild afterwards for small polish, and
 do not save extra copies, drafts, or PNG exports into `$OUTPUT_DIR`.
 
 The helper also opens every slide in headless Chromium with all clicks
-revealed and fails if any text runs off the slide, is cut off by its box, or
-overlaps other text (for example a footer). The error names the slide and the
-text. Fix the layout as described below and run the helper again; do not
-deliver a deck from a failed build.
+revealed and refuses to deliver the deck if:
+
+- any text runs off the slide, is cut off by its box, or overlaps other text;
+- any text has less than 3:1 contrast with the colour behind it (text in the
+  same or nearly the same colour as its background);
+- an OddBytes logo variant does not suit its background (black artwork belongs
+  on light backgrounds; white artwork on dark or red ones);
+- an image has more than 10% of its area outside the slide;
+- the build rendered fewer slides than `slides.md` defines.
+
+The error names the slide and the element. Fix the source and run the helper
+again; there is no way to deliver a deck from a failed build, so never claim
+one was produced.
 
 ## Layout: everything must fit the slide
 
@@ -126,6 +140,19 @@ every click revealed:
   splitting or shortening content, not by shrinking body text below 16 px.
 - Add `data-layout-ignore` only to a deliberate decorative overlap, such as a
   large background numeral behind a title, never to real content.
+
+## Colour and logo rules
+
+- Decide each slide's background first, then choose every text colour against
+  it: dark text (`#212121`) on white, sand or light grey; white text on black,
+  dark grey or brand red (`#FC4539`). Never reuse a dark-slide text colour on a
+  light slide or the reverse.
+- Captions, footers and notes use the same rule; "subtle" grey text must still
+  reach 3:1 contrast (on white, no lighter than `#767676`).
+- Use `OB_Black_*` logos and icons only on light backgrounds and `OB_White_*`
+  only on dark or red backgrounds. A footer component that appears on every
+  slide must pick the variant from that slide's background (for example a
+  `dark` prop), not use one file everywhere.
 
 ## Styling: global CSS goes in `style.css`
 

@@ -58,7 +58,7 @@ pipeline:
           context: .
           push: true # TODO
           tags:
-            - 0.9.1.oddyssey2-16 # TODO
+            - 0.9.1.oddyssey2-17 # TODO
     "Image build and push":
       branch: "main"
       imageBuild:
@@ -75,7 +75,7 @@ pipeline:
         context: deployment/sandbox
         push: true # todo set to false
         tags:
-          - 0.9.1.oddyssey2-6 # todo finalize
+          - 0.9.1.oddyssey2-7 # todo finalize
 #    "Sandbox image build and push":
 #      branch: "main"
 #      imageBuild:

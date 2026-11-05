@@ -15,7 +15,7 @@ import { catalogIdentityFromToken, notifyMcpCatalogChanged } from '@/chat/mcp-ca
 import { useAuthStore } from '@/lib/store/auth-store';
 
 const initialStatus: SlackConnectionStatus = { configured: false, isConnected: false };
-type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'superhuman';
+type Provider = 'slack' | 'notion' | 'miro' | 'atlassian' | 'gmail' | 'google-drive' | 'google-calendar' | 'tability' | 'superhuman';
 
 function McpConnectionCard({ provider }: { provider: Provider }) {
   const { t } = useTranslation();
@@ -33,7 +33,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             ? 'Google Drive'
             : provider === 'google-calendar'
               ? 'Google Calendar'
-              : 'Superhuman Docs / Coda';
+              : provider === 'tability'
+                ? 'Tability'
+                : 'Superhuman Docs / Coda';
   const i18nPrefix = `chat.${provider}Connection`;
   const statusRequest = provider === 'slack'
     ? McpServersApi.getSlackConnection
@@ -49,7 +51,9 @@ function McpConnectionCard({ provider }: { provider: Provider }) {
             ? McpServersApi.getGoogleDriveConnection
             : provider === 'google-calendar'
               ? McpServersApi.getGoogleCalendarConnection
-              : McpServersApi.getSuperhumanDocsConnection;
+              : provider === 'tability'
+                ? McpServersApi.getTabilityConnection
+                : McpServersApi.getSuperhumanDocsConnection;
   const identity = useAuthStore((s) => catalogIdentityFromToken(s.accessToken));
   const [connection, setConnection] = useState<SlackConnectionStatus>(initialStatus);
   const [loading, setLoading] = useState(true);
@@ -332,14 +336,19 @@ export function ObSalesConnectionCard() {
     return () => { active = false; };
   }, []);
 
-  if (available === null) return null;
-
-  const label = available ? 'Connected' : 'Unavailable';
+  // The status call probes the OBSales server live (seconds); render at once so
+  // the card does not pop in after its neighbours.
+  const label = available === null ? 'Checking…' : available ? 'Connected' : 'Unavailable';
+  const icon = available === null
+    ? <MaterialIcon name="sync" size={14} color="var(--slate-9)" style={{ animation: 'spin 1s linear infinite' }} />
+    : available
+      ? <MaterialIcon name="check_circle" size={14} color="var(--jade-9)" />
+      : <MaterialIcon name="info" size={14} color="var(--slate-9)" />;
   return (
     <Flex align="center" gap="2" px="2" py="1" style={{ minHeight: 34, flexShrink: 0, border: '1px solid var(--slate-5)', borderRadius: 'var(--radius-3)', background: 'var(--color-panel)' }} aria-label={`OBSales ${label}`}>
       <PipesHubIcon size={20} />
       <Text size="2" weight="medium" style={{ color: 'var(--slate-12)' }}>OBSales</Text>
-      {available ? <MaterialIcon name="check_circle" size={14} color="var(--jade-9)" /> : <MaterialIcon name="info" size={14} color="var(--slate-9)" />}
+      {icon}
       <Text size="1" color="gray" role="status">{label}</Text>
     </Flex>
   );
@@ -371,6 +380,10 @@ export function GoogleDriveConnectionCard() {
 
 export function GoogleCalendarConnectionCard() {
   return <McpConnectionCard provider="google-calendar" />;
+}
+
+export function TabilityConnectionCard() {
+  return <McpConnectionCard provider="tability" />;
 }
 
 export function SuperhumanDocsConnectionCard() {

@@ -67,6 +67,10 @@ RUN uv pip install --system --no-cache \
     xlsxwriter \
     jinja2
 
+# Every matplotlib savefig refuses figures with overflowing, overlapping, tiny
+# or low-contrast text (sitecustomize patches Figure.savefig on first import).
+COPY python/sitecustomize.py python/oddjeeves_figure_check.py /usr/local/lib/python3.12/site-packages/
+
 # Directories the sandbox user needs to write into at runtime.
 # /src   — container cwd; programs write output files here
 # /output — $OUTPUT_DIR; alternate artifact output path

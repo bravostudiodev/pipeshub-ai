@@ -333,6 +333,14 @@ class PipesHubCodingSandboxTool(CodingSandboxTool):
     only at sandbox creation — so passing `input_artifacts` alongside an
     explicit `sandbox_id` works the same as on a fresh sandbox."""
 
+    # A Slidev build plus its headless layout check outlasts the 30 s default,
+    # and a model that omits `timeout` would otherwise kill every deck build.
+    _DECK_BUILD_HELPER = "/opt/slidev/build_deck.py"
+    _DECK_BUILD_TIMEOUT_S = 600.0
+
+    def minimum_timeout(self, code: str) -> float:
+        return self._DECK_BUILD_TIMEOUT_S if self._DECK_BUILD_HELPER in code else 0.0
+
     @property
     def parameters(self) -> list[ToolParameter]:
         return [

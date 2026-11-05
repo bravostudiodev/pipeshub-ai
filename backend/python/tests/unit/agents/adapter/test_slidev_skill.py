@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[6]
 
 def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     skill = (ROOT / "backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/SKILL.md").read_text()
-    assert "pack_version: 1.0.9" in skill
+    assert "pack_version: 1.0.12" in skill
     assert "run_code" in skill
     assert "/opt/slidev/build_deck.py" in skill
     assert "http.server" not in skill
@@ -23,6 +23,8 @@ def test_slidev_skill_uses_sandbox_and_preinstalled_dependencies() -> None:
     assert "do not save extra copies" in skill
     assert "never inside\n`$OUTPUT_DIR`" in skill
     assert "data-layout-ignore" in skill and "headless Chromium" in skill
+    assert "3:1 contrast" in skill and "OB_White_*" in skill
+    assert "fewer slides than `slides.md` defines" in skill
 
 
 def test_sandbox_slidev_dependencies_are_pinned() -> None:
@@ -42,6 +44,8 @@ def test_sandbox_slidev_dependencies_are_pinned() -> None:
     assert "COPY slidev/build_deck.py slidev/single-file.vite.mjs slidev/layout_check.js /opt/slidev/" in dockerfile
     assert "fonts-inter" in dockerfile
     assert "chromium" in dockerfile
+    assert "COPY python/sitecustomize.py python/oddjeeves_figure_check.py /usr/local/lib/python3.12/site-packages/" in dockerfile
+    assert "FROM python:3.12-slim" in dockerfile  # the COPY target above is version-specific
     assert "COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/" in dockerfile
     assets = root / "brand-assets/oddbytes"
     logos = {

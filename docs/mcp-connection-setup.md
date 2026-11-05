@@ -27,7 +27,7 @@ Ask the Google Cloud project administrator to:
    https://www.googleapis.com/auth/calendar.calendarlist.readonly
    https://www.googleapis.com/auth/calendar.events.freebusy
    https://www.googleapis.com/auth/calendar.events.readonly
-   https://www.googleapis.com/auth/calendar.events.owned
+   https://www.googleapis.com/auth/calendar.events
    ```
 
 4. Create an OAuth 2.0 client of type **Web application**. Add this exact
@@ -49,8 +49,8 @@ The OddJeeves workspace administrator then:
 
 1. Opens **Workspace → MCP Servers** and adds the built-in **Google Calendar**
    catalog entry. The template supplies the hosted endpoint and Google OAuth
-   endpoints. Employee authorization requests the read scopes and the owned-calendar
-   event scope above, including for existing instances.
+   endpoints. Employee authorization requests the read scopes and the
+   `calendar.events` scope above, including for existing instances.
 2. Saves the instance and enters the OAuth client ID and secret in that
    instance's OAuth client configuration. Keep OAuth authentication user-bound;
    do not enable shared administrator authentication.
@@ -58,7 +58,11 @@ The OddJeeves workspace administrator then:
    clicks **Connect** on the Google Calendar card and authorizes their own
    Google account. Existing users must reconnect to grant the new scope; an
    existing token or token refresh does not gain it automatically. The scope
-   permits event changes on calendars the user owns, not arbitrary shared calendars.
+   permits creating, changing, and deleting events on any calendar the user can
+   access, including inviting attendees and responding to invitations. It does
+   not grant calendar settings or sharing changes. The narrower
+   `calendar.events.owned` scope is not sufficient: Google rejects invitations
+   because they write to attendees' calendars.
    Google's MCP service and workspace policy determine whether a write succeeds.
 
 The chart's Squid allowlist must contain `calendarmcp.googleapis.com`. The
@@ -68,10 +72,26 @@ browser authorization setup and server-side token exchange. Do not add
 the API service enabled in the Google Cloud project, while the app's request is
 to `calendarmcp.googleapis.com`.
 
-The hosted Calendar MCP may advertise tools that create, update, or delete
-events. This template requests only Google's documented read scopes, so the
-user's OAuth grant does not authorize those write operations. Keep the Google
-OAuth Data Access scopes and the MCP instance scopes read-only.
+The hosted Calendar MCP advertises tools that create, update, or delete
+events and respond to invitations. The stored MCP instance scopes stay
+read-only; OddJeeves adds `calendar.events` only to each employee's own consent
+request, never to shared or agent-owned credentials. `calendar.events` is a
+sensitive scope, so an External OAuth app needs Google verification; an
+Internal Workspace app does not.
+
+## Tability
+
+Add it from **Workspace → MCP Servers → Add MCP Server** with Streamable HTTP,
+URL `https://mcp.tability.app/mcp`, and OAuth 2.0 with the authorization URL,
+token URL, scopes and client credentials left blank (OddJeeves discovers them
+and registers itself). Keep OAuth user-bound. The employee's Tability user
+needs **API Access Enabled** in the Tability workspace settings.
+
+The chart's Squid allowlist must contain `mcp.tability.app`, `tability.app`
+(authorization server metadata and authorize page) and `api.tability.app`
+(dynamic registration and token endpoints). Without `tability.app` discovery
+fails and the connect step reports that the server "does not support dynamic
+client registration".
 
 ## Adding another MCP connection to this fork
 

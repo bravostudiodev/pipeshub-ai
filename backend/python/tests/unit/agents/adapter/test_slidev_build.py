@@ -87,7 +87,7 @@ def test_zip_holds_source_and_a_preview_ready_index(tmp_path: Path, monkeypatch:
         _dist(work)
 
     monkeypatch.setattr(build_deck, "_run_slidev", fake_slidev)
-    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: [])
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
     output = tmp_path / "out/deck.zip"
     build_deck.build_deck(project, output)
 
@@ -96,6 +96,24 @@ def test_zip_holds_source_and_a_preview_ready_index(tmp_path: Path, monkeypatch:
     assert names == {"dist/index.html", "slides.md", "style.css", "public/logo.svg", "README.md"}
     files = read_deck_archive(output.read_bytes())
     assert set(files) == {"index.html"}
+
+
+def test_content_right_after_a_separator_starts_a_new_slide() -> None:
+    deck = (
+        "---\ntheme: default\ntitle: Deck\n---\n\n# Cover\n\n"
+        "---\n<!-- 2 -->\n<div>Two</div>\n\n"
+        "---\nlayout: center\n---\n\n# Three\n\n"
+        "---\n# Four\n\n"
+        "```md\n---\n<!-- not a slide -->\n```\n"
+    )
+    fixed, count = build_deck.separate_slides(deck)
+
+    assert count == 2
+    assert "---\n\n<!-- 2 -->" in fixed
+    assert "---\n\n# Four" in fixed
+    assert "---\nlayout: center\n---" in fixed
+    assert "---\n<!-- not a slide -->" in fixed
+    assert fixed.startswith("---\ntheme: default\ntitle: Deck\n---\n")
 
 
 def test_refuses_a_project_inside_the_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,22 +143,46 @@ def _project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_layout_problems_fail_the_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(tmp_path, monkeypatch)
-    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ['Slide 13: "Research" overlaps "Jeeves QA"'])
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: (['Slide 13: "Research" overlaps "Jeeves QA"'], 1))
     output = tmp_path / "deck.zip"
     with pytest.raises(build_deck.DeckBuildError, match='Slide 13: "Research" overlaps'):
         build_deck.build_deck(project, output)
     assert not output.exists()
 
 
-def test_a_missing_browser_skips_the_layout_check_with_a_warning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_unverifiable_deck_is_not_delivered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(tmp_path, monkeypatch)
     monkeypatch.setattr(build_deck.shutil, "which", lambda name: None)
     output = tmp_path / "deck.zip"
-    warnings = build_deck.build_deck(project, output)
-    assert output.exists()
-    assert "layout check skipped: no Chromium browser is installed" in warnings
+    with pytest.raises(build_deck.DeckBuildError, match="could not be verified in a browser"):
+        build_deck.build_deck(project, output)
+    assert not output.exists()
+
+
+def test_a_build_that_loses_slides_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path, monkeypatch)
+    (project / "slides.md").write_text("---\ntitle: x\n---\n\n# One\n\n---\n\n# Two\n\n---\nhide: true\n---\n\n# Hidden\n")
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
+    with pytest.raises(build_deck.DeckBuildError, match="defines 2 slides but the build rendered 1"):
+        build_deck.build_deck(project, tmp_path / "deck.zip")
+
+
+def test_count_slides_matches_slidev_rules() -> None:
+    deck = (
+        "---\ntheme: default\n---\n\n# One\n\n---\nlayout: center\n---\n\n# Two\n\n"
+        "---\n\n```md\n---\n---\n```\n\n---\ndisabled: true\n---\n\n# Off\n\n---\n\n# Four\n"
+    )
+    assert build_deck.count_slides(deck) == 4
+    assert build_deck.count_slides("# Only slide, no headmatter\n") == 1
+
+
+def test_brand_fingerprints_recognise_both_variants(tmp_path: Path) -> None:
+    (tmp_path / "OB_Black_Logo.svg").write_text("<svg>\n  <path d='M0 0'/>\n</svg>")
+    (tmp_path / "OB_White_Icon.png").write_bytes(b"\x89PNG" + bytes(200))
+    (tmp_path / "Sticker-HB.png").write_bytes(b"\x89PNG")
+    prints = build_deck.brand_fingerprints(tmp_path)
+    assert prints["svg"] == {"<svg><pathd='M00'/></svg>": "black"}
+    assert list(prints["png"].values()) == ["white"]
 
 
 def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,6 +191,9 @@ def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pyte
         {"slide": 13, "kind": "outside", "text": "Research deck", "side": "bottom", "px": 140},
         {"slide": 4, "kind": "clipped", "text": "Long card", "px": 30},
         {"slide": 13, "kind": "overlap", "text": "Aleksandar", "other": "Jeeves QA"},
+        {"slide": 2, "kind": "contrast", "text": "Subtitle", "ratio": 1.2},
+        {"slide": 1, "kind": "logo", "variant": "black", "background": "dark"},
+        {"slide": 5, "kind": "image", "text": "hero", "pct": 40},
     ]
     dom = '<pre id="oddjeeves-layout-report">' + html.escape(json.dumps({"slides": 14, "issues": issues})) + "</pre>"
     browser = tmp_path / "chromium"
@@ -156,10 +201,17 @@ def test_browser_report_is_described_per_slide(tmp_path: Path, monkeypatch: pyte
     browser.chmod(0o755)
     monkeypatch.setattr(build_deck.shutil, "which", lambda name: str(browser))
 
-    assert build_deck.check_layout("<html><body></body></html>", tmp_path) == [
+    problems, rendered = build_deck.check_layout("<html><body></body></html>", tmp_path)
+    assert rendered == 14
+    assert problems == [
         'Slide 13: "Research deck" extends 140px past the bottom edge of the slide',
         'Slide 4: "Long card" is cut off by 30px because its box is too small',
         'Slide 13: "Aleksandar" overlaps "Jeeves QA"',
+        'Slide 2: "Subtitle" has 1.2:1 contrast with its background; at least 3:1 is required '
+        '(text must never be the same colour as what is behind it)',
+        "Slide 1: the black OddBytes logo sits on a dark background; use the white variant there "
+        "(black artwork on light backgrounds, white on dark or red)",
+        'Slide 5: image "hero" has 40% of its area outside the slide',
     ]
 
 
@@ -184,18 +236,45 @@ body { margin: 0; font: 20px sans-serif; }
   <div data-layout-ignore style="position: absolute; top: 120px; font-size: 200px">13</div>
   <h1 style="position: absolute; top: 200px">Title over a decorative numeral</h1>
 </div>
+<div class="print-slide-container" id="004-01" style="width: 980px; height: 552px; background: #212121">
+  <p style="color: #2a2a2a; position: absolute; top: 40px">Nearly invisible</p>
+  <p style="color: #FC4539; position: absolute; top: 120px">Red on black is fine</p>
+  <img alt="black logo" src="BLACK_LOGO" style="position: absolute; top: 200px; width: 100px">
+  <div style="position: absolute; top: 320px; background: #ffffff; padding: 20px"><img alt="white logo" src="WHITE_LOGO" style="width: 100px"></div>
+  <img alt="hero" src="BLACK_LOGO" style="position: absolute; left: 900px; top: 400px; width: 200px">
+</div>
 </body></html>"""
+
+BLACK_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0h10v10z' fill='#000'/></svg>"
+WHITE_SVG = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0 0h10v10z' fill='#fff'/></svg>"
 
 
 @pytest.mark.skipif(
     not any(shutil.which(name) for name in build_deck.BROWSERS), reason="needs a local Chromium"
 )
-def test_layout_check_script_finds_overflow_clipping_and_overlap(tmp_path: Path) -> None:
-    problems = build_deck.check_layout(PRINT_VIEW, tmp_path)
+def test_layout_check_script_finds_overflow_clipping_and_overlap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import base64
+
+    brand = tmp_path / "brand"
+    brand.mkdir()
+    (brand / "OB_Black_Logo.svg").write_text(BLACK_SVG)
+    (brand / "OB_White_Logo.svg").write_text(WHITE_SVG)
+    monkeypatch.setattr(build_deck, "BRAND_DIR", brand)
+    page = PRINT_VIEW.replace(
+        "BLACK_LOGO", "data:image/svg+xml;base64," + base64.b64encode(BLACK_SVG.encode()).decode()
+    ).replace("WHITE_LOGO", "data:image/svg+xml," + WHITE_SVG.replace("#", "%23").replace("'", "%27"))
+
+    problems, rendered = build_deck.check_layout(page, tmp_path)
+    assert rendered == 4
 
     assert not any(problem.startswith("Slide 1:") for problem in problems)
     assert any(problem.startswith('Slide 2: "Row six" extends') and "bottom edge" in problem for problem in problems)
     assert 'Slide 2: "Row five" overlaps "Jeeves QA"' in problems
     assert any(problem.startswith('Slide 3: "First line') and "is cut off" in problem for problem in problems)
     assert not any("decorative numeral" in problem or '"13"' in problem for problem in problems)
-    assert len(problems) == 3, problems
+    assert 'Slide 4: "Nearly invisible" has 1.1:1 contrast' in "\n".join(problems)
+    assert not any("Red on black" in problem for problem in problems)
+    assert "Slide 4: the black OddBytes logo sits on a dark background" in "\n".join(problems)
+    assert "Slide 4: the white OddBytes logo sits on a light background" in "\n".join(problems)
+    assert any(problem.startswith('Slide 4: image "hero" has') for problem in problems)
+    assert len(problems) == 7, problems

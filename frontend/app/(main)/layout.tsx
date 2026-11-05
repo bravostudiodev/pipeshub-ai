@@ -8,7 +8,7 @@ import 'react-pdf-highlighter/dist/esm/style/Highlight.css';
 import 'react-pdf-highlighter/dist/esm/style/AreaHighlight.css';
 import 'react-pdf-highlighter/dist/esm/style/Tip.css';
 import 'react-pdf-highlighter/dist/esm/style/MouseSelection.css';
-import { Flex, Box, Text, IconButton } from "@radix-ui/themes"
+import { Flex, Box, IconButton } from "@radix-ui/themes"
 import { MaterialIcon } from "../components/ui/MaterialIcon"
 import { ThemeProvider, ThemeScript } from "../components/theme-provider"
 import { SWRConfig } from "swr"
@@ -54,7 +54,6 @@ export default function RootLayout({
   sidebar: React.ReactNode
 }) {
   const [mounted, setMounted] = useState(false)
-  const { t } = useTranslation()
   const language = useLanguageStore((state) => state.language)
 
   // Set mounted flag and sync i18n after hydration
@@ -95,13 +94,6 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <OrgUrlCleaner />
             </Suspense>
-            {/* Landscape block — pure CSS visibility, no JS */}
-            <div className="landscape-block-overlay">
-              <MaterialIcon name="screen_rotation" size={48} color="var(--gray-11)" />
-              <Text size="3" style={{ color: 'var(--gray-11)', maxWidth: '220px' }}>
-                {t('common.rotateLandscape')}
-              </Text>
-            </div>
             <ServerUrlGuard>
               <AuthGuard>
                 <HealthGate>

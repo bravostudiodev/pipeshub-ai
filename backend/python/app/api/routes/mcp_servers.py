@@ -878,6 +878,7 @@ async def _resolve_oauth_client(
     discovered: Optional[DiscoveredOAuthMetadata],
     authorization_url: Optional[str],
     token_url: Optional[str],
+    token_endpoint_auth_method: str = "client_secret_post",
 ) -> tuple[str, Optional[str], bool]:
     """Resolve `(clientId, clientSecret, isDcr)`, in the same priority order as
     `token_refresh.resolve_client_credentials` — legacy per-owner DCR client, then the
@@ -909,6 +910,7 @@ async def _resolve_oauth_client(
                 redirect_uri=redirect_uri,
                 authorization_url=authorization_url or discovered.authorization_endpoint or "",
                 token_url=token_url or discovered.token_endpoint or "",
+                token_endpoint_auth_method=token_endpoint_auth_method,
             )
         except dcr_module.DCRError as e:
             # `DCRError`'s message embeds the registration endpoint's raw response body
@@ -976,7 +978,9 @@ async def _build_oauth_authorization_url(
     # The secret is intentionally discarded here — see the state_record comment below on why
     # it is re-resolved at callback/exchange time instead of being carried through this flow.
     client_id, _client_secret, is_dcr = await _resolve_oauth_client(
-        config_service, instance_id, owner_id, redirect_uri, discovered, authorization_url, token_url
+        config_service, instance_id, owner_id, redirect_uri, discovered, authorization_url, token_url,
+        # Tability only registers public (PKCE, no secret) clients and rejects client_secret_post.
+        token_endpoint_auth_method="none" if _is_tability_mcp_instance(instance) else "client_secret_post",
     )
 
     if not authorization_url or not token_url:
@@ -987,13 +991,15 @@ async def _build_oauth_authorization_url(
     # (Atlassian's MCP AS metadata advertises no scopes_supported at all).
     scopes = instance.get("scopes") or (discovered.scopes_supported if discovered else None)
     # Existing catalog instances retain their stored read-only scopes. Add the
-    # owned-calendar grant to each employee's new consent request, without
-    # changing stored grants or extending it to custom servers/service accounts.
+    # event-write grant to each employee's new consent request, without changing
+    # stored grants or extending it to custom servers/service accounts.
+    # calendar.events (not .owned) is required: inviting attendees and responding
+    # to invitations touch events on calendars the user does not own.
     if owner_type == "user" and _is_google_calendar_mcp_instance(instance):
-        owned_scope = "https://www.googleapis.com/auth/calendar.events.owned"
+        events_scope = "https://www.googleapis.com/auth/calendar.events"
         scopes = list(scopes or [])
-        if owned_scope not in scopes:
-            scopes.append(owned_scope)
+        if events_scope not in scopes:
+            scopes.append(events_scope)
 
     state = dcr_module.generate_state()
     code_verifier = dcr_module.generate_code_verifier()
@@ -1620,6 +1626,24 @@ def _is_google_calendar_mcp_instance(instance: dict[str, Any]) -> bool:
     )
 
 
+def _is_tability_mcp_instance(instance: dict[str, Any]) -> bool:
+    """Match the hosted Tability MCP endpoint configured for per-user OAuth."""
+    url = instance.get("url")
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == "mcp.tability.app"
+        and parsed.path.rstrip("/") == "/mcp"
+        and not parsed.query
+        and not parsed.fragment
+        and instance.get("transport") == MCPTransport.STREAMABLE_HTTP.value
+        and instance.get("authMode") == MCPAuthMode.OAUTH.value
+        and not instance.get("useAdminAuth", False)
+    )
+
+
 def _is_obsales_mcp_instance(instance: dict[str, Any]) -> bool:
     """Reserved OBSales boundary: explicit name plus custom Streamable HTTP/API token."""
     return (
@@ -1733,6 +1757,12 @@ async def get_google_drive_connection(request: Request) -> dict[str, Any]:
 async def get_google_calendar_connection(request: Request) -> dict[str, Any]:
     """Return only Google Calendar MCP availability and the caller's own connection state."""
     return await _get_designated_mcp_connection(request, _is_google_calendar_mcp_instance)
+
+
+@router.get("/tability-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])
+async def get_tability_connection(request: Request) -> dict[str, Any]:
+    """Return only Tability MCP availability and the caller's own connection state."""
+    return await _get_designated_mcp_connection(request, _is_tability_mcp_instance)
 
 
 @router.get("/obsales-connection", dependencies=[Depends(require_scopes(OAuthScopes.MCP_READ))])

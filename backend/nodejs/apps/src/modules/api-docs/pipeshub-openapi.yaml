@@ -16377,6 +16377,51 @@ paths:
         '403':
           description: Caller is not permitted to use this API
 
+  /mcp-servers/tability-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Tability MCP connection status
+      description: |
+        Returns whether the organization's designated Tability MCP instance is
+        configured and whether the authenticated user has their own saved OAuth
+        credentials. The instance must use https://mcp.tability.app/mcp,
+        Streamable HTTP, and per-user OAuth. Credentials are never returned.
+      operationId: getTabilityMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tability connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
   /mcp-servers/superhuman-docs-connection:
     get:
       tags:

@@ -303,6 +303,10 @@ async def _upload_staged_files(backend: Any) -> list[str]:
 class CodingSandboxTool(Tool):
     """`run_code` — write and run a standalone TypeScript/Python program."""
 
+    def minimum_timeout(self, code: str) -> float:
+        """Lower bound on the timeout for `code`, for known long-running work."""
+        return 0.0
+
     def __init__(
         self,
         manager: SandboxManager,
@@ -486,6 +490,7 @@ class CodingSandboxTool(Tool):
             language = detected
 
         resolved_timeout = timeout if timeout is not None else self._default_timeout
+        resolved_timeout = max(resolved_timeout, self.minimum_timeout(code))
         request = CodeRequest(
             code=code,
             language=language,
