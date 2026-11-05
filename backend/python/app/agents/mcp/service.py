@@ -85,11 +85,26 @@ SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE = (
 )
 
 
+def is_obsales_shared_instance(instance: dict[str, Any]) -> bool:
+    """Stable designation boundary for the sole shared-credential exception.
+
+    Require the reserved, case-insensitive name plus custom Streamable HTTP/API-token
+    configuration. The admin name is the explicit designation; do not infer from URL/type.
+    """
+    return (
+        str(instance.get("name", "")).strip().casefold() == "obsales"
+        and instance.get("isCustom") is True
+        and instance.get("typeId") is None
+        and instance.get("transport") == "streamable_http"
+        and instance.get("authMode") == MCPAuthMode.API_TOKEN.value
+    )
+
+
 def uses_shared_admin_credential(instance: dict[str, Any]) -> bool:
-    """An instance whose token/header credential is the admin's, used for every caller. OAuth is
-    always per caller, so `useAdminAuth` only shares api_token/headers credentials."""
-    return bool(instance.get("useAdminAuth")) and instance.get("authMode") in (
-        MCPAuthMode.API_TOKEN.value, MCPAuthMode.HEADERS.value,
+    """Only the explicitly designated OBSales API-token instance may share auth."""
+    return (
+        bool(instance.get("useAdminAuth"))
+        and is_obsales_shared_instance(instance)
     )
 
 
@@ -112,7 +127,9 @@ async def resolve_effective_user_auth(
 
     effective_user_id = user_id
     if uses_shared_admin_credential(instance):
-        effective_user_id = instance.get("createdBy") or user_id
+        effective_user_id = instance.get("createdBy")
+        if not isinstance(effective_user_id, str) or not effective_user_id:
+            return None
 
     record = await config_service.get_config(
         get_mcp_credentials_path(instance.get("_id"), effective_user_id), default=None, use_cache=False
@@ -259,6 +276,7 @@ def match_enabled_tools_for_mcp_server(
 async def get_authenticated_mcp_servers(
     owner_id: str,
     config_service: ConfigurationService,
+    org_id: str,
     instances: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """All MCP instances `owner_id` (a user, or an agentKey for a service-account agent) has
@@ -271,6 +289,8 @@ async def get_authenticated_mcp_servers(
 
     ``instances``, when provided, is used as-is instead of loading from the config service.
     """
+    if not owner_id or not org_id:
+        return []
     if instances is None:
         try:
             instances = await load_org_instances(config_service)
@@ -283,6 +303,8 @@ async def get_authenticated_mcp_servers(
 
     authenticated: list[dict[str, Any]] = []
     for instance in instances:
+        if instance.get("orgId") != org_id:
+            continue
         try:
             effective_auth = await resolve_effective_user_auth(instance, owner_id, config_service)
         except Exception as e:

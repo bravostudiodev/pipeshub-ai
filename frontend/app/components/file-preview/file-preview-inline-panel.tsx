@@ -65,6 +65,7 @@ export function FilePreviewInlinePanel({
   initialCitationId,
   hideFileDetails,
   showDownload,
+  headerAction,
   latestVersion,
   onVersionChange,
   isSwitchingVersion,
@@ -234,6 +235,7 @@ export function FilePreviewInlinePanel({
         </Flex>
 
         <Flex align="center" gap="1">
+          {headerAction}
           {canDownload && (
             <IconButton
               variant="ghost"

@@ -14,12 +14,22 @@ const nextConfig = {
      */
     async rewrites() {
         return [
+            // The standalone share viewer intentionally uses same-origin URLs.
+            // In the contributor split setup Next listens on 3001 and the API
+            // on 3000, so proxy just these routes in development.
+            ...(process.env.NODE_ENV === 'development' ? [
+                { source: '/api/v1/artifact-shares/:path*', destination: `${(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')}/api/v1/artifact-shares/:path*` },
+                { source: '/decks/:path*', destination: `${(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')}/decks/:path*` },
+            ] : []),
             { source: '/toolsets/oauth/callback/:slug', destination: '/toolsets/oauth/callback/' },
             { source: '/toolsets/oauth/callback/:slug/', destination: '/toolsets/oauth/callback/' },
             { source: '/connectors/oauth/callback/:slug', destination: '/connectors/oauth/callback/' },
             { source: '/connectors/oauth/callback/:slug/', destination: '/connectors/oauth/callback/' },
             { source: '/mcp-servers/oauth/callback/:slug', destination: '/mcp-servers/oauth/callback/' },
             { source: '/mcp-servers/oauth/callback/:slug/', destination: '/mcp-servers/oauth/callback/' },
+            // The share viewer is one static shell; retain the bearer in the visible path.
+            { source: '/share/:token', destination: '/share/' },
+            { source: '/share/:token/', destination: '/share/' },
             // `/record/<recordId>` URLs can't ship a dynamic `[recordId]` segment
             // under `output: 'export'`, so the build emits a single `/record/` shell.
             // Rewrite every `/record/:id` to that shell for `next dev`; the page reads

@@ -1,9 +1,11 @@
 'use client';
 
-import { Flex } from '@radix-ui/themes';
+import { useState } from 'react';
+import { Checkbox, Flex } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { ChatSectionElement, GeneratingTitleItem } from './chat-section-element';
 import { ELEMENT_HEIGHT } from '@/app/components/sidebar';
+import { selectIdsForScope, selectionScopeFor, useSidebarSelectionStore } from './selection-store';
 import type { PendingConversation } from '@/chat/store';
 import {
   groupByTime,
@@ -75,11 +77,22 @@ export function TimeGroup({
   const pendingSortedNewestFirst = [...pendingConversations].sort(
     (a, b) => b.createdAt - a.createdAt
   );
+  const scope = selectionScopeFor(agentId);
+  const selectedIds = useSidebarSelectionStore(selectIdsForScope(scope));
+  const setMany = useSidebarSelectionStore((s) => s.setMany);
+  const [headerHovered, setHeaderHovered] = useState(false);
+  const selectableIds = conversations.filter((c) => c.isOwner === true).map((c) => c.id);
+  const selectedCount = selectableIds.filter((id) => selectedIds.has(id)).length;
+  const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
+  const groupLabel = t(TIME_GROUP_I18N[label]);
   return (
     <Flex direction="column">
       {/* Sub-heading */}
       <Flex
         align="center"
+        justify="between"
+        onMouseEnter={() => setHeaderHovered(true)}
+        onMouseLeave={() => setHeaderHovered(false)}
         style={{
           height: ELEMENT_HEIGHT,
           padding: '0 var(--space-3)',
@@ -94,8 +107,20 @@ export function TimeGroup({
             color: 'var(--slate-10)',
           }}
         >
-          {t(TIME_GROUP_I18N[label])}
+          {groupLabel}
         </span>
+        {selectableIds.length > 0 && (
+          <Checkbox
+            size="1"
+            checked={allSelected ? true : selectedCount > 0 ? 'indeterminate' : false}
+            onCheckedChange={() => setMany(scope, selectableIds, !allSelected)}
+            aria-label={t('chat.selection.selectGroup', {
+              defaultValue: 'Select all chats in {{group}}',
+              group: groupLabel,
+            })}
+            style={{ opacity: headerHovered || selectedCount > 0 ? 1 : 0.45, transition: 'opacity 0.15s ease' }}
+          />
+        )}
       </Flex>
 
       {/* Chat items */}
@@ -110,6 +135,7 @@ export function TimeGroup({
             isActive={currentConversationId === conv.id}
             onClick={() => onSelectConversation(conv.id)}
             agentId={agentId}
+            selectionScope={scope}
           />
         ))}
       </Flex>

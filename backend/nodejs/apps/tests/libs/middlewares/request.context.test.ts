@@ -75,6 +75,14 @@ describe('Request Context Middleware', () => {
       expect(next.calledOnce).to.be.true
     })
 
+    it('does not retain a share token in request context URLs', () => {
+      const req = createMockRequest({ path: '/share/', originalUrl: '/share/?token=secret-value' })
+      req.get.withArgs('referer').returns('https://example.com/share/?token=secret-value')
+      requestContextMiddleware(req, createMockResponse(), createMockNext())
+      expect(req.context.meta.originalUrl).not.to.contain('secret-value')
+      expect(req.context.headers.referer).not.to.contain('secret-value')
+    })
+
     it('should generate a requestId when none is provided', () => {
       const req = createMockRequest()
       const res = createMockResponse()

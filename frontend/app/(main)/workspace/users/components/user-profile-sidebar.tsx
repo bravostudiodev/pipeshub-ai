@@ -156,7 +156,7 @@ export function UserProfileSidebar() {
         />
         <ProfileField
           label={t('workspace.users.profile.lastActive')}
-          value={formatDateTime(profileUser.updatedAtTimestamp)}
+          value={formatDateTime(profileUser.lastActiveTimestamp)}
         />
         <ProfileField
           label={t('workspace.users.profile.dateJoined')}

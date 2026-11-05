@@ -78,6 +78,8 @@ tests
 **/Thumbs.db
 
 # Build outputs created by the pipeline App build stage.
+# Next's reusable build cache is not part of the static frontend export.
+frontend/.next/
 frontend/dist/
 backend/nodejs/apps/dist/
 !backend/nodejs/apps/dist/
@@ -94,6 +96,7 @@ backend/nodejs/apps/dist/
 # SKILL.md files excluded by `**/*.md` above must ship in the image or the
 # BuiltinSkillSeeder finds zero packs and orgs get an empty skill catalog.
 !backend/python/app/agents/agent_loop/skills/builtin_packs/**/*.md
+!backend/python/app/agents/agent_loop/skills/builtin_packs/slidev/LICENSE
 
 # Tests
 **/tests/

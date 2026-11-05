@@ -188,7 +188,6 @@ export function CreateProjectDialog({ open, onOpenChange, onCreated }: CreatePro
             <LoadingButton
               type="button"
               size="2"
-              color="jade"
               onClick={() => void handleCreate()}
               loading={creating}
               loadingLabel={t('chat.projects.createDialog.creating')}

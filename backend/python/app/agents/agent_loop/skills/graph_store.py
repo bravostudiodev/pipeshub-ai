@@ -237,6 +237,7 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         *,
         validator: SkillValidator | None = None,
         visibility_scope: str | None = None,
+        allow_builtin_writes: bool = False,
     ) -> None:
         """`visibility_scope`, when set, narrows every read to skills whose
         `createdBy` matches it, EXCEPT builtin-sourced skills (`source ==
@@ -251,6 +252,11 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         self._user_id = user_id
         self._validator = validator or SkillValidator()
         self._visibility_scope = visibility_scope
+        self._allow_builtin_writes = allow_builtin_writes
+
+    def _assert_builtin_write_allowed(self, doc: dict) -> None:
+        if doc.get("source") == SkillSource.BUILTIN.value and not self._allow_builtin_writes:
+            raise RegistryError("Built-in skills can only be edited by a workspace administrator.")
 
     def _key(self, name: str) -> str:
         return f"{self._org_id}_{name}"
@@ -475,6 +481,7 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         existing_doc = await self._get_org_doc(name)
         if existing_doc is None:
             raise RegistryError(f"Skill {name!r} not found")
+        self._assert_builtin_write_allowed(existing_doc)
         if (
             expected_updated_at is not None
             and existing_doc.get("updatedAtTimestamp") != expected_updated_at
@@ -531,8 +538,10 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         return True
 
     async def delete_skill(self, name: str) -> bool:
-        if await self._get_org_doc(name) is None:
+        doc = await self._get_org_doc(name)
+        if doc is None:
             return False
+        self._assert_builtin_write_allowed(doc)
         # Revision history in `agentSkillVersions` is intentionally left in
         # place after a hard-delete — it references this skill by
         # `skillKey`/`name`, not a live graph edge, and audit/compliance
@@ -562,25 +571,27 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         doc = await self._get_org_doc(skill_name)
         if doc is None:
             return False
+        self._assert_builtin_write_allowed(doc)
         resources = _resources_from_doc(doc)
         resources[path] = content
         self._validator.validate_resource_budget(resources)
         return await self._graph.update_node(
             self._key(skill_name), _SKILLS,
-            {**_resources_to_fields(resources), "updatedAtTimestamp": get_epoch_timestamp_in_ms()},
+            {**_resources_to_fields(resources), "updatedAtTimestamp": _next_updated_at(doc.get("updatedAtTimestamp")), "updatedBy": self._user_id},
         )
 
     async def remove_resource(self, skill_name: str, path: str) -> bool:
         doc = await self._get_org_doc(skill_name)
         if doc is None:
             return False
+        self._assert_builtin_write_allowed(doc)
         resources = _resources_from_doc(doc)
         if path not in resources:
             return False
         del resources[path]
         return await self._graph.update_node(
             self._key(skill_name), _SKILLS,
-            {**_resources_to_fields(resources), "updatedAtTimestamp": get_epoch_timestamp_in_ms()},
+            {**_resources_to_fields(resources), "updatedAtTimestamp": _next_updated_at(doc.get("updatedAtTimestamp")), "updatedBy": self._user_id},
         )
 
     async def deprecate_skill(self, name: str, reason: str, replaced_by: str | None = None) -> bool:
@@ -615,6 +626,7 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         doc = await self._get_org_doc(name)
         if doc is None:
             return False
+        self._assert_builtin_write_allowed(doc)
         if from_status is not None and doc.get("status") != from_status.value:
             return False
         observed = int(doc.get("updatedAtTimestamp") or 0)
@@ -660,6 +672,7 @@ class GraphSkillStore(SkillStore, SkillHistoryReader, SkillCandidateStore):
         current_doc = await self._get_org_doc(name)
         if current_doc is None:
             raise RegistryError(f"Skill {name!r} not found")
+        self._assert_builtin_write_allowed(current_doc)
         archived = await self._get_version_doc(name, version)
         if archived is None:
             raise RegistryError(f"Version {version!r} of skill {name!r} not found")

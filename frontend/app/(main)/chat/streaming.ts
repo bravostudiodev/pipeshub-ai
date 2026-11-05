@@ -324,7 +324,7 @@ function statusMessageIdleThinking(): StatusMessage {
  * for `idleMs`. `stopIdleStatus` retires it once the answer is settled, so it
  * never appears beneath a finished reply.
  */
-function createStatusDwellScheduler(
+export function createStatusDwellScheduler(
   slotId: string,
   isCurrentRun: () => boolean,
   minDwellMs = 400,
@@ -343,8 +343,12 @@ function createStatusDwellScheduler(
   function applyStatus(msg: StatusMessage | null): void {
     if (!isCurrentRun()) return;
     lastStatusAt = Date.now();
-    // A real status supersedes whatever the watchdog was about to show.
+    // A real status supersedes whatever the watchdog was about to show, and
+    // any older status still waiting out the dwell window: left armed, its
+    // timer would later overwrite this newer one (a stale "Loading skill…").
     clearIdleTimer();
+    if (statusTimer !== null) { clearTimeout(statusTimer); statusTimer = null; }
+    pendingStatus = null;
     useChatStore.getState().updateSlot(slotId, { currentStatusMessage: msg });
   }
 
@@ -365,6 +369,10 @@ function createStatusDwellScheduler(
   function stopIdleStatus(): void {
     idleRetired = true;
     clearIdleTimer();
+    // A dwell-delayed status must not resurface after the run is parked on a
+    // question or the answer is final.
+    if (statusTimer !== null) { clearTimeout(statusTimer); statusTimer = null; }
+    pendingStatus = null;
     // `TEXT_MESSAGE_END` unconditionally shows "Thinking…" the moment the
     // final answer's last token lands (it can't yet tell narration from the
     // final answer — see agui-event-handler.ts). Callers reach here once the

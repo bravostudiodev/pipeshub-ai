@@ -118,6 +118,45 @@ def client_manager_factory(monkeypatch: pytest.MonkeyPatch) -> _FakeClientManage
 
 
 class TestCall:
+    async def test_obsales_calls_use_the_server_side_shared_token(self, client_manager_factory: _FakeClientManagerFactory) -> None:
+        context = make_context()
+        shared_token = "obsales-server-side-token"
+        server = _server(
+            auth_mode="api_token",
+            instance={
+                **_instance("api_token"), "name": "OBSales", "typeId": None,
+                "transport": "streamable_http", "useAdminAuth": True,
+                "isCustom": True, "url": "https://sales.example/mcp",
+            },
+            auth={"isAuthenticated": True, "credentialGeneration": "shared-gen",
+                  "credentials": {"apiToken": shared_token}},
+            owner_id="employee-a",
+        )
+        result = await MCPSessionManager(context).call(server, "find_record", {"term": "hello"})
+        assert result == "ok"
+        assert client_manager_factory.built[0].headers["Authorization"] == f"Bearer {shared_token}"
+        assert client_manager_factory.built[0].calls == [("find_record", {"term": "hello"})]
+
+    async def test_obsales_tool_failure_is_reported_without_logging_shared_token(
+        self, client_manager_factory: _FakeClientManagerFactory, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        token = "obsales-private-token"
+        server = _server(
+            auth_mode="api_token",
+            instance={
+                **_instance("api_token"), "name": "OBSales", "typeId": None,
+                "transport": "streamable_http", "useAdminAuth": True,
+                "isCustom": True, "url": "https://sales.example/mcp",
+            },
+            auth={"isAuthenticated": True, "credentials": {"apiToken": token}},
+        )
+        session_manager = MCPSessionManager(make_context())
+        client = await session_manager._get_or_open(server)
+        client.responses = [MCPProviderRejectedError(400, "https://sales.example/mcp", f"failed token={token}", None)]
+        with pytest.raises(MCPProviderRejectedError):
+            await session_manager.call(server, "find_record", {})
+        assert token not in caplog.text
+
     async def test_opens_session_once_and_reuses_across_calls(
         self, client_manager_factory: _FakeClientManagerFactory,
     ) -> None:

@@ -338,7 +338,7 @@ export interface AgentCapabilities {
 
 /** Default capabilities — both search modes enabled, deep search off. */
 export const DEFAULT_AGENT_CAPABILITIES: AgentCapabilities = {
-  internalSearch: true,
+  internalSearch: false,
   webSearch: true,
   deepSearch: false,
 };

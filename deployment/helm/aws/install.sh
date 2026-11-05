@@ -103,6 +103,8 @@ helm upgrade --install "${RELEASE}" "${CHART}" \
   --set "ingress.hosts[0].host=${PIPESHUB_HOST:?Set PIPESHUB_HOST, for example pipeshub.example.com}" \
   --set "ingress.hosts[0].paths[0].path=/" \
   --set "ingress.hosts[0].paths[0].pathType=Prefix" \
+  --set "ingress.hosts[0].paths[1].path=/decks" \
+  --set "ingress.hosts[0].paths[1].pathType=Prefix" \
   ${ALB_CERT_ARN:+--set "ingress.annotations.alb\.ingress\.kubernetes\.io/certificate-arn=${ALB_CERT_ARN}"} \
   ${helm_image_args[@]+"${helm_image_args[@]}"} \
   --wait --timeout 30m

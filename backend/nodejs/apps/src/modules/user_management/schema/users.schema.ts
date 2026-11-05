@@ -35,6 +35,8 @@ export interface User extends Document, Address {
   email: string;
   mobile?: string;
   hasLoggedIn?: boolean;
+  /** Most recent authenticated human-session activity, recorded at a bounded cadence. */
+  lastActiveAt?: Date;
   designation?: string;
   kind?: UserKind;
   /** Free text explaining what a service account is for. Unused for humans. */
@@ -76,6 +78,7 @@ const userSchema = new Schema<User>(
     },
     mobile: { type: String },
     hasLoggedIn: { type: Boolean, default: false },
+    lastActiveAt: { type: Date },
     designation: { type: String, trim: true },
     kind: {
       type: String,

@@ -134,7 +134,7 @@ def _validate(
     owner_id: str,
 ) -> dict[str, Any]:
     mode = _validate_instance(instance, instance_id, org_id, owner_id)
-    if uses_shared_admin_credential(instance):
+    if instance.get("useAdminAuth") and not uses_shared_admin_credential(instance):
         raise LegacySharedAuthIneligible(SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE)
     if mode == "none":
         return {}
@@ -178,6 +178,7 @@ async def load_catalog_scope(
         raise CatalogScopeError("MCP identity is unavailable")
     instance_path = get_mcp_instance_path(instance_id)
     credential_path = get_mcp_credentials_path(instance_id, owner_id)
+    credential_owner_id = owner_id
     for _ in range(3):
         raw_instance = await config_service.get_config(
             instance_path, default=None, use_cache=False, raise_on_error=True
@@ -185,10 +186,17 @@ async def load_catalog_scope(
         instance = copy.deepcopy(raw_instance)
         if not isinstance(instance, dict):
             raise CatalogScopeError("MCP instance is unavailable")
-        # Validate identity/configuration and shared-auth eligibility before any credential read.
+        # Validate caller/organization authority before resolving OBSales' explicitly shared
+        # administrator credential. Other MCP instances never borrow another owner's grant.
         mode = _validate_instance(instance, instance_id, org_id, owner_id)
-        if uses_shared_admin_credential(instance):
+        if instance.get("useAdminAuth") and not uses_shared_admin_credential(instance):
             raise LegacySharedAuthIneligible(SHARED_CREDENTIALS_UNSUPPORTED_MESSAGE)
+        credential_owner_id = (
+            instance.get("createdBy") if uses_shared_admin_credential(instance) else owner_id
+        )
+        if not isinstance(credential_owner_id, str) or not credential_owner_id:
+            raise CatalogScopeError("MCP credential owner is unavailable")
+        credential_path = get_mcp_credentials_path(instance_id, credential_owner_id)
         if mode == "none":
             auth = {}
             generation = "none"
@@ -197,13 +205,13 @@ async def load_catalog_scope(
             credential_path, default=None, use_cache=False, raise_on_error=True
         )
         auth = copy.deepcopy(raw_auth)
-        _validate(instance, auth, instance_id, org_id, owner_id)
+        _validate(instance, auth, instance_id, org_id, credential_owner_id)
         generation = auth.get("credentialGeneration")
         if generation:
             break
         # Migration changes the refresh CAS snapshot. Serialize it with token
         # exchange so it cannot strand an already-rotated provider refresh token.
-        async with credential_refresh_lock(instance_id, owner_id, config_service) as lease:
+        async with credential_refresh_lock(instance_id, credential_owner_id, config_service) as lease:
             latest_instance = await config_service.get_config(instance_path, default=None, use_cache=False, raise_on_error=True)
             latest_auth = await config_service.get_config(credential_path, default=None, use_cache=False, raise_on_error=True)
             if latest_instance != raw_instance or latest_auth != raw_auth:
@@ -219,9 +227,9 @@ async def load_catalog_scope(
     else:
         raise CatalogScopeError("MCP authorization changed during scope resolution")
     auth = copy.deepcopy(auth)
-    identity = _scope_digest(instance, auth, instance_id, org_id, owner_id, generation)
+    identity = _scope_digest(instance, auth, instance_id, org_id, credential_owner_id, generation)
     return CatalogScope(
-        instance, auth, instance_id, org_id, owner_id, generation, identity
+        instance, auth, instance_id, org_id, credential_owner_id, generation, identity
     )
 
 

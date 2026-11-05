@@ -4,7 +4,9 @@ parameters derived from `MCPToolInfo`, and `execute()` result normalization."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import (
@@ -69,6 +71,65 @@ class _FakeSessionManager:
 
 def _make_adapter(session_manager: _FakeSessionManager) -> MCPToolAdapter:
     return MCPToolAdapter(_server(), _tool_info(), session_manager)
+
+
+class TestObSalesIdentity:
+    def _adapter(self, user: Any, *, caller_id: str | None = "employee") -> tuple[MCPToolAdapter, _FakeSessionManager]:  # noqa: ANN401
+        server = _server()
+        server.instance = {"name": "OBSales", "isCustom": True, "typeId": None,
+                           "transport": "streamable_http", "authMode": "api_token", "useAdminAuth": True}
+        manager = _FakeSessionManager(result=_FakeCallResult(data="ok"))
+        manager._context = SimpleNamespace(
+            authenticated_user_id=caller_id, org_id="org-1", config_service=None,
+            graph_provider=SimpleNamespace(get_user_by_user_id=AsyncMock(return_value=user)),
+        )
+        tool = _tool_info(input_schema={"type": "object", "properties": {
+            "requesting_user_email": {"type": "string"}, "query": {"type": "string"},
+        }, "required": ["requesting_user_email", "query"]})
+        return MCPToolAdapter(server, tool, manager), manager
+
+    @pytest.mark.asyncio
+    async def test_uses_authenticated_employee_not_model_or_service_account_override(self) -> None:
+        adapter, manager = self._adapter({"orgId": "org-1", "email": "employee@oddbytes.com"})
+        assert "requesting_user_email" not in adapter.raw_input_schema["properties"]
+        assert "requesting_user_email" not in adapter.raw_input_schema["required"]
+        assert all(p.name != "requesting_user_email" for p in adapter.parameters)
+        adapter.validate({"query": "x"})
+        await adapter.execute(query="x", requesting_user_email="spoof@oddbytes.com")
+        assert manager.calls[0][2] == {"query": "x", "requesting_user_email": "employee@oddbytes.com"}
+
+    @pytest.mark.asyncio
+    async def test_successful_result_redacts_short_token_from_text_and_structured_data(self) -> None:
+        adapter, manager = self._adapter({"orgId": "org-1", "email": "employee@oddbytes.com"})
+        adapter._server.auth = {"credentials": {"apiToken": "xy7"}}
+        manager._result = CallToolResult(content=[], structuredContent={"echo": "Bearer xy7", "xy7": ["xy7"]})
+        output = await adapter.execute(query="x")
+        assert output.success
+        assert "xy7" not in str(output.data)
+        manager._result = CallToolResult(content=[TextContent(type="text", text="token xy7")])
+        output = await adapter.execute(query="x")
+        assert output.success
+        assert "xy7" not in str(output.data)
+
+    @pytest.mark.asyncio
+    async def test_token_is_redacted_before_result_truncation(self) -> None:
+        adapter, manager = self._adapter({"orgId": "org-1", "email": "employee@oddbytes.com"})
+        token = "uniquesecrettoken"
+        adapter._server.auth = {"credentials": {"apiToken": token}}
+        manager._result = CallToolResult(content=[TextContent(type="text", text="a" * 159940 + token + "b" * 100000)])
+        output = await adapter.execute(query="x")
+        assert output.success
+        assert token not in str(output.data)
+        assert "uniquesec" not in str(output.data)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("user", [None, {"orgId": "org-2", "email": "user@oddbytes.com"},
+                                     {"orgId": "org-1", "email": "user@example.com"}])
+    async def test_missing_or_ineligible_identity_fails_closed(self, user: Any) -> None:  # noqa: ANN401
+        adapter, manager = self._adapter(user)
+        result = await adapter.execute(query="x", requesting_user_email="spoof@oddbytes.com")
+        assert not result.success
+        assert not manager.calls
 
 
 class TestIdentity:

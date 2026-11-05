@@ -403,6 +403,9 @@ export class UserController {
         updatedAtTimestamp: timestamps.updatedAt
           ? new Date(timestamps.updatedAt).getTime()
           : undefined,
+        lastActiveTimestamp: u.lastActiveAt
+          ? new Date(u.lastActiveAt).getTime()
+          : undefined,
         profilePicture: dpMap.get(uid),
         role: toDisplayUserRole(u.role),
         groupCount: groups.filter((g) => g.type !== 'everyone').length,

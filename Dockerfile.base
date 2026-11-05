@@ -78,6 +78,12 @@ ARG TORCHVISION_VERSION=0.27.0
 #   --build-arg PYTHON_DEPS_BASE=pipeshubai/pipeshub-ai-base:python-deps
 ARG PYTHON_DEPS_BASE=build-base
 
+# Sources for the app-base target. Default to the stages in this file; point at
+# the published :python-deps / :runtime tags to assemble app-base without
+# rebuilding either of them.
+ARG PYTHON_DEPS_SOURCE=python-deps
+ARG RUNTIME_BASE_SOURCE=runtime-base
+
 # -----------------------------------------------------------------------------
 # Stage: Build Base - Contains all build tools (NOT in final app image)
 # -----------------------------------------------------------------------------
@@ -233,3 +239,54 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends cypher-shell && \
     apt-get purge -y --auto-remove gnupg && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# -----------------------------------------------------------------------------
+# Target: app-base — publish as pipeshubai-base:app
+# runtime-base with python-deps merged in. The app Dockerfile builds FROM this,
+# so the ~4 GB of Python packages, models, and Chromium are layers the registry
+# already has instead of fresh COPY --from layers re-hashed, re-compressed,
+# and re-pushed on every app build.
+# -----------------------------------------------------------------------------
+FROM ${PYTHON_DEPS_SOURCE} AS python-deps-source
+ARG BUNDLE_BGE_EMBEDDING
+# Older published python-deps bases still carry these models.
+RUN if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
+        rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5; \
+    fi && \
+    rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3
+
+FROM ${RUNTIME_BASE_SOURCE} AS app-base
+WORKDIR /app
+
+# Unprivileged runtime user (uid/gid 10101, matching the deployed Helm chart).
+# Its home stays /root so every on-disk path is unchanged across the upgrade:
+# local storage records absolute file:// URLs under ~/.local, and existing
+# volumes and custom mounts target /root/.local and /root/.cache/huggingface.
+# docker-entrypoint.sh hands root-owned data from earlier releases over to it.
+RUN groupadd --gid 10101 pipeshub && \
+    useradd --uid 10101 --gid 10101 --home-dir /root --no-create-home \
+        --shell /usr/sbin/nologin pipeshub && \
+    install -d -o 10101 -g 10101 /root/.cache /root/.local && \
+    chown 10101:10101 /root
+ENV HOME=/root
+# Pinned so the baked models are still found when HOME is overridden (the
+# Helm chart sets HOME=/home/user).
+ENV HF_HOME=/root/.cache/huggingface \
+    NLTK_DATA=/root/nltk_data \
+    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright \
+    FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+
+# Cap ML thread fan-out (PyTorch/OpenBLAS/MKL). runtime_threads.py propagates
+# this to all libraries. Override via OMP_NUM_THREADS in .env if needed.
+ENV OMP_NUM_THREADS=2
+
+# Several third-party deps (talon, pysbd, ...) ship regex string literals with
+# unescaped backslashes and hit Python 3.12+'s SyntaxWarning at import time.
+ENV PYTHONWARNINGS="ignore::SyntaxWarning"
+
+COPY --from=python-deps-source /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=python-deps-source /usr/local/bin /usr/local/bin
+COPY --chown=10101:10101 --from=python-deps-source /root/.cache/huggingface /root/.cache/huggingface
+COPY --chown=10101:10101 --from=python-deps-source /root/.cache/fastembed /root/.cache/fastembed
+COPY --chown=10101:10101 --from=python-deps-source /root/nltk_data /root/nltk_data
+COPY --chown=10101:10101 --from=python-deps-source /root/.cache/ms-playwright /root/.cache/ms-playwright

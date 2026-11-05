@@ -48,6 +48,10 @@ class TokenScopes(Enum):
     # Deliberately separate from STORAGE_TOKEN so a leaked storage token
     # cannot also grant connector record reads.
     RECORD_CONTENT = "record:content"
+    # Node -> connectors, a single owner-checked published artifact version.
+    ARTIFACT_SHARE_CONTENT = "artifact-share:content"
+    # Node -> connectors, an ACL-checked built file from one artifact version.
+    ARTIFACT_DECK_CONTENT = "artifact-deck:content"
     # Indexing's admin-level read of record bytes from the connectors service
     # (the name predates the route; it is not tied to signed URLs).
     CONNECTOR_SIGNED_URL = "connector:signedUrl"
@@ -55,6 +59,7 @@ class TokenScopes(Enum):
     # Node -> query: grant/revoke permission edges on a conversation's attachments
     # and artifacts, after Node has checked ownership/sharing in Mongo.
     CONVERSATION_PERMISSIONS = "conversation:permissions"
+    CONVERSATION_IMAGE_MEMBERSHIP = "conversation:image-membership"
     # Python -> Node caller-role lookups, so Node's rate limiter can tell them from
     # client traffic. Never accepted by the Python services.
     CALLER_ROLE = "caller:role"

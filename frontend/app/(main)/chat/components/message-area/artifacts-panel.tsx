@@ -6,6 +6,7 @@ import { KnowledgeBaseApi } from '@/app/(main)/knowledge-base/api';
 import { Spinner } from '@/app/components/ui/spinner';
 import { isSignedUrl, isTrustedApiUrl } from '../../utils/parse-download-markers';
 import type { ChatArtifact } from '../../types';
+import { ArtifactShareDialog } from './artifact-share-dialog';
 
 interface ArtifactsPanelProps {
   artifacts: ChatArtifact[];
@@ -335,8 +336,18 @@ function ArtifactCard({
         borderRadius: 'var(--radius-2)',
         border: '1px solid var(--slate-6)',
         backgroundColor: 'var(--slate-2)',
+        position: 'relative',
       }}
     >
+      {onPreview && (
+        <button
+          type="button"
+          aria-label={`Preview ${artifact.fileName}`}
+          disabled={isPreviewing}
+          onClick={() => void runPreview()}
+          style={{ position: 'absolute', inset: 0, zIndex: 1, border: 0, borderRadius: 'inherit', background: 'transparent', cursor: isPreviewing ? 'wait' : 'pointer' }}
+        />
+      )}
       {showThumbnail ? (
         <Box
           style={{
@@ -398,7 +409,10 @@ function ArtifactCard({
         )}
       </Flex>
 
-      <Flex gap="1">
+      <Flex gap="1" style={{ position: 'relative', zIndex: 2 }}>
+        {artifact.recordId && artifact.version && (
+          <ArtifactShareDialog artifactId={artifact.recordId} version={artifact.version} />
+        )}
         {onViewSource && artifact.derivedFromCodeArtifactId && (
           <IconButton
             size="1"

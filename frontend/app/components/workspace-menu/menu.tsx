@@ -8,7 +8,6 @@ import { UserAvatar } from '@/app/components/ui/user-avatar';
 import type { OrgInfo } from './types';
 import { POPUP_WIDTH } from './types';
 import { Divider } from './menu-item';
-import { ExternalLinksSection } from './external-links-section';
 import { LanguagePanel } from './language-panel';
 import { AppearancePanel } from './appearance-panel';
 
@@ -37,7 +36,7 @@ interface WorkspaceMenuProps {
 /**
  * Floating popup triggered from the sidebar footer button.
  *
- * Composed of discrete sections (settings, external links, org),
+ * Composed of settings and organisation sections,
  * with the organisation badge rendered directly here.
  */
 export function WorkspaceMenu({ isOpen, onClose, org, triggerRef }: WorkspaceMenuProps) {
@@ -128,12 +127,7 @@ export function WorkspaceMenu({ isOpen, onClose, org, triggerRef }: WorkspaceMen
 
         <Divider />
 
-        {/* ── Section 2: External Links ── */}
-        <ExternalLinksSection />
-
-        <Divider />
-
-        {/* ── Section 3: Current Organisation ── */}
+        {/* ── Section 2: Current Organisation ── */}
         {org && (
           <Flex direction="column" gap="3">
             {/* Org badge */}

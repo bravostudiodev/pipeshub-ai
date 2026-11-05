@@ -140,7 +140,7 @@ async def sync_builtin_skills(
     }
     if current == seeder.pack_versions:
         return
-    seed_store = GraphSkillStore(graph_provider, org_id, SEED_IDENTITY)
+    seed_store = GraphSkillStore(graph_provider, org_id, SEED_IDENTITY, allow_builtin_writes=True)
     try:
         await seeder.sync(seed_store)
     except Exception:
@@ -158,8 +158,12 @@ async def _build_manager(
     retrieval_service: Any,
     extractor_transport: "TransportRegistry | None",
     visibility_scope: str | None = None,
+    allow_builtin_writes: bool = False,
 ) -> SkillManager:
-    store = GraphSkillStore(graph_provider, org_id, user_id, visibility_scope=visibility_scope)
+    store = GraphSkillStore(
+        graph_provider, org_id, user_id, visibility_scope=visibility_scope,
+        allow_builtin_writes=allow_builtin_writes,
+    )
     index = SemanticSkillIndex(retrieval_service)
     tracker = GraphUsageTracker(graph_provider, org_id, user_id)
     extractor = None
@@ -221,4 +225,6 @@ async def build_management_skill_manager(
         retrieval_service=retrieval_service,
         extractor_transport=None,
         visibility_scope=user_id,
+        # REST routes perform a fresh admin check before every built-in write.
+        allow_builtin_writes=True,
     )

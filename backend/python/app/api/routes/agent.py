@@ -3753,7 +3753,9 @@ async def chat_stream(request: Request, agent_id: str) -> StreamingResponse:
                         instance_id = mcp_server["instanceId"]
                         try:
                             instance = await get_mcp_instance_resolved(instance_id, services["config_service"])
-                            if not instance:
+                            if not instance or instance.get("orgId") != org_key:
+                                # A graph attachment cannot grant cross-organization access to
+                                # an MCP instance, including the OBSales shared credential.
                                 return mcp_server, None, None
                             effective_auth = await mcp_service.resolve_effective_user_auth(
                                 instance, credential_lookup_id, services["config_service"],
@@ -4099,6 +4101,7 @@ async def get_assistant_agent(
             authenticated_mcp_servers_list = await get_authenticated_mcp_servers(
                 owner_id=user_id,
                 config_service=config_service,
+                org_id=org_id,
                 instances=mcp_instances,
             )
         except Exception as e:

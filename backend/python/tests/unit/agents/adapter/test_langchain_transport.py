@@ -144,6 +144,51 @@ class _FakeApiShapeModel:
         )
 
 
+class TestStreamDiagnostics:
+    async def test_records_stream_counts_without_content(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level("INFO", logger=transport_module.__name__)
+        transport = LangChainTransport(
+            _FakeModel(stream_chunks=[AIMessageChunk(content=""), AIMessageChunk(content="private answer")]),
+            model_name="example-model",
+        )
+        events = [event async for event in transport.stream([UserMessage(content="private question")])]
+        assert events
+        logs = "\n".join(record.getMessage() for record in caplog.records if "llm_stream_" in record.getMessage())
+        assert "llm_stream_start" in logs
+        assert "llm_stream_first_chunk" in logs
+        assert "kind=text" in logs
+        assert "outcome=completed" in logs
+        assert "chunks=2 text_events=1" in logs
+        assert "private answer" not in logs
+        assert "private question" not in logs
+
+    async def test_cancelled_stalled_stream_reports_no_chunks(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level("INFO", logger=transport_module.__name__)
+        waiting = asyncio.Event()
+
+        class StalledModel(_FakeModel):
+            async def astream(self, messages: list, config: object = None) -> AsyncIterator[AIMessageChunk]:
+                waiting.set()
+                await asyncio.Event().wait()
+                yield AIMessageChunk(content="unreachable")
+
+        token = CancellationToken()
+        transport = LangChainTransport(StalledModel(), model_name="example-model", cancellation_token=token)
+
+        async def consume() -> None:
+            async for _ in transport.stream([UserMessage(content="private question")]):
+                pass
+
+        task = asyncio.create_task(consume())
+        await waiting.wait()
+        token.cancel()
+        await asyncio.wait_for(task, timeout=2)
+        logs = "\n".join(record.getMessage() for record in caplog.records if "llm_stream_" in record.getMessage())
+        assert "outcome=cancelled" in logs
+        assert "chunks=0 text_events=0" in logs
+        assert "llm_stream_first_chunk" not in logs
+
+
 class TestComplete:
     async def test_plain_text_response(self) -> None:
         transport = LangChainTransport(_FakeModel(AIMessage(content="The answer is 42.")))

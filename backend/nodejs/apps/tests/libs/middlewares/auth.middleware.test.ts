@@ -178,6 +178,7 @@ describe('AuthMiddleware', () => {
       sinon.stub(jwt, 'decode').returns({ userId: 'user1', orgId: 'org1' })
       const userQuery = createMockQuery({ _id: 'user1', orgId: 'org1', isDeleted: false })
       sinon.stub(Users, 'findOne').returns(userQuery)
+      sinon.stub(Users, 'updateOne').returns(createMockQuery({}) as any)
     })
 
     it('should authenticate and call next() on valid regular token with no logout/password activity', async () => {
@@ -201,6 +202,30 @@ describe('AuthMiddleware', () => {
       expect(next.calledOnce).to.be.true
       expect(next.firstCall.args).to.have.length(0)
       expect(req.user).to.deep.equal(decoded)
+      const update = Users.updateOne as sinon.SinonStub
+      expect(update.calledOnce).to.be.true
+      expect(update.firstCall.args[0]).to.include({ _id: 'user1', orgId: 'org1', isDeleted: false })
+      expect(update.firstCall.args[1].$max.lastActiveAt).to.be.instanceOf(Date)
+      expect(update.firstCall.args[2]).to.deep.equal({ timestamps: false })
+    })
+
+    it('does not write again for recently active sessions', async () => {
+      ;(Users.findOne as sinon.SinonStub).returns(createMockQuery({ _id: 'user1', orgId: 'org1', lastActiveAt: new Date() }))
+      tokenService.verifyToken.resolves({ userId: 'user1', orgId: 'org1', role: 'member', iat: Math.floor(Date.now() / 1000) })
+      sinon.stub(UserActivities, 'findOne').returns(createMockQuery(null))
+      const next = createMockNext()
+      await authMiddleware.authenticate(createMockRequest({ headers: { authorization: `Bearer ${validToken}` } }), createMockResponse(), next)
+      expect(next.firstCall.args).to.have.length(0)
+      expect((Users.updateOne as sinon.SinonStub).called).to.be.false
+    })
+
+    it('continues authentication when activity recording fails', async () => {
+      ;(Users.updateOne as sinon.SinonStub).returns({ exec: sinon.stub().rejects(new Error('database unavailable')) })
+      tokenService.verifyToken.resolves({ userId: 'user1', orgId: 'org1', role: 'member', iat: Math.floor(Date.now() / 1000) })
+      sinon.stub(UserActivities, 'findOne').returns(createMockQuery(null))
+      const next = createMockNext()
+      await authMiddleware.authenticate(createMockRequest({ headers: { authorization: `Bearer ${validToken}` } }), createMockResponse(), next)
+      expect(next.firstCall.args).to.have.length(0)
     })
 
     it('rejects a session belonging to a disabled account', async () => {
@@ -282,6 +307,7 @@ describe('AuthMiddleware', () => {
       const error = next.firstCall.args[0]
       expect(error).to.be.instanceOf(UnauthorizedError)
       expect(error.message).to.equal('Session expired, please login again')
+      expect((Users.updateOne as sinon.SinonStub).called).to.be.false
     })
 
     it('refuses an access token issued in the same second the account was deleted', async () => {

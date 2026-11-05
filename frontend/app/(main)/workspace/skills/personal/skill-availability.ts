@@ -1,5 +1,10 @@
 import type { SkillMetadata } from './types';
 
+/** Built-ins are organization-wide; only administrators can edit them. */
+export function canEditSkillContent(skill: Pick<SkillMetadata, 'source'>, isAdmin: boolean): boolean {
+  return skill.source !== 'builtin' || isAdmin;
+}
+
 /** Whether the availability Switch should render for this skill.
 
 Custom skills: the creator (the management list is already creator-scoped).

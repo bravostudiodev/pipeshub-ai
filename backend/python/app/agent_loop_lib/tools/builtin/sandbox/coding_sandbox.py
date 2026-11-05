@@ -303,6 +303,10 @@ async def _upload_staged_files(backend: Any) -> list[str]:
 class CodingSandboxTool(Tool):
     """`run_code` — write and run a standalone TypeScript/Python program."""
 
+    def minimum_timeout(self, code: str) -> float:
+        """Lower bound on the timeout for `code`, for known long-running work."""
+        return 0.0
+
     def __init__(
         self,
         manager: SandboxManager,
@@ -418,7 +422,7 @@ class CodingSandboxTool(Tool):
             ),
             ToolParameter(
                 name="sandbox_id", type=ParameterType.STRING, required=False, default=None,
-                description="Sandbox to reuse, from a previous run_code/install_packages call's result. Omit to create a fresh sandbox.",
+                description="Sandbox to reuse, from a previous run_code/install_packages call's result. Omit to use this answer's idle sandbox, or a new one if none is free.",
             ),
             ToolParameter(
                 name="timeout", type=ParameterType.FLOAT, required=False, default=self._default_timeout,
@@ -444,13 +448,24 @@ class CodingSandboxTool(Tool):
             self._allow_network, len(code),
         )
         try:
-            resolved_id, backend = await self._manager.get_or_create(SandboxType.CODING, sandbox_id)
+            resolved_id, backend = await self._manager.get_or_create(
+                SandboxType.CODING, sandbox_id, reserve=True, reuse_idle=True,
+            )
         except UnknownSandboxError as e:
             _logger.error("CodingSandboxTool.execute: unknown sandbox %s: %s", sandbox_id, e)
             return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
         except SandboxLimitExceeded as e:
             _logger.warning("CodingSandboxTool.execute: capacity denied: %s", e)
             return ToolOutput(success=False, error=sandbox_limit_guidance(e))
+        try:
+            return await self._run(backend, resolved_id, code, language, packages, timeout)
+        finally:
+            self._manager.release(SandboxType.CODING, resolved_id)
+
+    async def _run(
+        self, backend: Any, resolved_id: str, code: str, language: str,
+        packages: list[str] | None, timeout: float | None,
+    ) -> ToolOutput:
 
         _logger.info(
             "CodingSandboxTool.execute: resolved sandbox_id=%s backend=%s "
@@ -475,6 +490,7 @@ class CodingSandboxTool(Tool):
             language = detected
 
         resolved_timeout = timeout if timeout is not None else self._default_timeout
+        resolved_timeout = max(resolved_timeout, self.minimum_timeout(code))
         request = CodeRequest(
             code=code,
             language=language,
@@ -560,7 +576,7 @@ class InstallPackagesTool(Tool):
             ),
             ToolParameter(
                 name="sandbox_id", type=ParameterType.STRING, required=False, default=None,
-                description="Sandbox to reuse. Omit to create a fresh sandbox.",
+                description="Sandbox to reuse. Omit to use this answer's idle sandbox, or a new one if none is free.",
             ),
         ]
 
@@ -574,11 +590,22 @@ class InstallPackagesTool(Tool):
         sandbox_id = _reuse_id(sandbox_id)
         is_fresh_sandbox = sandbox_id is None
         try:
-            resolved_id, backend = await self._manager.get_or_create(SandboxType.CODING, sandbox_id)
+            resolved_id, backend = await self._manager.get_or_create(
+                SandboxType.CODING, sandbox_id, reserve=True, reuse_idle=True,
+            )
         except UnknownSandboxError as e:
             return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
         except SandboxLimitExceeded as e:
             return ToolOutput(success=False, error=sandbox_limit_guidance(e))
+        try:
+            return await self._install(backend, resolved_id, packages, language, is_fresh_sandbox)
+        finally:
+            self._manager.release(SandboxType.CODING, resolved_id)
+
+    async def _install(
+        self, backend: Any, resolved_id: str, packages: list[str], language: str,
+        is_fresh_sandbox: bool,
+    ) -> ToolOutput:
 
         # Same staged-input upload `run_code` does on a fresh sandbox —
         # a child that pre-warms its environment with install_packages

@@ -362,7 +362,7 @@ class TestBuildManagerInternal:
                 extractor_transport=None,
                 visibility_scope="creator-scope",
             )
-        mock_store.assert_called_once_with(gp, "org", "user", visibility_scope="creator-scope")
+        mock_store.assert_called_once_with(gp, "org", "user", visibility_scope="creator-scope", allow_builtin_writes=False)
 
     @pytest.mark.asyncio
     async def test_manager_start_awaited(self) -> None:

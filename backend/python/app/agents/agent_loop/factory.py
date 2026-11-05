@@ -15,7 +15,7 @@ every adapter-layer piece built in Phases 2-6:
 - Mode-driven composition, keyed off the resolved `ModeDefinition` (see
   `modes.py` for the current catalog), never off `isinstance(loop, ...)`:
   - `loop_kind == "orchestrator"` (deep): the top-level `spec.tool_names`
-    is narrowed to the four coordination tools (`create_plan`/
+    is narrowed to image analysis and the four coordination tools (`create_plan`/
     `critique_plan`/`spawn_agent`/`verify_result` — registered onto the
     request's `tool_registry` here) and `AgentRuntime.spec_factory` is
     wired so `spawn_agent` can resolve a domain "role" string into a
@@ -45,6 +45,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from app.agent_loop_lib.agent import Agent
@@ -102,6 +103,7 @@ from app.agent_loop_lib.transport.opik_tracing import (
     traced_transport_factory,
 )
 from app.agent_loop_lib.transport.registry import TransportRegistry
+from app.agents.agent_loop.analyze_image_tool import AnalyzeImageTool
 from app.agents.agent_loop.artifact_store import build_artifact_store
 from app.agents.agent_loop.cancellation_transport import with_cancellation
 from app.agents.agent_loop.direct_transport import build_direct_transport
@@ -133,7 +135,9 @@ from app.agents.agent_loop.hooks.progressive_tools import (
     PROGRESSIVE_TOOL_NAMES,
     entity_tools_used_in_history,
 )
+from app.agents.agent_loop.image_attachment_references import image_attachment_references
 from app.agents.agent_loop.image_guard import with_image_cap
+from app.agents.agent_loop.image_membership_client import chat_image_is_member
 from app.agents.agent_loop.langchain_transport import (
     LangChainTransport,
     _supports_multipart_tool_result,
@@ -315,6 +319,19 @@ class PipesHubAgentFactory:
         # `OPIK_PROJECT_NAME` is optional; Opik falls back to its default
         # project when unset, same as the legacy `OpikTracer()` call site
         # (`utils/streaming.py`).
+        # Chat uses live connected sources, never indexed-knowledge tools.
+        # Keep attachment records and graph-backed permission checks intact.
+        context.has_knowledge = False
+        context.has_sql_knowledge = False
+        context.has_slack_knowledge = False
+        context.agent_knowledge = []
+        context.apps = []
+        context.kb = []
+        context.tool_state.update({
+            "has_knowledge": False, "has_sql_knowledge": False,
+            "has_slack_knowledge": False, "agent_knowledge": [],
+            "apps": [], "kb": [],
+        })
         _timer = context.tool_state.get("_stage_timer")
 
         def _mark(stage: str) -> None:
@@ -532,6 +549,9 @@ class PipesHubAgentFactory:
             supports_multipart_tool_result=_supports_multipart_tool_result(llm),
         )
         tool_registry.register_tool(RetrieveArtifactContentTool(store=artifact_store))
+        tool_registry.register_tool(AnalyzeImageTool(
+            context, partial(chat_image_is_member, context.config_service),
+        ))
         _register_final_answer_if_enabled(tool_registry)
         if skill_manager is not None:
             register_skill_preloading(hooks, skill_manager)
@@ -605,13 +625,23 @@ class PipesHubAgentFactory:
             if image_blocks:
                 context.attachment_image_blocks = image_blocks
 
+        image_refs = image_attachment_references(context)
+        if image_refs:
+            goal.description += (
+                "\n\nImage attachments available for visual inspection "
+                "(use analyze_image with the id when the "
+                "user asks about image contents; do not guess from a filename. "
+                "The tool verifies access and analyzes images, not HTML or slides):\n"
+                + json.dumps(image_refs, ensure_ascii=True)
+            )
+
         # Per-mode composition/tool-grant, keyed off `mode` (the resolved
         # `ModeDefinition` — see `modes.py`), never off `isinstance(loop, ...)`:
         # - `loop_kind == "orchestrator"` (deep): the top-level `Agent` is a
         #   pure planner/dispatcher — it must never call connector tools
         #   directly (that's what spawned, domain-scoped sub-agents are
         #   for), so its own `tool_names` is narrowed to the four
-        #   coordination tools regardless of `compose_domain_agents` (deep
+        #   coordination tools and image analysis regardless of `compose_domain_agents` (deep
         #   mode's catalog entry always has it on, but this branch would
         #   still be correct if it didn't). What DOES vary on
         #   `compose_domain_agents` for this loop kind is the SPAWN POOL:
@@ -834,6 +864,8 @@ class PipesHubAgentFactory:
             essential_names=frozenset(essential_toolset_names),
             context=context,
         )
+        if "analyze_image" not in tool_names:
+            tool_names.append("analyze_image")
         tool_names, tool_disclosure = top_level_lazy_tools(tool_registry, tool_names)
         # `list_toolsets`/`fetch_tools` were appended unconditionally above
         # (before this decision existed) so they'd be available to append

@@ -463,7 +463,6 @@
     "language": "Idioma",
     "english": "Inglés",
     "german": "Alemán",
-    "rotateLandscape": "Gire su dispositivo para una mejor experiencia",
     "errorOccurred": "Se produjo un error. Inténtelo de nuevo.",
     "beta": {
       "label": "Beta",
@@ -2628,6 +2627,7 @@
         "scopes": "Ámbitos",
         "scopesPlaceholder": "Añadir un ámbito",
         "useAdminAuth": "Usar autenticación de administrador compartida para todos los usuarios",
+        "useAdminAuthHint": "Solo para OBSales; los empleados usan este token compartido automáticamente.",
         "headerValue": "{{headerName}}",
         "apiToken": "Token de API",
         "credentialsHeading": "Credenciales (opcional)",
@@ -3409,7 +3409,7 @@
         "conflictDescription": "Vuelva a cargar la última versión y aplique de nuevo sus cambios.",
         "conflictReload": "Recargar"
       },
-      "builtinReadOnly": "Esta es una skill integrada y no se puede editar.",
+      "builtinReadOnly": "Solo los administradores del espacio de trabajo pueden editar esta skill integrada.",
       "editorPanel": {
         "createTitle": "Nueva Skill",
         "reviewTitle": "Revisar y editar la candidata",

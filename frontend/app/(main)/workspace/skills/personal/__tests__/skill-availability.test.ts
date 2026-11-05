@@ -1,10 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { canToggleSkillAvailability } from '../skill-availability';
+import { canEditSkillContent, canToggleSkillAvailability } from '../skill-availability';
 import type { SkillMetadata } from '../types';
 
 function skill(patch: Partial<Pick<SkillMetadata, 'source' | 'status'>>): Pick<SkillMetadata, 'source' | 'status'> {
   return { source: 'manual', status: 'active', ...patch };
 }
+
+describe('canEditSkillContent', () => {
+  it('permits built-in edits only for admins, while custom skills remain editable', () => {
+    expect(canEditSkillContent({ source: 'builtin' }, true)).toBe(true);
+    expect(canEditSkillContent({ source: 'builtin' }, false)).toBe(false);
+    expect(canEditSkillContent({ source: 'manual' }, false)).toBe(true);
+  });
+});
 
 describe('canToggleSkillAvailability', () => {
   it('lets the creator toggle a custom active or disabled skill', () => {

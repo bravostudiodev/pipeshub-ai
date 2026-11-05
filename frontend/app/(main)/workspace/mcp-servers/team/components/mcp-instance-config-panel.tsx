@@ -194,7 +194,13 @@ export function McpInstanceConfigPanel({
     ? resolvedTemplate.supportedAuthModes
     : ALL_AUTH_MODES;
 
-  const canUseAdminAuth = authMode === 'api_token' || authMode === 'headers';
+  // Shared credentials are reserved for the organization-approved OBSales MCP.
+  const canUseAdminAuth = (
+    authMode === 'api_token'
+    && transport === 'streamable_http'
+    && !isTemplateBased
+    && name.trim().toLowerCase() === 'obsales'
+  );
 
   const effectiveRequiredEnv = isTemplateBased
     ? (resolvedTemplate?.requiredEnv ?? [])
@@ -492,9 +498,14 @@ export function McpInstanceConfigPanel({
       {canUseAdminAuth && (
         <Flex align="center" gap="2">
           <Checkbox checked={useAdminAuth} onCheckedChange={(v) => setUseAdminAuth(v === true)} />
-          <Text size="2" style={{ color: 'var(--slate-12)' }}>
-            {t('workspace.mcpServers.form.useAdminAuth')}
-          </Text>
+          <Flex direction="column" gap="1">
+            <Text size="2" style={{ color: 'var(--slate-12)' }}>
+              {t('workspace.mcpServers.form.useAdminAuth')}
+            </Text>
+            <Text size="1" color="gray">
+              {t('workspace.mcpServers.form.useAdminAuthHint')}
+            </Text>
+          </Flex>
         </Flex>
       )}
 

@@ -36,6 +36,7 @@ export function FilePreviewFullscreen({
   citations,
   initialCitationId,
   showDownload,
+  headerAction,
   latestVersion,
   onVersionChange,
   isSwitchingVersion,
@@ -194,6 +195,7 @@ export function FilePreviewFullscreen({
         </Flex>
 
         <Flex align="center" gap="1" style={{ flexShrink: 0 }}>
+          {headerAction}
           {canDownload && (
             <IconButton
               variant="ghost"

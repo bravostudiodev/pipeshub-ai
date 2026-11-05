@@ -20,7 +20,7 @@ import { useUserStore, selectIsAdmin } from '@/lib/store/user-store';
 import { useSkillsStore } from '../store';
 import { SkillsApi, isSkillConflictError } from '../api';
 import type { EditorTab, Skill, SkillStatus, SkillUsage, SkillVersionSummary, SkillWritePayload } from '../types';
-import { canToggleSkillAvailability } from '../skill-availability';
+import { canEditSkillContent, canToggleSkillAvailability } from '../skill-availability';
 import { MarkdownEditor } from './markdown-editor';
 
 const EMPTY_SKILL: Skill = {
@@ -126,8 +126,8 @@ export function SkillEditorPanel() {
       .finally(() => setLoading(false));
   }, [editorOpen, isEditMode, editingSkillName, editorPrefill, t]);
 
-  const isReadOnly = skill.source === 'builtin';
   const isAdmin = useUserStore(selectIsAdmin) === true;
+  const isReadOnly = !canEditSkillContent(skill, isAdmin);
   const showAvailability = isEditMode && canToggleSkillAvailability(skill, isAdmin);
   const isValid = name.trim().length > 0 && skill.description.trim().length > 0 && skill.body.trim().length > 0;
 
@@ -301,7 +301,7 @@ export function SkillEditorPanel() {
                   }
                 />
               )}
-              {isEditMode && !isReadOnly && (
+              {isEditMode && !isReadOnly && skill.source !== 'builtin' && (
                 <DangerZone skillName={editingSkillName!} onDone={async () => { await refreshCatalog(); closeEditor(); }} nestedHost={nestedHost} />
               )}
             </Tabs.Content>
@@ -314,6 +314,7 @@ export function SkillEditorPanel() {
               {isEditMode && (
                 <VersionsTab
                   skillName={editingSkillName!}
+                  readOnly={isReadOnly}
                   onRolledBack={async () => {
                     const fresh = await SkillsApi.getSkill(editingSkillName!);
                     setSkill(fresh);
@@ -756,10 +757,12 @@ function ResourcesTab({
 
 function VersionsTab({
   skillName,
+  readOnly,
   onRolledBack,
   nestedHost,
 }: {
   skillName: string;
+  readOnly: boolean;
   onRolledBack: () => Promise<void>;
   nestedHost: HTMLElement | null;
 }) {
@@ -821,7 +824,7 @@ function VersionsTab({
               {v.updatedBy ? t('workspace.skills.versions.updatedBy', { who: v.updatedBy }) : ''}
             </Text>
           </Flex>
-          {idx !== 0 && (
+          {idx !== 0 && !readOnly && (
             <Button variant="outline" color="gray" size="1" onClick={() => setRollbackTarget(v.version)} style={{ cursor: 'pointer' }}>
               {t('workspace.skills.versions.rollback')}
             </Button>

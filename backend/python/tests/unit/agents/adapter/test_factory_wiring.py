@@ -80,6 +80,29 @@ class TestCreate:
         assert isinstance(agent, Agent)
         assert isinstance(runtime, AgentRuntime)
 
+    async def test_image_reference_reaches_goal_and_tool(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import AsyncMock
+
+        from app.agents.agent_loop import analyze_image_tool, factory
+
+        context = make_context(llm=FakeChatModel())
+        context.tool_state["attachments"] = [{
+            "virtualRecordId": "image-ref", "mimeType": "image/png", "recordName": "photo.png",
+        }]
+        monkeypatch.setattr(factory, "chat_image_is_member", AsyncMock(return_value=True))
+        monkeypatch.setattr(analyze_image_tool, "resolve_chat_image", AsyncMock(return_value="image"))
+        vision = AsyncMock(return_value="A red square")
+        monkeypatch.setattr(analyze_image_tool, "analyze_authorized_image", vision)
+        agent, runtime, goal, _ = await PipesHubAgentFactory().create(
+            context, context.llm, "quick", query="What is this?",
+        )
+        assert "image-ref" in goal.description
+        assert "analyze_image" in agent.spec.tool_names
+        tool = runtime.tool_registry.resolve_by_name("analyze_image")
+        result = await tool.execute(attachment_id="image-ref")
+        assert result.success and result.data == "A red square"
+        vision.assert_awaited_once()
+
     async def test_direct_mode_skips_llm_router(self) -> None:
         """`"react"`/`"planExecute"`/`"verification"` all resolve via the
         catalog synchronously with `include_routing=False`, so the tier
@@ -243,7 +266,7 @@ class TestCreate:
 
         assert isinstance(agent.spec.loop, OrchestratorLoop)
 
-    async def test_deep_mode_restricts_tool_names_to_coordination_tools(self) -> None:
+    async def test_deep_mode_grants_coordination_and_image_analysis(self) -> None:
         from app.agents.agent_loop.loops.orchestrator import COORDINATION_TOOL_NAMES
 
         context = make_context(llm=FakeChatModel())
@@ -251,7 +274,16 @@ class TestCreate:
 
         agent, _runtime, _goal, _clarifying = await factory.create(context, context.llm, "deep", query="hello")
 
-        assert set(agent.spec.tool_names) == set(COORDINATION_TOOL_NAMES)
+        assert set(agent.spec.tool_names) == set(COORDINATION_TOOL_NAMES) | {"analyze_image"}
+
+    @pytest.mark.parametrize("mode", ["quick", "react", "planExecute", "deep"])
+    async def test_image_tool_granted_in_each_mode(self, mode: str) -> None:
+        context = make_context(llm=FakeChatModel())
+        agent, runtime, _goal, _clarifying = await PipesHubAgentFactory().create(
+            context, context.llm, mode, query="describe this image",
+        )
+        assert "analyze_image" in agent.spec.tool_names
+        assert runtime.tool_registry.has("analyze_image")
 
     async def test_deep_mode_registers_coordination_tools_on_registry(self) -> None:
         from app.agents.agent_loop.loops.orchestrator import COORDINATION_TOOL_NAMES

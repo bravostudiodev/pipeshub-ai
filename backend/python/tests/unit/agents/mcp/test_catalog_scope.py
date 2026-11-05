@@ -9,7 +9,6 @@ from app.agents.constants.mcp_server_constants import (
 )
 from app.agents.mcp.catalog_scope import (
     CatalogScopeError,
-    LegacySharedAuthIneligible,
     load_catalog_scope,
     scope_is_current,
 )
@@ -148,22 +147,49 @@ async def test_instance_configuration_and_generation_invalidate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_none_auth_is_owner_private_and_shared_legacy_not_read() -> None:
+async def test_none_auth_is_owner_private_and_non_obsales_admin_does_not_fallback() -> None:
     s = Store(instance={"_id": "i", "orgId": "o", "authMode": "none"})
     a = await load_catalog_scope("i", "o", "u", s)
     b = await load_catalog_scope("i", "o", "v", s)
     assert a.auth == {} and a.identity != b.identity
-    legacy = Store(
-        instance={
-            "_id": "i",
-            "orgId": "o",
-            "authMode": "api_token",
-            "useAdminAuth": True,
-        }
+    private_only = Store(
+        instance={"_id": "i", "orgId": "o", "name": "Other", "authMode": "api_token", "useAdminAuth": True, "createdBy": "admin"},
+        auth=None,
     )
-    with pytest.raises(LegacySharedAuthIneligible):
-        await load_catalog_scope("i", "o", "u", legacy)
-    assert len(legacy.calls) == 1
+    private_only.data[get_mcp_credentials_path("i", "admin")] = {
+        "isAuthenticated": True, "credentialGeneration": "admin-gen",
+        "credentials": {"apiToken": "admin-secret"},
+    }
+    with pytest.raises(CatalogScopeError):
+        await load_catalog_scope("i", "o", "employee", private_only)
+    assert len(private_only.calls) == 1  # Refuse before reading the administrator's credential.
+
+
+@pytest.mark.asyncio
+async def test_obsales_shared_catalog_scope_is_org_and_generation_bound() -> None:
+    instance = {
+        "_id": "i", "orgId": "o", "createdBy": "admin", "name": "OBSales",
+        "isCustom": True, "transport": "streamable_http", "authMode": "api_token",
+        "useAdminAuth": True,
+    }
+    store = Store(instance=instance, auth=None)
+    admin_path = get_mcp_credentials_path("i", "admin")
+    store.data[admin_path] = {
+        "isAuthenticated": True, "credentialGeneration": "g1",
+        "credentials": {"apiToken": "secret"},
+    }
+    a = await load_catalog_scope("i", "o", "employee-a", store)
+    b = await load_catalog_scope("i", "o", "employee-b", store)
+    assert a.owner_id == "admin" and a.identity == b.identity
+    assert a.auth == b.auth
+    assert "secret" not in repr(a) and "secret" not in a.identity
+    with pytest.raises(CatalogScopeError):
+        await load_catalog_scope("i", "different-org", "employee-a", store)
+    store.data[admin_path]["credentialGeneration"] = "g2"
+    assert (await load_catalog_scope("i", "o", "employee-a", store)).identity != a.identity
+    del store.data[admin_path]
+    with pytest.raises(CatalogScopeError):
+        await load_catalog_scope("i", "o", "employee-a", store)
 
 
 @pytest.mark.asyncio

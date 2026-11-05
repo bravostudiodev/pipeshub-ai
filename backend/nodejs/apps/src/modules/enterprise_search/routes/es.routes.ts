@@ -1,4 +1,5 @@
 import { NextFunction, Router, Response } from 'express';
+import { imageAttachmentMembership } from '../controller/image-attachment-membership.controller';
 import { Container } from 'inversify';
 import multer from 'multer';
 import { createMulter } from '../../../libs/utils/multer.utils';
@@ -202,6 +203,12 @@ export function createConversationalRouter(container: Container): Router {
     chatPdfUpload.array('files'),
     ValidationMiddleware.validate(attachmentUploadSchema),
     uploadChatAttachments(appConfig),
+  );
+
+  router.post(
+    '/internal/image-attachment-membership',
+    authMiddleware.scopedTokenValidator(TokenScopes.CONVERSATION_IMAGE_MEMBERSHIP),
+    imageAttachmentMembership,
   );
 
   router.post(

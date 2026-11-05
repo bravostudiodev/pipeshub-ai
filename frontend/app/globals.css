@@ -75,6 +75,9 @@ html.dark .oauth-callback-shell { background: #111113; }
   color: #fff !important;
 }
 
+/* Share can be opened from the fullscreen preview (z-index 100). */
+.rt-DialogOverlay:has(.artifact-share-dialog) { z-index: 110; }
+
 /* Org logos may fail to load, leaving Radix's initials fallback visible. */
 .rt-AvatarRoot.oddjeeves-org-avatar {
   --accent-a3: var(--brand-a3);
@@ -237,8 +240,13 @@ html.dark .oauth-callback-shell { background: #111113; }
   --file-icon-fill: #212225;
 }
 
-/* Map the company accent palette to Radix accent variables. */
-.radix-themes[data-accent-color="emerald"] {
+/* Portaled dialogs recreate the theme from its jade context instead of copying
+   the root's custom data attribute. Legacy action buttons also select jade
+   explicitly. Map both to the company palette; semantic badges and red
+   destructive actions retain their explicit colors. */
+.radix-themes[data-accent-color="emerald"],
+.radix-themes[data-accent-color="jade"],
+.rt-BaseButton[data-accent-color="jade"] {
   --accent-1: var(--brand-1);
   --accent-2: var(--brand-2);
   --accent-3: var(--brand-3);
@@ -861,32 +869,6 @@ li > blockquote {
 @keyframes mobileSheetBackdropIn {
   from { opacity: 0; }
   to   { opacity: 1; }
-}
-
-/* ========================
-   Landscape Block Overlay
-   Shown on small screens in landscape to prompt users to rotate to portrait.
-   Pure CSS — no JS or React state required.
-   ======================== */
-
-@media screen and (orientation: landscape) and (max-width: 900px) {
-  .landscape-block-overlay {
-    display: flex !important;
-  }
-}
-
-.landscape-block-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background-color: var(--color-background);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  padding: var(--space-6);
-  text-align: center;
 }
 
 @keyframes chatWidgetExpandIn {
