@@ -400,10 +400,11 @@ def save_draft(project: Path) -> Path | None:
     draft = project.parent / DRAFT_PATH
     try:
         draft.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(draft, "w", zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(draft, "w", zipfile.ZIP_DEFLATED, strict_timestamps=False) as archive:
             for path in sources:
                 archive.write(path, path.relative_to(project).as_posix())
-    except OSError as error:
+    except (OSError, ValueError, zipfile.LargeZipFile) as error:
+        # A draft is a convenience; it must never stop the deck from building.
         print(f"Note: the project draft could not be saved ({error}).", file=sys.stderr)
         return None
     return draft
@@ -470,7 +471,9 @@ def build_deck(project: Path, output: Path) -> tuple[Path, list[str]]:
         "Open dist/index.html in a browser; it is self-contained and needs no server.\n"
         "The source is slides.md (plus style.css, components/ and public/ when present).\n"
     )
-    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+    # strict_timestamps=False: a file with a pre-1980 mtime is stored as 1980
+    # instead of aborting the delivery.
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, strict_timestamps=False) as archive:
         archive.writestr("dist/index.html", index)
         sources = [path for path in _source_files(project) if path.name != DECK_STATE]
         for path in sources:

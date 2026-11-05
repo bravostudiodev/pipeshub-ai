@@ -927,6 +927,9 @@ def _tar_files(files: dict[str, bytes]) -> bytes:
     # Entries are unpacked as root, but code runs as the unprivileged `sandbox`
     # user, which must be able to overwrite files carried over from an earlier
     # call (e.g. edit and rebuild a project) and add files beside them.
+    # TarInfo defaults to a 1970 mtime, which ZIP cannot store; zipping a
+    # carried-over file then fails with "timestamps before 1980".
+    now = int(time.time())
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         dirs: set[str] = set()
@@ -939,11 +942,13 @@ def _tar_files(files: dict[str, bytes]) -> bytes:
             info = tarfile.TarInfo(name=d)
             info.type = tarfile.DIRTYPE
             info.mode = 0o777
+            info.mtime = now
             tar.addfile(info)
         for rel_path, content in files.items():
             info = tarfile.TarInfo(name=rel_path)
             info.size = len(content)
             info.mode = 0o666
+            info.mtime = now
             tar.addfile(info, io.BytesIO(content))
     buf.seek(0)
     return buf.read()

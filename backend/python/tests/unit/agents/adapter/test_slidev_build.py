@@ -344,3 +344,22 @@ def test_main_prints_the_path_it_actually_wrote(tmp_path: Path, monkeypatch: pyt
     monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
     assert build_deck.main(["build_deck.py", str(project), str(tmp_path / "requested.zip")]) == 0
     assert f"Wrote {tmp_path / 'Hello.zip'}" in capsys.readouterr().out
+
+
+def test_files_with_1970_timestamps_still_build_and_draft(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files carried into the sandbox from an earlier call used to arrive dated
+    1970, which ZIP rejects; every rebuild then crashed in the draft save."""
+    import os
+
+    project = _project(tmp_path, monkeypatch)
+    (project / "style.css").write_text(":root{}")
+    for path in project.iterdir():
+        os.utime(path, (0, 0))
+    monkeypatch.setattr(build_deck, "check_layout", lambda html, work: ([], 1))
+
+    output, _ = build_deck.build_deck(project, tmp_path / "out/deck.zip")
+
+    with zipfile.ZipFile(output) as archive:
+        assert "style.css" in archive.namelist()
+    with zipfile.ZipFile(tmp_path / build_deck.DRAFT_PATH) as draft:
+        assert "style.css" in draft.namelist()

@@ -752,6 +752,8 @@ class TestTarFiles:
         assert names.index("deck/public/logo") < names.index("deck/public/logo/a.svg")
         for m in members.values():
             assert m.mode == (0o777 if m.isdir() else 0o666)
+            # A 1970 mtime (TarInfo's default) makes ZIP refuse the file later.
+            assert m.mtime > 315532800
 
     def test_empty_map_yields_empty_tar(self) -> None:
         tar_bytes = _tar_files({})
