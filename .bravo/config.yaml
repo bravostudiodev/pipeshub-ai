@@ -58,27 +58,27 @@ pipeline:
           context: .
           push: true
           tags:
-            - 0.9.1.oddyssey2-19
-#    "Image build and push":
-#      branch: "main"
-#      imageBuild:
-#        <<: *imageBuild
-#        push: true
-#    "Sandbox image build":
-#      branch: "!main"
-#      imageBuild: &sandboxImageBuild
-#        name: platform/pipeshubai-sandbox
-#        securityScan:
-#          failSeverity: CRITICAL
-#          issueAllowlist:
-#            - CVE-2026-6653
-#        context: deployment/sandbox
-#        push: true
-#        tags:
-#          - 0.9.1.oddyssey2-18
-#    "Sandbox image build and push":
-#      branch: "main"
-#      imageBuild:
-#        <<: *sandboxImageBuild
-#        push: true
-#
+            - 0.9.1.oddyssey2
+    "Image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *imageBuild
+        push: true
+    "Sandbox image build":
+      branch: "!main"
+      imageBuild: &sandboxImageBuild
+        name: platform/pipeshubai-sandbox
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-6653
+        context: deployment/sandbox
+        push: true
+        tags:
+          - 0.9.1.oddyssey2
+    "Sandbox image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *sandboxImageBuild
+        push: true
+
