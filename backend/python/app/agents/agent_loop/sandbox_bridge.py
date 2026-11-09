@@ -148,6 +148,20 @@ _DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org"
 # Baked into the PipesHub sandbox image; added to NODE_PATH so the
 # common packages need no per-sandbox npm install.
 _IMAGE_NODE_MODULES = "/home/sandbox/node_modules"
+# What deployment/sandbox/Dockerfile installs into the image (kept in sync by
+# test_sandbox_bridge). Without this every `packages=[...]` for a library the
+# image already has started an install container against the registry.
+_IMAGE_PREINSTALLED_PACKAGES: dict[str, list[str]] = {
+    "python": [
+        "pandas", "matplotlib", "seaborn", "plotly", "kaleido", "openpyxl",
+        "python-docx", "python-pptx", "pillow", "reportlab", "fpdf2", "cairosvg",
+        "numpy", "scipy", "tabulate", "xlsxwriter", "jinja2",
+    ],
+    "typescript": [
+        "fs-extra", "sharp", "@types/node", "csv-stringify", "json2csv", "papaparse",
+        "pptxgenjs", "docx", "exceljs", "pdfkit", "pdf-lib",
+    ],
+}
 
 _FALSY_ENV_VALUES = {"0", "false", "no", "off"}
 
@@ -284,6 +298,7 @@ async def build_coding_sandbox_manager(
         docker_opts.setdefault("pip_index_url", os.environ.get(_ENV_PIP_INDEX_URL, _DEFAULT_PIP_INDEX_URL))
         docker_opts.setdefault("npm_registry", os.environ.get(_ENV_NPM_REGISTRY, _DEFAULT_NPM_REGISTRY))
         docker_opts.setdefault("image_node_modules", _IMAGE_NODE_MODULES)
+        docker_opts.setdefault("preinstalled_packages", _IMAGE_PREINSTALLED_PACKAGES)
         docker_opts.setdefault("allow_network", network_enabled)
 
     registry = build_default_registry(

@@ -584,6 +584,40 @@ class TestInstallPackagesIdempotency:
             assert fake_client.containers.create.call_count == 1
 
 
+class TestPreinstalledPackages:
+    """A package the image already ships must never start an install
+    container: with an unreachable registry that install hung for five
+    minutes while the chat showed nothing."""
+
+    async def test_image_package_is_satisfied_without_a_container(self, tmp_path) -> None:
+        sandbox = DockerCodingSandbox(
+            working_dir=str(tmp_path / "wd"),
+            preinstalled_packages={"typescript": ["exceljs", "docx"], "python": ["python_docx"]},
+        )
+        fake_client = MagicMock()
+        _with_egress_network(fake_client, "sandbox_egress")
+
+        with patch("docker.from_env", return_value=fake_client):
+            node = await sandbox.install_packages(["exceljs@4", "docx"], "typescript")
+            python = await sandbox.install_packages(["python-docx"], "python")
+
+        assert node.success is True and node.installed == []
+        assert python.success is True and python.installed == []
+        fake_client.containers.create.assert_not_called()
+
+    async def test_a_real_install_fails_fast_when_the_registry_is_unreachable(self, tmp_path) -> None:
+        sandbox = DockerCodingSandbox(working_dir=str(tmp_path / "wd"))
+        fake_client = MagicMock()
+        fake_client.containers.create.return_value = _fake_container(exit_code=0)
+        _with_egress_network(fake_client, "sandbox_egress")
+
+        with patch("docker.from_env", return_value=fake_client):
+            await sandbox.install_packages(["left-pad"], "typescript")
+
+        command = fake_client.containers.create.call_args.kwargs["command"][6]
+        assert "--fetch-timeout=20000" in command and "--fetch-retries=1" in command
+
+
 class TestInstallFailsClosed:
     """pip builds sdists and npm runs lifecycle scripts, so an install is
     never retried on the bridge without the firewall."""

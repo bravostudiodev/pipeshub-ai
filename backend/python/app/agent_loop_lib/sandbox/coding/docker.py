@@ -179,6 +179,7 @@ class DockerCodingSandbox(CodingSandboxBackend):
         package_allowlist: list[str] | None = None,
         package_denylist: list[str] | None = None,
         image_node_modules: str | None = None,
+        preinstalled_packages: dict[str, list[str]] | None = None,
         egress_allow_cidrs: tuple[str, ...] = (),
         sandbox_user: str = "sandbox",
         context: SandboxContext | None = None,
@@ -209,7 +210,13 @@ class DockerCodingSandbox(CodingSandboxBackend):
         self._image_node_modules = image_node_modules
         self._egress_allow_cidrs = parse_cidrs(egress_allow_cidrs)
         self._sandbox_user = sandbox_user
-        self._installed: dict[str, set[str]] = {"typescript": set(), "python": set()}
+        self._installed: dict[str, set[str]] = {
+            language: {
+                canonical_package_key(name, language)
+                for name in (preinstalled_packages or {}).get(language, [])
+            }
+            for language in ("typescript", "python")
+        }
         self._reflection = ReflectionEngine()
         self._provisioned = False
 
@@ -764,7 +771,11 @@ class DockerCodingSandbox(CodingSandboxBackend):
         if language == "python":
             cmd = [
                 "sh", "-c",
+                # Short timeouts: an unreachable index must fail in about a
+                # minute, not hold the tool call (and the chat) for the full
+                # container wait below.
                 "pip install --quiet --no-cache-dir --target /deps "
+                "--timeout 20 --retries 1 "
                 f"--index-url {self._pip_index_url} " + " ".join(to_install),
             ]
             extract_path = "/deps"
@@ -773,6 +784,7 @@ class DockerCodingSandbox(CodingSandboxBackend):
             cmd = [
                 "sh", "-c",
                 "mkdir -p /install && npm install --prefix /install --no-save "
+                "--fetch-timeout=20000 --fetch-retries=1 "
                 f"--loglevel=error --registry={self._npm_registry} "
                 + " ".join(to_install),
             ]

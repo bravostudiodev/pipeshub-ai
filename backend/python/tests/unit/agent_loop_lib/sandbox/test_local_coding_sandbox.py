@@ -97,7 +97,7 @@ class TestUnknownSandboxTools:
 
         assert result.success is False
         assert "no 'coding' sandbox with id" in result.error
-        assert "only for the turn that created them" in result.error
+        assert "only for the user message that created them" in result.error
         assert "Do not retry with another id" in result.error
 
     def test_guidance_keeps_the_original_error_text(self) -> None:
