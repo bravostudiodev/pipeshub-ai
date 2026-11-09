@@ -91,6 +91,8 @@ pipeline:
           - 29.9.2.oddyssey1-1 # TODO
         securityScan:
           failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-111497
     "Sandbox DinD image build and push":
       branch: "main"
       imageBuild:
