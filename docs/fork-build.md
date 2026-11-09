@@ -165,9 +165,13 @@ This image smoke test verifies the libraries baked into the image, but does
 not verify Kubernetes runtime isolation or the package installer and its
 network route. Before enabling execution, verify that Docker reports
 `name=rootless` in its `SecurityOptions`. The Helm executor pod uses
-`hostUsers: true` and UID/GID/fsGroup 1000 for sandbox containers; the outer
+`hostUsers: true` and UID/GID/fsGroup 10101 for sandbox containers; the outer
 executor container remains `privileged: true` to initialize and run the
-rootless Docker daemon. Rootless mode applies to the Docker engine and does not
+rootless Docker daemon. The custom DinD image is built from
+`deployment/sandbox-dind/Dockerfile` in this repository; it remaps the upstream
+`rootless` account to UID/GID 10101 and includes the daemon-start and
+smoke-test scripts. The Bravo pipeline builds it on non-main branches and
+pushes it from `main`. Rootless mode applies to the Docker engine and does not
 remove the outer container's privileged setting. Also verify per-run CPU and
 memory limits in practice: startup reports the daemon's cgroup driver and
 version, but does not guarantee enforcement. Per-run limits may be ignored
