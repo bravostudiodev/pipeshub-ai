@@ -89,6 +89,8 @@ pipeline:
         push: false
         tags:
           - 29.9.2.oddyssey1-1
+        securityScan:
+          failSeverity: CRITICAL
     "Sandbox DinD image build and push":
       branch: "main"
       imageBuild:
