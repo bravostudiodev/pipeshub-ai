@@ -86,9 +86,9 @@ pipeline:
       imageBuild: &sandboxDindImageBuild
         name: platform/pipeshubai-dind-rootless
         context: deployment/sandbox-dind
-        push: false
+        push: true # TODO
         tags:
-          - 29.9.2.oddyssey1-1
+          - 29.9.2.oddyssey1-1 # TODO
         securityScan:
           failSeverity: CRITICAL
     "Sandbox DinD image build and push":
