@@ -55,7 +55,7 @@ pipeline:
             - CVE-2026-111497
             - CVE-2026-114820
         context: .
-        push: true
+        push: false
         tags:
           - 0.9.1.oddyssey2
     "Image build and push":
@@ -72,7 +72,7 @@ pipeline:
           issueAllowlist:
             - CVE-2026-6653
         context: deployment/sandbox
-        push: true
+        push: false
         tags:
           - 0.9.1.oddyssey2
     "Sandbox image build and push":
