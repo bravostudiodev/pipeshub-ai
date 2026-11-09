@@ -37,27 +37,27 @@ pipeline:
       branch: "!main"
       imageBuild: &imageBuild
         name: platform/pipeshubai
-          securityScan:
-            failSeverity: CRITICAL
-            issueAllowlist:
-              - CVE-2026-49261
-              - CVE-2026-44172
-              - CVE-2026-6653
-              - CVE-2026-85394
-              - CVE-2026-8838
-              - GHSA-6q48-6c7w-9gw2
-              - CVE-2026-112403
-              - GHSA-hq85-5cpj-mr62
-              - CVE-2026-91403
-              - CVE-2026-112393
-              - CVE-2026-112398
-              - CVE-2026-112900
-              - CVE-2026-111497
-              - CVE-2026-114820
-          context: .
-          push: true
-          tags:
-            - 0.9.1.oddyssey2
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+            - CVE-2026-8838
+            - GHSA-6q48-6c7w-9gw2
+            - CVE-2026-112403
+            - GHSA-hq85-5cpj-mr62
+            - CVE-2026-91403
+            - CVE-2026-112393
+            - CVE-2026-112398
+            - CVE-2026-112900
+            - CVE-2026-111497
+            - CVE-2026-114820
+        context: .
+        push: true
+        tags:
+          - 0.9.1.oddyssey2
     "Image build and push":
       branch: "main"
       imageBuild:
