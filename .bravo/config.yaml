@@ -35,9 +35,8 @@ pipeline:
           - frontend/.next/cache
     "Image build":
       branch: "!main"
-      imageBuild:
-        <<: &imageBuild
-          name: platform/pipeshubai
+      imageBuild: &imageBuild
+        name: platform/pipeshubai
           securityScan:
             failSeverity: CRITICAL
             issueAllowlist:
