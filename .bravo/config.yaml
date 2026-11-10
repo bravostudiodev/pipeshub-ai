@@ -9,50 +9,92 @@ pipeline:
           script: |
             set -e
 
+            echo "App build: installing backend dependencies"
             cd backend/nodejs/apps
             ARCH=$(uname -m)
             if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then
-              npm ci --ignore-scripts
+              npm ci --ignore-scripts || { echo "App build failed: backend install" >&2; exit 1; }
               npm uninstall jpeg-recompress-bin mozjpeg imagemin-mozjpeg 2>/dev/null || true
               npm install sharp --save || true
             else
-              npm ci
+              npm ci || { echo "App build failed: backend install" >&2; exit 1; }
             fi
-            npm run build
-            npm prune --production
+            echo "App build: compiling backend"
+            npm run build || { echo "App build failed: backend compilation" >&2; exit 1; }
+            echo "App build: pruning backend dependencies"
+            npm prune --production || { echo "App build failed: backend prune" >&2; exit 1; }
 
+            echo "App build: installing frontend dependencies"
             cd ../../../frontend
-            npm config set legacy-peer-deps true
-            npm ci
-            ELECTRON_STATIC=1 npm run build
+            npm_config_legacy_peer_deps=true npm ci || { echo "App build failed: frontend install" >&2; exit 1; }
+            echo "App build: compiling frontend"
+            ELECTRON_STATIC=1 npm run build || { echo "App build failed: frontend compilation" >&2; exit 1; }
+            echo "App build: complete"
         cache:
           - ~/.npm
+          - frontend/.next/cache
     "Image build":
       branch: "!main"
-      imageBuild:
-        <<: &imageBuild
-          name: platform/pipeshubai
-          securityScan:
-            failSeverity: CRITICAL
-            issueAllowlist:
-              - CVE-2026-49261
-              - CVE-2026-44172
-              - CVE-2026-6653
-              - CVE-2026-85394
-              - CVE-2026-8838
-              - GHSA-6q48-6c7w-9gw2
-              - CVE-2026-112403
-              - GHSA-hq85-5cpj-mr62
-              - CVE-2026-91403
-              - CVE-2026-112393
-              - CVE-2026-112398
-              - CVE-2026-112900
-          context: .
-          push: false
-          tags:
-            - 0.9.1.oddyssey1
+      imageBuild: &imageBuild
+        name: platform/pipeshubai
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-49261
+            - CVE-2026-44172
+            - CVE-2026-6653
+            - CVE-2026-85394
+            - CVE-2026-8838
+            - GHSA-6q48-6c7w-9gw2
+            - CVE-2026-112403
+            - GHSA-hq85-5cpj-mr62
+            - CVE-2026-91403
+            - CVE-2026-112393
+            - CVE-2026-112398
+            - CVE-2026-112900
+            - CVE-2026-111497
+            - CVE-2026-114820
+        context: .
+        push: false
+        tags:
+          - 0.9.1.oddyssey2
     "Image build and push":
       branch: "main"
       imageBuild:
         <<: *imageBuild
         push: true
+    "Sandbox image build":
+      branch: "!main"
+      imageBuild: &sandboxImageBuild
+        name: platform/pipeshubai-sandbox
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-6653
+        context: deployment/sandbox
+        push: false
+        tags:
+          - 0.9.1.oddyssey2
+    "Sandbox image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *sandboxImageBuild
+        push: true
+    "Sandbox DinD image build":
+      branch: "!main"
+      imageBuild: &sandboxDindImageBuild
+        name: platform/pipeshubai-dind-rootless
+        context: deployment/sandbox-dind
+        push: false
+        tags:
+          - 29.9.2.oddyssey2
+        securityScan:
+          failSeverity: CRITICAL
+          issueAllowlist:
+            - CVE-2026-111497
+    "Sandbox DinD image build and push":
+      branch: "main"
+      imageBuild:
+        <<: *sandboxDindImageBuild
+        push: true
+

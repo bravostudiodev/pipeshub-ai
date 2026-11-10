@@ -4,6 +4,11 @@ import { BaseError } from '../errors/base.error';
 import { HttpError } from '../errors/http.errors';
 import { isClientSafeError, isReaderWritten } from '../errors/reader-friendly';
 import { jsonResponse, logError } from '../utils/error.middleware.utils';
+import { redactSensitiveQueryParams } from '../utils/log-redaction.utils';
+import {
+  isShareTokenRequest,
+  isShareViewerRequest,
+} from '../../modules/artifacts/services/share-request-privacy';
 
 /**
  * What a reader is told when the failure is in PipesHub's own plumbing (a
@@ -176,11 +181,13 @@ export class ErrorMiddleware {
   }
 
   private static getRequestContext(req: Request) {
+    const bearerPath =
+      isShareTokenRequest(req.path) || isShareViewerRequest(req.path);
     return {
       method: req.method,
-      path: req.path,
-      query: req.query,
-      params: req.params,
+      path: redactSensitiveQueryParams(req.path),
+      query: bearerPath ? {} : req.query,
+      params: bearerPath ? {} : req.params,
       ip: req.ip,
       headers: this.sanitizeHeaders(req.headers),
     };
@@ -190,6 +197,11 @@ export class ErrorMiddleware {
     const sanitized = { ...headers };
     delete sanitized.authorization;
     delete sanitized.cookie;
+    for (const key of ['referer', 'referrer']) {
+      if (typeof sanitized[key] === 'string') {
+        sanitized[key] = redactSensitiveQueryParams(sanitized[key]);
+      }
+    }
     return sanitized;
   }
 }

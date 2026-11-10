@@ -9,6 +9,8 @@ import { ChatSectionHeader } from './chat-section-header';
 import { ChatSectionElement, StartChatButton, ChatItemSkeleton } from './chat-section-element';
 import { SidebarItem } from './sidebar-item';
 import { TimeGroup } from './time-group';
+import { SelectionBar } from './selection-bar';
+import { selectionScopeFor } from './selection-store';
 import type { Conversation } from '@/chat/types';
 import type { PendingConversation } from '@/chat/store';
 import type { TimeGroupKey } from './time-group';
@@ -190,6 +192,14 @@ export function ChatSection({
           )}
         </Flex>
       ) : null}
+
+      {isTimeGrouped && !isCollapsed && (
+        <SelectionBar
+          scope={selectionScopeFor(agentId)}
+          agentId={agentId}
+          visibleIds={timeGroups.flatMap(([, convs]) => convs.map((c) => c.id))}
+        />
+      )}
     </Flex>
   );
 }

@@ -4,6 +4,7 @@ LABEL maintainer="pipeshub" \
       description="Unified sandbox for Python, TypeScript, SQLite, and PostgreSQL code execution"
 
 # System deps: Cairo/Pango for SVG/PDF rendering, SQLite, PostgreSQL client, curl for Node setup.
+# chromium: headless layout check for Slidev decks (/opt/slidev/build_deck.py).
 # iptables: containers on the egress bridge install their egress firewall at start
 # (app/agent_loop_lib/sandbox/coding/egress_firewall.py), then drop to `sandbox`
 # with no capabilities via setpriv (util-linux). Without iptables, networked runs
@@ -14,21 +15,34 @@ RUN apt-get update && \
         libpango-1.0-0 \
         libpangocairo-1.0-0 \
         fonts-dejavu-core \
+        fonts-inter \
+        fontconfig \
         sqlite3 \
         postgresql-client \
         curl \
         gnupg \
         tzdata \
         iptables \
+        chromium \
     && rm -rf /var/lib/apt/lists/*
 
-# Node.js 20 via nodesource
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+# Node.js 22 is required by the pinned Slidev and Mermaid dependencies.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Global Node tools
 RUN npm install -g tsx && npm cache clean --force
+
+# Slidev and its themes are pinned separately from the general-purpose packages.
+# Projects can link /opt/slidev/node_modules to use these without network access.
+COPY slidev-package.json /opt/slidev/package.json
+COPY slidev-package-lock.json /opt/slidev/package-lock.json
+COPY brand-assets/oddbytes/ /opt/brand-assets/oddbytes/
+RUN cd /opt/slidev && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+# Builds decks into a self-contained dist/index.html for the gateway-protected preview
+# and checks the layout of every slide in headless Chromium.
+COPY slidev/build_deck.py slidev/single-file.vite.mjs slidev/layout_check.js /opt/slidev/
 
 # Install uv for fast Python package management
 RUN pip install --no-cache-dir uv
@@ -52,6 +66,10 @@ RUN uv pip install --system --no-cache \
     tabulate \
     xlsxwriter \
     jinja2
+
+# Every matplotlib savefig refuses figures with overflowing, overlapping, tiny
+# or low-contrast text (sitecustomize patches Figure.savefig on first import).
+COPY python/sitecustomize.py python/oddjeeves_figure_check.py /usr/local/lib/python3.12/site-packages/
 
 # Directories the sandbox user needs to write into at runtime.
 # /src   — container cwd; programs write output files here

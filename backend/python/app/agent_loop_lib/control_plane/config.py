@@ -180,8 +180,8 @@ class GovernorConfig(BaseModel):
     ``sandbox/governor.py::SandboxResourceGovernor``. ``None`` on either
     cap means unlimited for that dimension."""
 
-    max_total_sandboxes: int | None = 50
-    max_per_org: int | None = 10
+    max_total_sandboxes: int | None = 100
+    max_per_org: int | None = 30
 
 
 class CodingSandboxConfig(BaseModel):

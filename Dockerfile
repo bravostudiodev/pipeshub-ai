@@ -1,85 +1,21 @@
 # syntax=docker/dockerfile:1
-# Slow layers (APT, Rust, Python deps, ML models, runtime stack) live in Dockerfile.base.
-# The pipeline uses the company-published bases. Override these for local builds:
-#   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps --build-arg RUNTIME_BASE_IMAGE=pipeshubai/pipeshub-ai-base:runtime .
-# Slim app image (no pre-baked BGE; ~1.3 GB smaller — model downloads on first use):
-#   docker build --build-arg PYTHON_DEPS_IMAGE=pipeshubai/pipeshub-ai-base:python-deps-slim -t pipeshubai/pipeshub-ai:slim .
-ARG PYTHON_DEPS_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:python-deps
-ARG RUNTIME_BASE_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:runtime
+# Python deps, ML models, Chromium, and the runtime OS stack live in the
+# app-base image built from Dockerfile.base (target app-base). Every layer below
+# is application code, so only those layers are rebuilt and pushed per commit.
+# Rebuild and publish app-base when Python dependencies, bundled models, or the
+# runtime OS stack change (see docs/fork-build.md).
+ARG APP_BASE_IMAGE=doc.lan.dc11.us/platform/pipeshubai-base:app
 
-FROM ${PYTHON_DEPS_IMAGE} AS python-deps
-ARG BUNDLE_BGE_EMBEDDING=0
-# This base is built from the current backend/python/pyproject.toml and already
-# contains Python dependencies, Crawl4AI, Chromium, and model assets. Rebuild and
-# publish it when Python dependencies or bundled models change.
-RUN if [ "${BUNDLE_BGE_EMBEDDING}" != "1" ]; then \
-        rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-large-en-v1.5; \
-    fi && \
-    rm -rf /root/.cache/huggingface/hub/models--BAAI--bge-reranker-v2-m3
-
-
-FROM ${RUNTIME_BASE_IMAGE} AS runtime-base
-
-# -----------------------------------------------------------------------------
-# Runtime image. Node.js and frontend application artifacts are prepared by the
-# pipeline App build stage and copied from the build context below.
-# -----------------------------------------------------------------------------
-FROM runtime-base AS runtime
+FROM ${APP_BASE_IMAGE} AS runtime
 WORKDIR /app
 
-# Unprivileged runtime user (uid/gid 10101, matching the deployed Helm chart).
-# Its home stays /root so every on-disk path is unchanged across the upgrade:
-# local storage records absolute file:// URLs under ~/.local, and existing
-# volumes and custom mounts target /root/.local and /root/.cache/huggingface.
-# docker-entrypoint.sh hands root-owned data from earlier releases over to it.
-RUN groupadd --gid 10101 pipeshub && \
-    useradd --uid 10101 --gid 10101 --home-dir /root --no-create-home \
-        --shell /usr/sbin/nologin pipeshub && \
-    install -d -o 10101 -g 10101 /root/.cache /root/.local && \
-    chown 10101:10101 /root
-ENV HOME=/root
-# Pinned so the baked models are still found when HOME is overridden (the
-# Helm chart sets HOME=/home/user).
-ENV HF_HOME=/root/.cache/huggingface \
-    NLTK_DATA=/root/nltk_data \
-    PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
-
-# Point fastembed at the pre-populated cache we copy in below, matching the
-# FASTEMBED_CACHE_PATH used at build time in the python-deps stage.
-ENV FASTEMBED_CACHE_PATH=/root/.cache/fastembed
-
-# Cap ML thread fan-out (PyTorch/OpenBLAS/MKL). runtime_threads.py propagates
-# this to all libraries. Override via OMP_NUM_THREADS in .env if needed.
-ENV OMP_NUM_THREADS=2
-
-# Several third-party deps (talon, pysbd, ...) ship regex string literals with
-# unescaped backslashes and hit Python 3.12+'s SyntaxWarning at import time.
-# We don't control their source, and new deps can hit this same issue, so
-# suppress the class globally rather than patching each import site.
-ENV PYTHONWARNINGS="ignore::SyntaxWarning"
-
-# Copy Python site-packages from build stage
-COPY --from=python-deps /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=python-deps /usr/local/bin /usr/local/bin
-
-# Copy ML model data (dense HF embeddings + reranker, sparse fastembed, NLTK)
-COPY --chown=10101:10101 --from=python-deps /root/.cache/huggingface /root/.cache/huggingface
-COPY --chown=10101:10101 --from=python-deps /root/.cache/fastembed /root/.cache/fastembed
-COPY --chown=10101:10101 --from=python-deps /root/nltk_data /root/nltk_data
-
-# Copy Playwright browser binaries
-COPY --chown=10101:10101 --from=python-deps /root/.cache/ms-playwright /root/.cache/ms-playwright
-
-# Copy Node.js backend artifacts (already compiled and pruned by App build)
-COPY backend/nodejs/apps/dist ./backend/dist
+# node_modules first: it changes far less often than dist or the frontend, so
+# with a warm builder cache its ~700 MB layer is reused.
+COPY backend/nodejs/apps/node_modules ./backend/dist/node_modules
 COPY backend/nodejs/apps/src/modules/mail ./backend/src/modules/mail
 COPY backend/nodejs/apps/src/modules/api-docs/pipeshub-openapi.yaml ./backend/src/modules/api-docs/pipeshub-openapi.yaml
-COPY backend/nodejs/apps/node_modules ./backend/dist/node_modules
-
-# Copy static frontend export produced by App build
+COPY backend/nodejs/apps/dist ./backend/dist
 COPY frontend/out ./backend/dist/public
-
-# Copy Python application code
 COPY backend/python/app/ /app/python/app/
 
 # Copy the process monitor script

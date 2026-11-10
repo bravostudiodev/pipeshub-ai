@@ -10,13 +10,10 @@ import { DEFAULT_AGENT_CAPABILITIES } from '@/chat/types';
 import { useFeatureFlagsStore, selectPublicWebAccessEnabled } from '@/lib/store/feature-flags-store';
 
 export function hasNonDefaultSearchCapabilities(
-  internalSearch: boolean,
+  _internalSearch: boolean,
   webSearch: boolean,
 ): boolean {
-  return (
-    internalSearch !== DEFAULT_AGENT_CAPABILITIES.internalSearch ||
-    webSearch !== DEFAULT_AGENT_CAPABILITIES.webSearch
-  );
+  return webSearch !== DEFAULT_AGENT_CAPABILITIES.webSearch;
 }
 
 export function PlusMenuTriggerIcon({
@@ -144,11 +141,8 @@ function PlusMenuToggleRow({
 /** Shared menu body — attach files + capability toggles — used by both the desktop popover and mobile sheet. */
 export function PlusMenuContent({
   onAttachFiles,
-  internalSearch,
   webSearch,
-  onToggleInternalSearch,
   onToggleWebSearch,
-  agentHasInternalSearch,
   agentHasWebSearch,
 }: PlusMenuContentProps) {
   const { t } = useTranslation();
@@ -170,13 +164,6 @@ export function PlusMenuContent({
 
       <Separator size="4" style={{ margin: 'var(--space-1) 0' }} />
 
-      <PlusMenuToggleRow
-        label={t('chat.agentCapabilities.internalSearch', { defaultValue: 'Internal Search' })}
-        checked={internalSearch}
-        disabled={agentHasInternalSearch === false}
-        disabledTooltip={notConfiguredLabel}
-        onCheckedChange={onToggleInternalSearch}
-      />
       {publicWebAccessEnabled && (
         <PlusMenuToggleRow
           label={t('chat.agentCapabilities.webSearch', { defaultValue: 'Web Search' })}

@@ -198,3 +198,73 @@ class TestSandboxManagerConcurrency:
         assert sid is not None
         assert isinstance(backend, _FakeBackend)
         assert backend._provisioned
+
+
+class TestIdleEviction:
+    @pytest.mark.asyncio
+    async def test_a_fresh_sandbox_at_the_cap_replaces_the_least_recently_used_idle_one(self):
+        manager = _make_manager(limits=SandboxLimits(max_concurrent=2, evict_idle=True))
+        first, first_backend = await manager.get_or_create(SandboxType.CODING)
+        second, _ = await manager.get_or_create(SandboxType.CODING)
+
+        third, _ = await manager.get_or_create(SandboxType.CODING)
+
+        assert first_backend._destroyed
+        assert manager.active_count(SandboxType.CODING) == 2
+        with pytest.raises(UnknownSandboxError):
+            await manager.get_or_create(SandboxType.CODING, first)
+        assert {second, third} <= {key[1] for key in manager._instances}
+
+    @pytest.mark.asyncio
+    async def test_a_sandbox_held_by_a_running_call_is_never_evicted(self):
+        manager = _make_manager(limits=SandboxLimits(max_concurrent=1, evict_idle=True))
+        held, backend = await manager.get_or_create(SandboxType.CODING, reserve=True)
+
+        with pytest.raises(SandboxLimitExceeded):
+            await manager.get_or_create(SandboxType.CODING)
+        assert not backend._destroyed
+
+        manager.release(SandboxType.CODING, held)
+        await manager.get_or_create(SandboxType.CODING)
+        assert backend._destroyed
+
+    @pytest.mark.asyncio
+    async def test_without_evict_idle_the_cap_still_refuses(self):
+        manager = _make_manager(limits=SandboxLimits(max_concurrent=1))
+        await manager.get_or_create(SandboxType.CODING)
+        with pytest.raises(SandboxLimitExceeded):
+            await manager.get_or_create(SandboxType.CODING)
+
+
+class TestIdleReuse:
+    @pytest.mark.asyncio
+    async def test_an_answer_reuses_its_idle_sandbox_instead_of_opening_another(self):
+        manager = _make_manager(limits=SandboxLimits(max_concurrent=5))
+        first, backend = await manager.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+        manager.release(SandboxType.CODING, first)
+
+        again, same = await manager.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+
+        assert again == first and same is backend
+        assert manager.active_count(SandboxType.CODING) == 1
+
+    @pytest.mark.asyncio
+    async def test_parallel_calls_get_separate_sandboxes(self):
+        manager = _make_manager(limits=SandboxLimits(max_concurrent=5))
+        first, _ = await manager.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+        second, _ = await manager.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+
+        assert first != second
+        assert manager.active_count(SandboxType.CODING) == 2
+
+    @pytest.mark.asyncio
+    async def test_separate_runs_never_share_a_sandbox(self):
+        # Each agent run (one answer in one conversation) builds its own manager.
+        first_run = _make_manager(limits=SandboxLimits(max_concurrent=5))
+        second_run = _make_manager(limits=SandboxLimits(max_concurrent=5))
+        first, first_backend = await first_run.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+        first_run.release(SandboxType.CODING, first)
+
+        second, second_backend = await second_run.get_or_create(SandboxType.CODING, reserve=True, reuse_idle=True)
+
+        assert second != first and second_backend is not first_backend

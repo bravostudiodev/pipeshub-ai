@@ -4,8 +4,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, Flex, Text, IconButton } from '@radix-ui/themes';
 import { KnowledgeBaseApi } from '@/app/(main)/knowledge-base/api';
 import { Spinner } from '@/app/components/ui/spinner';
+import {
+  downloadPresentationHtml,
+  isPresentationArchive,
+  presentationTitle,
+} from '@/app/components/file-preview/presentation';
 import { isSignedUrl, isTrustedApiUrl } from '../../utils/parse-download-markers';
 import type { ChatArtifact } from '../../types';
+import { ArtifactShareDialog } from './artifact-share-dialog';
 
 interface ArtifactsPanelProps {
   artifacts: ChatArtifact[];
@@ -59,6 +65,17 @@ function isPreviewableImage(mimeType: string): boolean {
  *   URL even if the recordId stream fails.
  */
 async function handleDownload(artifact: ChatArtifact): Promise<void> {
+  // A deck downloads as one HTML file that opens in any browser; the ZIP
+  // (source plus build) is only the fallback.
+  if (artifact.recordId && artifact.version && isPresentationArchive(artifact)) {
+    try {
+      const indexUrl = await KnowledgeBaseApi.createDeckPreview(artifact.recordId, artifact.version);
+      await downloadPresentationHtml(indexUrl, presentationTitle(artifact.fileName));
+      return;
+    } catch {
+      // Fall back to the ZIP below.
+    }
+  }
   if (artifact.recordId) {
     try {
       await KnowledgeBaseApi.streamDownloadRecord(artifact.recordId, artifact.fileName, {
@@ -282,7 +299,9 @@ function ArtifactCard({
   /** Set to the higher version number when a later turn has since produced a newer copy of this same artifact. */
   newerVersionAvailable?: number;
 }) {
-  const icon = getIconForMime(artifact.mimeType);
+  const isDeck = isPresentationArchive(artifact);
+  const icon = isDeck ? 'slideshow' : getIconForMime(artifact.mimeType);
+  const displayName = isDeck ? presentationTitle(artifact.fileName) : artifact.fileName;
   const showThumbnail = isPreviewableImage(artifact.mimeType);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -335,8 +354,18 @@ function ArtifactCard({
         borderRadius: 'var(--radius-2)',
         border: '1px solid var(--slate-6)',
         backgroundColor: 'var(--slate-2)',
+        position: 'relative',
       }}
     >
+      {onPreview && (
+        <button
+          type="button"
+          aria-label={`Preview ${displayName}`}
+          disabled={isPreviewing}
+          onClick={() => void runPreview()}
+          style={{ position: 'absolute', inset: 0, zIndex: 1, border: 0, borderRadius: 'inherit', background: 'transparent', cursor: isPreviewing ? 'wait' : 'pointer' }}
+        />
+      )}
       {showThumbnail ? (
         <Box
           style={{
@@ -370,7 +399,7 @@ function ArtifactCard({
       <Flex direction="column" style={{ flex: 1, minWidth: 0 }}>
         <Flex align="center" gap="1">
           <Text size="2" weight="medium" style={{ color: 'var(--slate-12)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {artifact.fileName}
+            {displayName}
           </Text>
           {!!artifact.version && (
             <Text
@@ -389,7 +418,7 @@ function ArtifactCard({
           )}
         </Flex>
         <Text size="1" style={{ color: 'var(--slate-9)' }}>
-          {artifact.artifactType} {artifact.sizeBytes > 0 ? `· ${formatFileSize(artifact.sizeBytes)}` : ''}
+          {isDeck ? 'Presentation' : artifact.artifactType} {artifact.sizeBytes > 0 ? `· ${formatFileSize(artifact.sizeBytes)}` : ''}
         </Text>
         {newerVersionAvailable !== undefined && (
           <Text size="1" weight="medium" style={{ color: 'var(--amber-11)' }}>
@@ -398,7 +427,10 @@ function ArtifactCard({
         )}
       </Flex>
 
-      <Flex gap="1">
+      <Flex gap="1" style={{ position: 'relative', zIndex: 2 }}>
+        {artifact.recordId && artifact.version && (
+          <ArtifactShareDialog artifactId={artifact.recordId} version={artifact.version} />
+        )}
         {onViewSource && artifact.derivedFromCodeArtifactId && (
           <IconButton
             size="1"
@@ -437,7 +469,7 @@ function ArtifactCard({
           variant="ghost"
           onClick={runDownload}
           disabled={isDownloading}
-          aria-label={isDownloading ? 'Downloading artifact' : 'Download artifact'}
+          aria-label={isDownloading ? 'Downloading artifact' : isDeck ? 'Download presentation' : 'Download artifact'}
           style={{ cursor: isDownloading ? 'wait' : 'pointer' }}
         >
           {isDownloading ? (

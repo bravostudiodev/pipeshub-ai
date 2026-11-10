@@ -240,6 +240,11 @@ class AgentContext(BaseModel):
     # the delivery pipeline from attaching the same download card N times
     # (see `sandbox_bridge._register_run_code_artifacts`).
     delivered_artifact_versions: set[str] = Field(default_factory=set)
+    # Set once the conversation's saved deck draft has been looked up and
+    # restored into the sandbox. Request-wide, not per run: a delegated
+    # child's first `run_code` must not restore the draft over edits the
+    # parent already made in the same sandbox.
+    deck_draft_restore_checked: bool = False
     # Bounds `completion_gate`'s empty-response nudges so a genuinely
     # stuck run terminates rather than looping until `max_turns`.
     completion_gate_nudges: int = 0

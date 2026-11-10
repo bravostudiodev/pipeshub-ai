@@ -27,6 +27,8 @@
 #     --set 'ingress.hosts[0].host=pipeshub.example.com' \
 #     --set 'ingress.hosts[0].paths[0].path=/' \
 #     --set 'ingress.hosts[0].paths[0].pathType=Prefix' \
+#     --set 'ingress.hosts[0].paths[1].path=/decks' \
+#     --set 'ingress.hosts[0].paths[1].pathType=Prefix' \
 #     --set config.frontendPublicUrl=https://pipeshub.example.com \
 #     --set config.allowedOrigins=https://pipeshub.example.com \
 #     --set secretKey="$(openssl rand -hex 32)" \
@@ -123,12 +125,14 @@ ingress:
   className: ""   # e.g. alb, gce, nginx
   annotations: {}
   hosts: []
-  # Minimal example (single public host -> 3001 only). serviceName/port are
-  # optional; they default to the chart's fullname Service and 3001:
+  # Minimal example (single public host -> Node/UI on 3001). Keep /decks on
+  # the same Service and host; preserve its path and redact capability tokens
+  # from gateway logs/traces:
   # hosts:
-  #   - host: pipeshub.example.com
+  #   - host: oddjeeves.example.com
   #     paths:
   #       - { path: /, pathType: Prefix }
+  #       - { path: /decks, pathType: Prefix }
   #
   # OAuth/webhook example (adds a second host -> 8088). Only add this if
   # config.connectorPublicBackend is set to the second host.

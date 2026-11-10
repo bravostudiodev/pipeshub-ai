@@ -44,6 +44,7 @@ import { isPastedTextAttachment } from '../../utils/paste-attachment';
 import { useTranslation } from 'react-i18next';
 import { CitationMessageRowKeyContext } from './response-tabs/citations/citation-popover-control';
 import { useInlineCitationPopoverStore } from './response-tabs/citations/citation-popover-store';
+import { presentationTitle } from '@/app/components/file-preview/presentation';
 
 // Stable empty reference — avoids creating new objects in default params
 const EMPTY_CITATION_MAPS: CitationMaps = emptyCitationMaps();
@@ -301,6 +302,30 @@ export const ChatResponse = React.memo(function ChatResponse({
         }
         try {
           const { KnowledgeBaseApi } = await import('@/app/(main)/knowledge-base/api');
+          if (
+            (['application/zip', 'application/x-zip-compressed'].includes(artifact.mimeType) ||
+              (artifact.mimeType === 'application/octet-stream' && artifact.fileName.toLowerCase().endsWith('.zip'))) &&
+            version !== undefined
+          ) {
+            const previewUrl = await KnowledgeBaseApi.createDeckPreview(recordId, version);
+            const previous = useChatStore.getState().previewFile;
+            if (previous?.url?.startsWith('blob:')) URL.revokeObjectURL(previous.url);
+            setPreviewFile({
+              id: recordId,
+              url: previewUrl,
+              name: presentationTitle(artifact.fileName),
+              type: 'application/vnd.oddjeeves.slidev-preview',
+              size: artifact.sizeBytes,
+              hideFileDetails: true,
+              showDownload: false,
+              shareArtifactId: recordId,
+              version,
+              latestVersion: effectiveLatest,
+              onVersionChange,
+              isSwitchingVersion: false,
+            });
+            return;
+          }
           const streamAsPdf =
             isPresentationFile(artifact.mimeType, artifact.fileName) ||
             isLegacyWordDocFile(artifact.mimeType, artifact.fileName);
@@ -319,6 +344,8 @@ export const ChatResponse = React.memo(function ChatResponse({
             streamAsPdf,
           );
           const isDocx = isDocxFile(artifact.mimeType, artifact.fileName);
+          const isPresentationPdf = isPresentationFile(artifact.mimeType, artifact.fileName) &&
+            (resolvedType === 'application/pdf' || await blob.slice(0, 5).text() === '%PDF-');
           const objectUrl = isDocx ? '' : URL.createObjectURL(blob);
 
           // Release the previous blob URL now that nothing references it —
@@ -331,10 +358,11 @@ export const ChatResponse = React.memo(function ChatResponse({
             url: objectUrl,
             blob: isDocx ? blob : undefined,
             name: artifact.fileName,
-            type: resolvedType,
+            type: isPresentationPdf ? 'application/vnd.oddjeeves.presentation-preview' : resolvedType,
             size: artifact.sizeBytes,
             hideFileDetails: true,
             showDownload: true,
+            shareArtifactId: recordId,
             version,
             latestVersion: effectiveLatest,
             onVersionChange,

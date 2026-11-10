@@ -456,7 +456,6 @@
     "language": "Language",
     "english": "English",
     "german": "German",
-    "rotateLandscape": "Rotate your device for the best experience",
     "errorOccurred": "An error occurred. Please try again.",
     "beta": {
       "label": "Beta",
@@ -639,7 +638,7 @@
     "uploadFilesRemaining": "{{remaining}} of {{total}} files remaining",
     "dropFilesHere": "Drop files here",
     "loadingConversation": "Loading conversation...",
-    "recents": "Recents",
+    "recents": "Conversations",
     "sharedChats": "Shared Chats",
     "sharedBy": "Shared by {{name}}",
     "noSharedChats": "No shared chats",
@@ -912,7 +911,7 @@
     "deleteChat": "Delete",
     "deleteChatConfirm": "Are you sure?",
     "deleteChatDescription": "The chat titled",
-    "deleteChatWarning": "will be permanently removed from OddJeeves. All users with shared access will lose their access.",
+    "deleteChatWarning": "will be permanently removed from OddJeeves.",
     "editAgent": "Edit agent",
     "failedToArchive": "Failed to archive chat",
     "failedToDelete": "Failed to delete chat",
@@ -2602,6 +2601,7 @@
         "scopes": "Scopes",
         "scopesPlaceholder": "Add a scope",
         "useAdminAuth": "Use shared admin authentication for all users",
+        "useAdminAuthHint": "Only for OBSales; employees use this shared token automatically.",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "Credentials (optional)",
@@ -3385,7 +3385,7 @@
         "conflictDescription": "Reload the latest version, then re-apply your edits.",
         "conflictReload": "Reload"
       },
-      "builtinReadOnly": "This is a built-in skill and cannot be edited.",
+      "builtinReadOnly": "Only workspace administrators can edit this built-in skill.",
       "editorPanel": {
         "createTitle": "New Skill",
         "reviewTitle": "Review & Edit Candidate",

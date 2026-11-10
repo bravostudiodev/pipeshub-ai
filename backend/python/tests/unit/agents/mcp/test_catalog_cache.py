@@ -10,6 +10,7 @@ from app.agents.constants.mcp_server_constants import (
 )
 from app.agents.mcp.catalog_cache import (
     CatalogInvalidated,
+    CatalogUnavailable,
     get_for_owner,
     invalidate_scope,
 )
@@ -57,6 +58,25 @@ class Store:
         if self.race_revoke:
             self.data[get_mcp_credentials_path("i", "u")] = {"isAuthenticated": False}
         return {"tools": [{"name": "search", "description": "Search", "inputSchema": {"type": "object", "properties": {}}, "outputSchema": {"type": "object"}, "annotations": {"readOnlyHint": True}}], "instructions": "Read-only guidance"}
+
+
+@pytest.mark.asyncio
+async def test_obsales_rejects_credentials_echoed_in_discovery() -> None:
+    store = Store()
+    store.data[get_mcp_instance_path("i")] = {
+        "_id": "i", "orgId": "o", "createdBy": "u", "name": "OBSales", "typeId": None,
+        "isCustom": True, "transport": "streamable_http", "authMode": "api_token", "useAdminAuth": True,
+    }
+    store.data[get_mcp_credentials_path("i", "u")] = {
+        "isAuthenticated": True, "credentialGeneration": "g", "credentials": {"apiToken": "xy7"},
+    }
+
+    async def leaking_listing(scope: Any) -> dict[str, Any]:  # noqa: ANN401
+        return {"tools": [{"name": "search", "description": "echo xy7", "inputSchema": {"type": "object"}}]}
+
+    with pytest.raises(CatalogUnavailable, match="unsafe metadata"):
+        await get_for_owner("i", "o", "employee", store, leaking_listing)
+    assert not any("xy7" in str(value) for key, value in store.data.items() if "/catalog/" in key)
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,15 @@ def _http_config(**overrides: Any) -> MCPServerConfig:  # noqa: ANN401
     return _config(**{"transport": MCPTransport.STREAMABLE_HTTP, "url": "https://mcp.example.com/mcp?api_key=secret", "command": None, **overrides})
 
 
+def test_obsales_short_bearer_token_is_redacted_from_connect_errors() -> None:
+    config = _http_config(name="OBSales", type_id=None, is_custom=True,
+                          auth_mode=MCPAuthMode.API_TOKEN, use_admin_auth=True)
+    manager = MCPClientManager(config, headers={"Authorization": "Bearer xy7"})
+    error = manager._connect_error(RuntimeError("provider echoed xy7"), wire.WireRecord(), "")
+    assert "xy7" not in str(error)
+    assert "xy7" not in manager._sanitize_credentials("provider echoed xy7")
+
+
 async def _answered(status: int, *, session_id: bool = False, challenge: str | None = None) -> None:
     """What the response hook records for one request."""
     headers = {"mcp-session-id": "s-1"} if session_id else {}
@@ -193,6 +202,38 @@ def sdk() -> Iterator[_Script]:
          patch.object(client_module, "check_mcp_url", new=AsyncMock()):
         yield script
     client_module._initialize_only.clear()
+
+
+async def test_shared_api_token_reaches_sdk_proxy_transport_without_disclosure(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """Exercise real SDK negotiation and the guarded proxy transport, without network access."""
+    from app.agents.mcp import url_guard
+    from app.agents.mcp.discovery import build_auth_env_and_headers
+
+    token = "dummy-integration-token"
+    seen = []
+
+    async def respond(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request.headers.get("authorization") == f"Bearer {token}")
+        return httpx2.Response(
+            401, json={"jsonrpc": "2.0", "error": {"code": -32000, "message": "Missing Bearer key."}, "id": 1},
+            request=request,
+        )
+
+    monkeypatch.setenv("OUTBOUND_PROXY_URL", "http://proxy.example:3128")
+    monkeypatch.setattr(client_module, "check_mcp_url", AsyncMock())
+    monkeypatch.setattr(url_guard, "check_mcp_url", AsyncMock())
+    monkeypatch.setattr(url_guard, "_inner_transport", lambda proxy: httpx2.MockTransport(respond))
+    config = _http_config(url="https://example.com/mcp", name="OBSales", type_id=None, is_custom=True,
+                          auth_mode=MCPAuthMode.API_TOKEN, use_admin_auth=True)
+    env, headers = build_auth_env_and_headers(config, {"apiToken": token})
+    manager = MCPClientManager(config, env=env, headers=headers)
+    try:
+        with pytest.raises(MCPConnectionError):
+            await manager.open()
+    finally:
+        await manager.aclose()
+    assert seen and all(seen)
+    assert token not in caplog.text
 
 
 class TestBlockedUrlFailsBeforeConnecting:

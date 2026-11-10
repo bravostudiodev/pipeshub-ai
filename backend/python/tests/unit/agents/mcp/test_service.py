@@ -11,10 +11,12 @@ from app.agents.mcp.service import (
     instance_config_from_dict,
     is_effective_auth_authenticated,
     is_mcp_enabled,
+    is_obsales_shared_instance,
     legacy_mcp_selection_owners,
     load_org_instances,
     match_enabled_tools_for_mcp_server,
     resolve_effective_user_auth,
+    uses_shared_admin_credential,
 )
 
 
@@ -96,13 +98,49 @@ class TestResolveEffectiveUserAuth:
         cfg.get_config.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_admin_auth_resolves_creator_record(self) -> None:
+    async def test_only_obsales_resolves_shared_creator_record(self) -> None:
+        instance = _instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport="streamable_http", authMode="api_token",
+            useAdminAuth=True, createdBy="admin-1",
+        )
+        cfg = MagicMock()
+        cfg.get_config = AsyncMock(return_value={"isAuthenticated": True})
+        await resolve_effective_user_auth(instance, "user-2", cfg)
+        assert cfg.get_config.await_args.args[0].endswith("/inst-1/admin-1")
+
+    @pytest.mark.asyncio
+    async def test_obsales_missing_creator_fails_closed_without_caller_fallback(self) -> None:
+        instance = _instance(
+            name="OBSales", typeId=None, isCustom=True,
+            transport="streamable_http", authMode="api_token",
+            useAdminAuth=True, createdBy=None,
+        )
+        cfg = MagicMock()
+        cfg.get_config = AsyncMock(return_value={"isAuthenticated": True})
+        assert await resolve_effective_user_auth(instance, "user-2", cfg) is None
+        cfg.get_config.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_obsales_admin_flag_never_shares_credentials(self) -> None:
         instance = _instance(useAdminAuth=True, createdBy="admin-1")
         cfg = MagicMock()
         cfg.get_config = AsyncMock(return_value={"isAuthenticated": True})
         await resolve_effective_user_auth(instance, "user-2", cfg)
-        called_path = cfg.get_config.await_args.args[0]
-        assert called_path.endswith("/inst-1/admin-1")
+        assert cfg.get_config.await_args.args[0].endswith("/inst-1/user-2")
+
+    def test_obsales_designation_is_strict(self) -> None:
+        candidate = _instance(
+            name=" obsales ", typeId=None, isCustom=True,
+            transport="streamable_http", authMode="api_token", useAdminAuth=True,
+        )
+        assert is_obsales_shared_instance(candidate)
+        assert uses_shared_admin_credential(candidate)
+        for changes in (
+            {"name": "sales"}, {"typeId": "obsales"}, {"isCustom": False},
+            {"transport": "sse"}, {"authMode": "headers"}, {"useAdminAuth": False},
+        ):
+            assert not uses_shared_admin_credential({**candidate, **changes})
 
     @pytest.mark.asyncio
     async def test_oauth_ignores_admin_auth_flag(self) -> None:
@@ -158,6 +196,7 @@ class TestGetAuthenticatedMcpServers:
     async def test_filters_to_authenticated_only(self) -> None:
         authenticated = _instance(_id="inst-1", typeId="brave_search")
         unauthenticated = _instance(_id="inst-2", typeId="exa", name="Exa")
+
         cfg = MagicMock()
         cfg.list_keys_in_directory = AsyncMock(
             return_value=["/services/mcp/instances/inst-1", "/services/mcp/instances/inst-2"]
@@ -175,7 +214,7 @@ class TestGetAuthenticatedMcpServers:
             return None
 
         cfg.get_config = AsyncMock(side_effect=_get_config_side_effect)
-        result = await get_authenticated_mcp_servers("user-1", cfg)
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1")
         assert [r["instanceId"] for r in result] == ["inst-1"]
 
     @pytest.mark.asyncio
@@ -198,21 +237,52 @@ class TestGetAuthenticatedMcpServers:
             return None
 
         cfg.get_config = AsyncMock(side_effect=_get_config_side_effect)
-        result = await get_authenticated_mcp_servers("user-1", cfg)
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1")
         assert [server["instanceId"] for server in result] == ["inst-1", "inst-2"]
+
+    @pytest.mark.asyncio
+    async def test_obsales_shared_connection_attaches_for_multiple_workspace_employees(self) -> None:
+        obsales = _instance(
+            name="OBSales", typeId=None, isCustom=True, orgId="org-1",
+            transport="streamable_http", authMode="api_token", useAdminAuth=True,
+        )
+        cfg = MagicMock()
+        cfg.get_config = AsyncMock(return_value={
+            "isAuthenticated": True,
+            "credentialGeneration": "shared-generation",
+            "credentials": {"apiToken": "server-side-token"},
+        })
+        for employee_id in ("employee-a", "employee-b"):
+            result = await get_authenticated_mcp_servers(employee_id, cfg, "org-1", instances=[obsales])
+            assert [entry["instanceId"] for entry in result] == ["inst-1"]
+        assert cfg.get_config.await_count == 2
+        assert all(call.args[0].endswith("/inst-1/user-1") for call in cfg.get_config.await_args_list)
+        assert all("server-side-token" not in str(call) for call in cfg.get_config.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_cross_organization_instance_is_not_attached(self) -> None:
+        obsales = _instance(
+            name="OBSales", typeId=None, isCustom=True, orgId="org-2",
+            transport="streamable_http", authMode="api_token", useAdminAuth=True,
+        )
+        cfg = MagicMock()
+        cfg.get_config = AsyncMock(return_value={"isAuthenticated": True})
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1", instances=[obsales])
+        assert result == []
+        cfg.get_config.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_no_instances_returns_empty(self) -> None:
         cfg = MagicMock()
         cfg.list_keys_in_directory = AsyncMock(return_value=[])
-        result = await get_authenticated_mcp_servers("user-1", cfg)
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1")
         assert result == []
 
     @pytest.mark.asyncio
     async def test_load_failure_returns_empty(self) -> None:
         cfg = MagicMock()
         cfg.list_keys_in_directory = AsyncMock(side_effect=RuntimeError("boom"))
-        result = await get_authenticated_mcp_servers("user-1", cfg)
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1")
         assert result == []
 
     @pytest.mark.asyncio
@@ -222,7 +292,7 @@ class TestGetAuthenticatedMcpServers:
             raise RuntimeError("unexpected")
 
         monkeypatch.setattr("app.agents.mcp.service.load_org_instances", _raise)
-        result = await get_authenticated_mcp_servers("user-1", MagicMock())
+        result = await get_authenticated_mcp_servers("user-1", MagicMock(), "org-1")
         assert result == []
 
     @pytest.mark.asyncio
@@ -246,7 +316,7 @@ class TestGetAuthenticatedMcpServers:
             return None
 
         cfg.get_config = AsyncMock(side_effect=_get_config_side_effect)
-        result = await get_authenticated_mcp_servers("user-1", cfg)
+        result = await get_authenticated_mcp_servers("user-1", cfg, "org-1")
         assert [r["instanceId"] for r in result] == ["inst-1"]
 
 

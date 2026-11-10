@@ -20,12 +20,11 @@ import { groupConversationsByTime, getNonEmptyGroups } from './time-group';
 const MAX_VISIBLE_CHATS = 10;
 
 /** Number of skeleton items shown while loading each section */
-const SHARED_CHATS_SKELETON_COUNT = 2;
 const YOUR_CHATS_SKELETON_COUNT = 3;
 
 /**
- * Chat sections — renders "Shared Chats" and "Your Chats" with
- * time-grouped conversations and overflow "More" buttons.
+ * Chat sections — renders time-grouped conversations
+ * and an overflow "More" button.
  *
  * Wrapped in React.memo to prevent parent-cascade re-renders.
  */
@@ -40,20 +39,18 @@ export const ChatSections = React.memo(function ChatSections({
   const { t } = useTranslation();
 
   const conversations = useChatStore((s) => s.conversations);
-  const sharedConversations = useChatStore((s) => s.sharedConversations);
   const isConversationsLoading = useChatStore((s) => s.isConversationsLoading);
   const conversationsError = useChatStore((s) => s.conversationsError);
   const pendingConversations = useChatStore((s) => s.pendingConversations);
   const slots = useChatStore((s) => s.slots);
   const pagination = useChatStore((s) => s.pagination);
-  const sharedPagination = useChatStore((s) => s.sharedPagination);
 
   // ── Render-reason tracking ──────────────────────────────────────
   debugLog.tick('[sidebar] [ChatSections]');
   const prevChatSectionsRef = React.useRef<Record<string, unknown>>({});
   const currentSectionsVals: Record<string, unknown> = {
-    currentConversationId, conversations, sharedConversations,
-    isConversationsLoading, conversationsError, pendingConversations, slots, pagination, sharedPagination,
+    currentConversationId, conversations,
+    isConversationsLoading, conversationsError, pendingConversations, slots, pagination,
   };
   const sectionsReasons: string[] = [];
   for (const [k, v] of Object.entries(currentSectionsVals)) {
@@ -81,19 +78,11 @@ export const ChatSections = React.memo(function ChatSections({
 
   // Overflow detection — show "More" if there are more items than fit,
   // OR if the server indicated there are additional pages to fetch.
-  // Only OR in pagination when this section has items: store `pagination` is shared
-  // across loads, so "your" chats' hasNext must not show "More" on empty Shared.
-  const hasMoreShared =
-    sharedConversations.length > MAX_VISIBLE_CHATS ||
-    (sharedConversations.length > 0 && (sharedPagination?.hasNextPage ?? false));
   const hasMoreYour =
     conversations.length > MAX_VISIBLE_CHATS ||
     (conversations.length > 0 && (pagination?.hasNextPage ?? false));
 
   // Slice for overflow limit
-  const visibleShared = hasMoreShared
-    ? sharedConversations.slice(0, MAX_VISIBLE_CHATS)
-    : sharedConversations;
   const visibleYour = hasMoreYour
     ? conversations.slice(0, MAX_VISIBLE_CHATS)
     : conversations;
@@ -113,12 +102,12 @@ export const ChatSections = React.memo(function ChatSections({
       gap="3"
       style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
     >
-      {/* Recents — collapsible wrapper for both Shared and Your Chats */}
+      {/* Conversations — collapsible wrapper */}
       <Flex
         direction="column"
         style={recentsCollapsed ? undefined : { flex: 1, minHeight: 0, overflow: 'hidden' }}
       >
-        {/* Recents header with collapse toggle */}
+        {/* Conversations header with collapse toggle */}
         <Flex
           align="center"
           justify="between"
@@ -160,24 +149,8 @@ export const ChatSections = React.memo(function ChatSections({
             gap="3"
             style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
           >
-            {/* Shared Chats — flat list (no time grouping) */}
+            {/* Time-grouped chats; no section title since the wrapper is already "Conversations" */}
             <ChatSection
-              title={t('chat.sharedChats')}
-              conversations={visibleShared}
-              isLoading={isConversationsLoading}
-              hasError={!!conversationsError}
-              currentConversationId={currentConversationId}
-              onSelectConversation={handleSelectConversation}
-              onNewChat={handleNewChat}
-              skeletonCount={SHARED_CHATS_SKELETON_COUNT}
-              hasMore={hasMoreShared}
-              onMore={() => onOpenMoreChats('shared')}
-              emptyStateText={t('chat.noSharedChats')}
-            />
-
-            {/* Your Chats — time-grouped */}
-            <ChatSection
-              title={t('chat.yourChats')}
               timeGroups={yourNonEmptyGroups}
               isLoading={isConversationsLoading}
               hasError={!!conversationsError}

@@ -25,8 +25,8 @@ class TestCodingSandboxConfigDefaults:
 
     def test_governor_defaults(self) -> None:
         csc = CodingSandboxConfig()
-        assert csc.governor.max_total_sandboxes == 50
-        assert csc.governor.max_per_org == 10
+        assert csc.governor.max_total_sandboxes == 100
+        assert csc.governor.max_per_org == 30
 
     def test_backend_options_override(self) -> None:
         csc = CodingSandboxConfig(

@@ -94,13 +94,19 @@ vi.mock('@/chat/utils/fetch-models-for-context', () => ({
 }));
 
 vi.mock('@/app/components/file-preview', () => ({
-  FilePreviewInlinePanel: ({ file, onClose }: { file: { name: string }; onClose: () => void }) => (
+  FilePreviewInlinePanel: ({ file, onClose, headerAction }: { file: { name: string }; onClose: () => void; headerAction?: React.ReactNode }) => (
     <aside aria-label="Preview panel">
-      {file.name}
+      {file.name}{headerAction}
       <button type="button" onClick={onClose}>Close preview</button>
     </aside>
   ),
-  FilePreviewFullscreen: ({ file }: { file: { name: string } }) => <div aria-label="Fullscreen preview">{file.name}</div>,
+  FilePreviewFullscreen: ({ file, headerAction }: { file: { name: string }; headerAction?: React.ReactNode }) => <div aria-label="Fullscreen preview">{file.name}{headerAction}</div>,
+}));
+
+vi.mock('../components/message-area/artifact-share-dialog', () => ({
+  ArtifactShareDialog: ({ artifactId, version }: { artifactId: string; version: number }) => (
+    <button type="button">Share {artifactId} v{version}</button>
+  ),
 }));
 
 const getSharedMembers = vi.fn();
@@ -123,12 +129,15 @@ vi.mock('../components/search', () => ({
 
 vi.mock('../components/slack-connection-card', () => ({
   SlackConnectionCard: () => <button type="button">Connect</button>,
+  ObSalesConnectionCard: () => <div>OBSales</div>,
   NotionConnectionCard: () => <button type="button">Connect</button>,
   MiroConnectionCard: () => <button type="button">Connect</button>,
   JiraConnectionCard: () => <button type="button">Connect</button>,
   ConfluenceConnectionCard: () => <button type="button">Connect</button>,
   GmailConnectionCard: () => <button type="button">Connect</button>,
   GoogleDriveConnectionCard: () => <button type="button">Connect</button>,
+  GoogleCalendarConnectionCard: () => <button type="button">Connect</button>,
+  TabilityConnectionCard: () => <button type="button">Connect</button>,
   SuperhumanDocsConnectionCard: () => <button type="button">Connect</button>,
 }));
 
@@ -349,7 +358,7 @@ describe('Chat page — opening a conversation', () => {
     expect(screen.getByText('You get 25 days a year.')).toBeTruthy();
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Message composer' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(8);
+    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(9);
   });
 
   it('restores the collections the last question was scoped to', async () => {
@@ -621,6 +630,23 @@ describe('Chat page — projects and previews', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
     expect(screen.queryByRole('complementary', { name: 'Preview panel' })).toBeNull();
+  });
+
+  it('offers sharing only for the loaded artifact version in both preview modes', () => {
+    renderPage();
+    act(() => useChatStore.setState({
+      previewFile: { id: 'record-1', name: 'report.html', url: 'blob:test', type: 'text/html', shareArtifactId: 'record-1', version: 2 },
+      previewMode: 'sidebar',
+    } as Partial<ReturnType<typeof useChatStore.getState>>));
+    expect(screen.getByRole('button', { name: 'Share record-1 v2' })).toBeTruthy();
+    act(() => useChatStore.setState((state) => ({ previewFile: { ...state.previewFile!, version: 1 }, previewMode: 'fullscreen' })));
+    expect(screen.getByRole('button', { name: 'Share record-1 v1' })).toBeTruthy();
+    act(() => useChatStore.setState((state) => ({ previewFile: { ...state.previewFile!, isSwitchingVersion: true } })));
+    expect(screen.queryByRole('button', { name: /Share record-1/ })).toBeNull();
+    act(() => useChatStore.setState({
+      previewFile: { id: 'attachment', name: 'image.png', url: 'blob:test', type: 'image/png', version: 1 },
+    } as Partial<ReturnType<typeof useChatStore.getState>>));
+    expect(screen.queryByRole('button', { name: /Share record-1/ })).toBeNull();
   });
 
   it('shows the fullscreen preview when asked for it', () => {

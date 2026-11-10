@@ -90,6 +90,7 @@ from app.agent_loop_lib.tools.builtin.sandbox.coding_sandbox import (
 from app.agent_loop_lib.tools.builtin.sandbox.input_staging import (
     set_staged_input_files_for_task,
 )
+from app.agents.agent_loop import deck_drafts
 from app.agents.agent_loop.protocol.formatter import ArtifactSSEPayload
 from app.config.constants.arangodb import Connectors
 from app.models.entities import ArtifactType, ArtifactVisibility
@@ -147,6 +148,20 @@ _DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org"
 # Baked into the PipesHub sandbox image; added to NODE_PATH so the
 # common packages need no per-sandbox npm install.
 _IMAGE_NODE_MODULES = "/home/sandbox/node_modules"
+# What deployment/sandbox/Dockerfile installs into the image (kept in sync by
+# test_sandbox_bridge). Without this every `packages=[...]` for a library the
+# image already has started an install container against the registry.
+_IMAGE_PREINSTALLED_PACKAGES: dict[str, list[str]] = {
+    "python": [
+        "pandas", "matplotlib", "seaborn", "plotly", "kaleido", "openpyxl",
+        "python-docx", "python-pptx", "pillow", "reportlab", "fpdf2", "cairosvg",
+        "numpy", "scipy", "tabulate", "xlsxwriter", "jinja2",
+    ],
+    "typescript": [
+        "fs-extra", "sharp", "@types/node", "csv-stringify", "json2csv", "papaparse",
+        "pptxgenjs", "docx", "exceljs", "pdfkit", "pdf-lib",
+    ],
+}
 
 _FALSY_ENV_VALUES = {"0", "false", "no", "off"}
 
@@ -283,6 +298,7 @@ async def build_coding_sandbox_manager(
         docker_opts.setdefault("pip_index_url", os.environ.get(_ENV_PIP_INDEX_URL, _DEFAULT_PIP_INDEX_URL))
         docker_opts.setdefault("npm_registry", os.environ.get(_ENV_NPM_REGISTRY, _DEFAULT_NPM_REGISTRY))
         docker_opts.setdefault("image_node_modules", _IMAGE_NODE_MODULES)
+        docker_opts.setdefault("preinstalled_packages", _IMAGE_PREINSTALLED_PACKAGES)
         docker_opts.setdefault("allow_network", network_enabled)
 
     registry = build_default_registry(
@@ -302,6 +318,9 @@ async def build_coding_sandbox_manager(
             max_concurrent=max_concurrent,
             max_lifetime_s=max_lifetime_s,
             provision_timeout_s=settings.provision_timeout_s,
+            # Agents iterate with run_code and no sandbox_id; recycle an idle
+            # sandbox instead of failing the deliverable at the cap.
+            evict_idle=True,
         ),
         ctx=sandbox_ctx,
     )
@@ -329,6 +348,14 @@ class PipesHubCodingSandboxTool(CodingSandboxTool):
     `CodingSandboxTool._upload_staged_files()` runs unconditionally, not
     only at sandbox creation — so passing `input_artifacts` alongside an
     explicit `sandbox_id` works the same as on a fresh sandbox."""
+
+    # A Slidev build plus its headless layout check outlasts the 30 s default,
+    # and a model that omits `timeout` would otherwise kill every deck build.
+    _DECK_BUILD_HELPER = "/opt/slidev/build_deck.py"
+    _DECK_BUILD_TIMEOUT_S = 600.0
+
+    def minimum_timeout(self, code: str) -> float:
+        return self._DECK_BUILD_TIMEOUT_S if self._DECK_BUILD_HELPER in code else 0.0
 
     @property
     def parameters(self) -> list[ToolParameter]:
@@ -584,6 +611,15 @@ def coding_sandbox_artifact_staging(context: "AgentContext", *, inmemory_store: 
         if registry is not None and context.conversation_id and isinstance(code, str) and code.strip():
             await _capture_code_artifact(context, registry, ctx)
 
+        # Only run_code uploads staged files on every call; restoring on another
+        # tool would spend the once-per-request restore without delivering it.
+        restored = (
+            await deck_drafts.restore_draft_once(context, registry)
+            if ctx.tool_path.endswith("/run_code") else {}
+        )
+        if restored:
+            ctx.metadata["deck_project_restored"] = len(restored)
+
         refs = ctx.tool_input.get("input_artifacts")
         has_registry = registry is not None and context.conversation_id
         has_inmemory = inmemory_store is not None
@@ -593,7 +629,7 @@ def coding_sandbox_artifact_staging(context: "AgentContext", *, inmemory_store: 
                 "(refs=%s registry=%s inmemory=%s conversation_id=%s)",
                 bool(refs), registry is not None, has_inmemory, context.conversation_id,
             )
-            set_staged_input_files_for_task(None)
+            set_staged_input_files_for_task(restored or None)
             await next_fn()
             return
 
@@ -618,7 +654,7 @@ def coding_sandbox_artifact_staging(context: "AgentContext", *, inmemory_store: 
             ctx.metadata["staged_input_artifacts"] = resolved
         if missing:
             ctx.metadata["input_artifacts_not_found"] = missing
-        set_staged_input_files_for_task(files)
+        set_staged_input_files_for_task({**restored, **files})
         await next_fn()
 
     return _middleware
@@ -852,6 +888,9 @@ def coding_sandbox_artifact_bridge(context: "AgentContext", manager: SandboxMana
             missing = ctx.metadata.get("input_artifacts_not_found")
             if missing:
                 data["input_artifacts_not_found"] = missing
+            restored_count = ctx.metadata.get("deck_project_restored")
+            if restored_count:
+                data["deck_project_restored"] = deck_drafts.RESTORED_NOTE.format(count=restored_count)
 
         await next_fn()
 
@@ -999,6 +1038,7 @@ async def _register_run_code_artifacts(
         data["artifacts"] = []
         return
 
+    await deck_drafts.save_draft(context, registry, backend, artifact_paths)
     deliverable_paths, scratch_paths = _partition_sandbox_outputs(artifact_paths)
 
     if scratch_paths:
@@ -1083,11 +1123,16 @@ async def _register_and_deliver(
     for rel_path, content in fetched:
         file_name = names[rel_path]
         mime_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        artifact_type = (
+            ArtifactType.PRESENTATION
+            if deck_drafts.is_deck_archive(file_name, content)
+            else MIME_TO_ARTIFACT_TYPE.get(mime_type, ArtifactType.OTHER)
+        )
         try:
             metadata, _version = await registry.register_output(
                 actor=actor,
                 name=file_name,
-                artifact_type=MIME_TO_ARTIFACT_TYPE.get(mime_type, ArtifactType.OTHER),
+                artifact_type=artifact_type,
                 mime_type=mime_type,
                 content=content,
                 conversation_id=context.conversation_id,
@@ -1224,7 +1269,15 @@ async def _rescue_scratch_files(
     if registry is None or not context.conversation_id or not context.org_id:
         return
 
+    # A deck project's source (slides.md, fonts, logos) is never a deliverable;
+    # a failed deck build would otherwise hand the user dozens of loose files.
+    # The source survives as the hidden deck draft instead.
+    project_dirs = deck_drafts.deck_project_dirs([p for call in scratch_calls for p in call["paths"]])
+
     for call in scratch_calls:
+        paths = [p for p in call["paths"] if not deck_drafts.in_deck_project(p, project_dirs)]
+        if not paths:
+            continue
         sandbox_id = call["sandbox_id"]
         try:
             backend = manager.get(SandboxType.CODING, sandbox_id)
@@ -1235,7 +1288,7 @@ async def _rescue_scratch_files(
             continue
 
         fetched: list[tuple[str, bytes]] = []
-        for rel_path in call["paths"]:
+        for rel_path in paths:
             try:
                 content = await backend.download_file(rel_path)
             except Exception:

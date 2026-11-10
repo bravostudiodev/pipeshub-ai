@@ -210,13 +210,19 @@ def attachment_rehydration(context: "AgentContext") -> "Middleware[TurnContext]"
             context, historical, blob_store,
         )
 
-        if record_ids:
+        if record_ids and context.has_knowledge:
             _register_fetch_tool(ctx, context)
 
         goal = ctx.scope.run.goal
         names = [a.get("recordName", "unknown") for a in historical]
 
-        if record_ids:
+        if record_ids and not context.has_knowledge:
+            goal.constraints.append(
+                f"User previously attached file(s): {', '.join(names)}. "
+                "Use their content when present in the conversation; if it is "
+                "not available, ask the user to attach them again."
+            )
+        elif record_ids:
             ids_str = ", ".join(f'"{rid}"' for rid in record_ids)
             goal.constraints.append(
                 f"User previously attached file(s): {', '.join(names)}. "
@@ -335,6 +341,9 @@ def _register_fetch_tool(
     registered after that hook's ``initial_visible_tools()`` snapshot stays
     invisible to ``tool_schemas_for_turn`` for the entire run.
     """
+    if not context.has_knowledge:
+        return
+
     from app.agents.agent_loop.hooks.citations import (
         _FETCH_FULL_RECORD_TOOL_NAME,
         ensure_fetch_full_record_available,

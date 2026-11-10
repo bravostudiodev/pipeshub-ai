@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { buildChatHref } from '@/chat/build-chat-url';
 import { ChatStarIcon } from '@/app/components/ui/chat-star-icon';
-import { Box, Flex } from '@radix-ui/themes';
+import { Box, Checkbox, Flex } from '@radix-ui/themes';
 import { useTranslation } from 'react-i18next';
 import { Conversation } from '@/chat/types';
 import { useChatStore, isConversationStreamingInScope } from '@/chat/store';
@@ -15,7 +15,8 @@ import { useFeatureFlagsStore, selectProjectsEnabled } from '@/lib/store/feature
 import { ICON_SIZE_DEFAULT, CHAT_ITEM_HEIGHT } from '@/app/components/sidebar';
 import { SidebarItem } from './sidebar-item';
 import { ChatItemMenu } from './chat-item-menu';
-import { DeleteChatDialog, ArchiveChatDialog, MoveToProjectDialog } from './dialogs';
+import { DeleteChatDialog, MoveToProjectDialog } from './dialogs';
+import { useSidebarSelectionStore } from './selection-store';
 import { Spinner } from '@/app/components/ui/spinner';
 
 /** Duration must match `typing-reveal` animation duration in globals.css */
@@ -54,9 +55,11 @@ interface ChatSectionElementProps {
   onClick: () => void;
   /**
    * When set, this row is an agent conversation — use agent delete API only
-   * (rename/archive are not supported for agent chats).
+   * (rename is not supported for agent chats).
    */
   agentId?: string;
+  /** Enables multi-select for this row; rows rendered without it never show checkboxes. */
+  selectionScope?: string;
   /**
    * Set by `ProjectConversationsSidebar` so the row's href keeps `projectId`
    * in the URL — otherwise navigating away from the project's own sidebar
@@ -69,7 +72,7 @@ interface ChatSectionElementProps {
 /**
  * A single conversation item in the chat sidebar.
  */
-export function ChatSectionElement({ conversation, isActive, onClick, agentId, projectId }: ChatSectionElementProps) {
+export function ChatSectionElement({ conversation, isActive, onClick, agentId, projectId, selectionScope }: ChatSectionElementProps) {
   const { t } = useTranslation();
 
   const [isHovered, setIsHovered] = useState(false);
@@ -78,16 +81,22 @@ export function ChatSectionElement({ conversation, isActive, onClick, agentId, p
   const [renameValue, setRenameValue] = useState(conversation.title);
   const [isSavingRename, setIsSavingRename] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const projectsEnabled = useFeatureFlagsStore(selectProjectsEnabled);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
   const [isTypingTitle, setIsTypingTitle] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlConversationId = searchParams?.get('conversationId') ?? null;
+
+  const selecting = useSidebarSelectionStore(
+    (s) => !!selectionScope && conversation.isOwner === true && s.scope === selectionScope && s.ids.size > 0,
+  );
+  const isSelected = useSidebarSelectionStore(
+    (s) => !!selectionScope && s.scope === selectionScope && s.ids.has(conversation.id),
+  );
+  const toggleSelected = useSidebarSelectionStore((s) => s.toggle);
 
   const isConversationStreaming = useChatStore((s) =>
     isConversationStreamingInScope(s.slots, conversation.id, agentId ?? null),
@@ -199,37 +208,6 @@ export function ChatSectionElement({ conversation, isActive, onClick, agentId, p
     }
   };
 
-  const handleConfirmArchive = async () => {
-    if (convStreamingBlocksSidebarMutation()) return;
-    setIsArchiving(true);
-    try {
-      if (agentId) {
-        await AgentsApi.archiveAgentConversation(agentId, conversation.id);
-      } else {
-        await ChatApi.archiveConversation(conversation.id);
-      }
-      removeConversation(conversation.id);
-      bumpConversationsVersion();
-      setArchiveDialogOpen(false);
-      if (urlConversationId === conversation.id) {
-        const store = useChatStore.getState();
-        const found = agentId
-          ? store.getSlotByConvId(conversation.id, { forAgentId: agentId })
-          : store.getSlotByConvId(conversation.id, { forAgentId: null });
-        if (found) {
-          store.evictSlot(found.slotId);
-        } else {
-          store.clearActiveSlot();
-        }
-        router.replace(agentId ? buildChatHref({ agentId }) : '/chat/');
-      }
-    } catch {
-      // keep dialog open on error
-    } finally {
-      setIsArchiving(false);
-    }
-  };
-
   const handleConfirmMoveToProject = async (projectId: string | null) => {
     if (convStreamingBlocksSidebarMutation()) {
       throw new Error('Cannot move a conversation while it is streaming.');
@@ -312,23 +290,28 @@ export function ChatSectionElement({ conversation, isActive, onClick, agentId, p
           )
         }
         isActive={isActive}
-        href={conversationHref}
-        onClick={onClick}
+        icon={
+          selecting ? (
+            <span style={{ display: 'inline-flex', pointerEvents: 'none' }}>
+              <Checkbox size="1" checked={isSelected} tabIndex={-1} aria-hidden />
+            </span>
+          ) : undefined
+        }
+        href={selecting ? undefined : conversationHref}
+        onClick={selecting && selectionScope ? () => toggleSelected(selectionScope, conversation.id) : onClick}
         textColor="var(--slate-12)"
         fontWeight={500}
         subtitle={sharedBySubtitle}
         forceHighlight={menuOpen}
         onHoverChange={setIsHovered}
         rightSlot={
-          conversation.isOwner === true ? (
+          conversation.isOwner === true && !selecting ? (
             <ChatItemMenu
               isParentHovered={isHovered}
               onOpenChange={setMenuOpen}
               onRename={handleStartRename}
-              onArchive={() => setArchiveDialogOpen(true)}
               onDelete={() => setDeleteDialogOpen(true)}
               showRename={true}
-              showArchive={true}
               onMoveToProject={projectsEnabled ? () => setMoveDialogOpen(true) : undefined}
               onRemoveFromProject={
                 projectsEnabled && conversation.projectId ? () => void handleRemoveFromProject() : undefined
@@ -345,14 +328,6 @@ export function ChatSectionElement({ conversation, isActive, onClick, agentId, p
         onConfirm={handleConfirmDelete}
         chatTitle={conversation.title}
         isDeleting={isDeleting}
-      />
-
-      <ArchiveChatDialog
-        open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
-        onConfirm={handleConfirmArchive}
-        chatTitle={conversation.title}
-        isArchiving={isArchiving}
       />
 
       <MoveToProjectDialog

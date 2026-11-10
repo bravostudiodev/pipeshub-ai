@@ -2,17 +2,38 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
-from app.api.middlewares.auth import require_scopes
+from app.api.middlewares.auth import require_scopes, require_service_token
 from app.config.constants.http_status_code import HttpStatusCode
-from app.config.constants.service import OAuthScopes
+from app.config.constants.service import OAuthScopes, TokenScopes
 from app.services.artifact_registry.access import ArtifactNotFoundError
-from app.services.artifact_registry.gallery import ArtifactGalleryService, ArtifactListQuery
+from app.services.artifact_registry.deck_archive import (
+    DeckFile,
+    InvalidDeckArchive,
+    deck_archive_cache,
+    get_cached_deck_file_async,
+    read_deck_archive,
+)
+from app.services.artifact_registry.gallery import (
+    ArtifactGalleryService,
+    ArtifactListQuery,
+)
 from app.services.artifact_registry.models import Actor
-from app.services.graph_db.interface.graph_db_provider import IGraphDBProvider
+from app.services.artifact_registry.share_authorization import (
+    ArtifactShareAuthorization,
+)
+from app.services.artifact_registry.share_content import ArtifactShareContent
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from app.services.graph_db.interface.graph_db_provider import IGraphDBProvider
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +42,14 @@ artifacts_router = APIRouter(tags=["Artifacts"])
 
 async def get_graph_provider(request: Request) -> IGraphDBProvider:
     return request.app.state.graph_provider
+
+
+def _is_deck_zip(name: object, mime_type: object) -> bool:
+    return mime_type in ("application/zip", "application/x-zip-compressed") or (
+        mime_type in ("application/octet-stream", None, "")
+        and isinstance(name, str)
+        and name.lower().endswith(".zip")
+    )
 
 
 def _parse_comma_separated_str(value: str | None) -> list[str] | None:
@@ -39,6 +68,161 @@ def _actor_from_request(request: Request) -> Actor:
             detail="Authentication required",
         )
     return Actor(org_id=org_id, user_id=user_id)
+
+
+@artifacts_router.get("/api/v1/internal/artifact-share/content")
+async def internal_share_content(
+    request: Request,
+    deck_path: str | None = Query(None),
+    claims: Mapping[str, Any] = Depends(
+        require_service_token(TokenScopes.ARTIFACT_SHARE_CONTENT)
+    ),
+    graph_provider: IGraphDBProvider = Depends(get_graph_provider),
+    *,
+    preview_pdf: bool = Query(False),
+) -> Response:
+    """Only a service token can name the owner, artifact and pinned version.
+
+    The Node caller must validate the share and active owner on each request.
+    This endpoint independently checks owner permission and visibility.
+    """
+    org_id, user_id, artifact_id, version, content_hash = (
+        claims.get("orgId"),
+        claims.get("userId"),
+        claims.get("artifactId"),
+        claims.get("version"),
+        claims.get("contentHash"),
+    )
+    if not all(isinstance(v, str) and v for v in (org_id, user_id, artifact_id)):
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if not isinstance(content_hash, str) or len(content_hash) != 64:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    from app.modules.transformers.blob_storage import BlobStorage
+    from app.services.artifact_registry.registry import ArtifactRegistryService
+
+    registry = ArtifactRegistryService(
+        graph_provider, BlobStorage(logger, request.app.state.config_service)
+    )
+    actor = Actor(org_id=org_id, user_id=user_id)
+    share_content = ArtifactShareContent(graph_provider, registry)
+    if deck_path is not None:
+        if not _is_deck_zip(claims.get("name"), claims.get("mimeType")):
+            raise HTTPException(status_code=404, detail="Artifact unavailable")
+        try:
+            deck_file = await share_content.get_deck_file(
+                actor=actor,
+                artifact_id=artifact_id,
+                version=version,
+                pinned_hash=content_hash,
+                path=deck_path,
+            )
+        except ArtifactNotFoundError:
+            raise HTTPException(
+                status_code=404, detail="Artifact unavailable"
+            ) from None
+        return _deck_file_response(deck_file.content, deck_file.content_type)
+    try:
+        content = await share_content.get_content(
+            actor=actor,
+            artifact_id=artifact_id,
+            version=version,
+            pinned_hash=content_hash,
+        )
+    except ArtifactNotFoundError:
+        raise HTTPException(status_code=404, detail="Artifact unavailable") from None
+    if preview_pdf is True:
+        mime = claims.get("mimeType")
+        name = claims.get("name")
+        formats = {
+            "application/vnd.ms-powerpoint": "ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "application/msword": "doc",
+        }
+        extension = formats.get(mime) if isinstance(mime, str) else None
+        if extension is None and isinstance(name, str):
+            suffix = name.rsplit(".", 1)[-1].lower()
+            extension = suffix if suffix in {"ppt", "pptx", "doc"} else None
+        if extension is None:
+            raise HTTPException(status_code=404, detail="Artifact unavailable")
+        from app.utils.libreoffice_convert import convert_with_libreoffice
+
+        try:
+            content = await convert_with_libreoffice(content, extension, "pdf")
+        except Exception:
+            raise HTTPException(status_code=404, detail="Artifact unavailable") from None
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=404, detail="Artifact unavailable")
+    return Response(
+        content=content,
+        media_type="application/pdf" if preview_pdf is True else "application/octet-stream",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@artifacts_router.get("/api/v1/internal/artifact-deck/file")
+async def internal_artifact_deck_file(
+    request: Request,
+    path: str = Query(..., min_length=1, max_length=1024),
+    claims: Mapping[str, Any] = Depends(
+        require_service_token(TokenScopes.ARTIFACT_DECK_CONTENT)
+    ),
+    graph_provider: IGraphDBProvider = Depends(get_graph_provider),
+) -> Response:
+    """Serve one deck file for the artifact/version named by a scoped Node token."""
+    org_id, user_id, artifact_id, version = (
+        claims.get("orgId"),
+        claims.get("userId"),
+        claims.get("artifactId"),
+        claims.get("version"),
+    )
+    if not all(
+        isinstance(value, str) and value for value in (org_id, user_id, artifact_id)
+    ):
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise HTTPException(status_code=401, detail="Invalid service token")
+    if not _is_deck_zip(claims.get("name"), claims.get("mimeType")):
+        raise HTTPException(status_code=404, detail="Artifact unavailable")
+    from app.modules.transformers.blob_storage import BlobStorage
+    from app.services.artifact_registry.registry import ArtifactRegistryService
+
+    actor = Actor(org_id=org_id, user_id=user_id)
+    registry = ArtifactRegistryService(
+        graph_provider, BlobStorage(logger, request.app.state.config_service)
+    )
+    try:
+        detail = await ArtifactGalleryService(graph_provider).get(actor, artifact_id)
+        if not _is_deck_zip(detail.name, detail.mime_type):
+            raise InvalidDeckArchive("Artifact is not a ZIP archive")
+        version_details = next(
+            (item for item in detail.versions if item.version == version), None
+        )
+        content_hash = version_details.content_hash if version_details else ""
+        if len(content_hash) != 64:
+            raise ArtifactNotFoundError("Artifact version unavailable")
+        cache_key = (org_id, user_id, artifact_id, version, content_hash)
+
+        async def load_archive() -> dict[str, DeckFile]:
+            content = await registry.get_content(
+                actor=actor, artifact_id=artifact_id, version=version
+            )
+            if not hmac.compare_digest(
+                hashlib.sha256(content).hexdigest(), content_hash
+            ):
+                raise ArtifactNotFoundError("Artifact version unavailable")
+            return read_deck_archive(content)
+
+        deck_file = await get_cached_deck_file_async(
+            deck_archive_cache,
+            cache_key,
+            path,
+            load_archive,
+        )
+    except (ArtifactNotFoundError, InvalidDeckArchive):
+        raise HTTPException(status_code=404, detail="Artifact unavailable") from None
+    return _deck_file_response(deck_file.content, deck_file.content_type)
 
 
 @artifacts_router.get(
@@ -86,6 +270,19 @@ async def list_artifacts_gallery(
     }
 
 
+def _deck_file_response(content: bytes, media_type: str) -> Response:
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Access-Control-Allow-Origin": "*",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "inline",
+        },
+    )
+
+
 @artifacts_router.get(
     "/api/v1/artifacts/{artifact_id}",
     dependencies=[Depends(require_scopes(OAuthScopes.CONNECTOR_READ, OAuthScopes.KB_READ))],
@@ -105,6 +302,29 @@ async def get_artifact_gallery(
             detail="Artifact not found",
         ) from None
     return detail.model_dump(by_alias=True)
+
+
+@artifacts_router.post(
+    "/api/v1/artifacts/{artifact_id}/share-authorization",
+    dependencies=[Depends(require_scopes(OAuthScopes.CONNECTOR_READ, OAuthScopes.KB_READ))],
+)
+async def authorize_artifact_share(
+    request: Request,
+    artifact_id: str,
+    version: int = Query(..., ge=1),
+    graph_provider: IGraphDBProvider = Depends(get_graph_provider),
+) -> dict:
+    """Check the authenticated caller's authority; this does not create a link."""
+    actor = _actor_from_request(request)
+    try:
+        content_hash = await ArtifactShareAuthorization(graph_provider).authorize(actor, artifact_id, version)
+        detail = await ArtifactGalleryService(graph_provider).get(actor, artifact_id)
+    except ArtifactNotFoundError:
+        raise HTTPException(
+            status_code=HttpStatusCode.NOT_FOUND.value,
+            detail="Artifact or version not found",
+        ) from None
+    return {"authorized": True, "contentHash": content_hash, "name": detail.name, "mimeType": detail.mime_type}
 
 
 @artifacts_router.get(

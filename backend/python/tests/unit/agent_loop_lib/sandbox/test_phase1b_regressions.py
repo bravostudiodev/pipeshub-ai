@@ -464,7 +464,8 @@ class TestM3CapacityDenialReachesTheModel:
         gov = SandboxResourceGovernor(GovernorLimits(max_total_sandboxes=1))
         mgr = SandboxManager(governor=gov)
         mgr.register_backend(SandboxType.CODING, _Factory())
-        await mgr.get_or_create(SandboxType.CODING)  # consume the only slot
+        # Hold the only slot busy; an idle one would simply be reused.
+        await mgr.get_or_create(SandboxType.CODING, reserve=True)
 
         tool = CodingSandboxTool(mgr)
         output = await tool.execute(code='print("hi")', language="python")

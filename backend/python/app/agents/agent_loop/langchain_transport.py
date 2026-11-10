@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage
@@ -793,6 +794,26 @@ class LangChainTransport(LLMTransport):
         while True:
             stream_iter: AsyncIterator[AIMessage] | None = None
             cancel_task: asyncio.Task[None] | None = None
+            started = time.monotonic()
+            attempt = 2 if retried else 1
+            chunk_count = 0
+            event_counts = {"text": 0, "reasoning": 0, "tool": 0}
+            outcome = "interrupted"
+            error_type = None
+            logger.info("llm_stream_start model=%s attempt=%d", self._model, attempt)
+
+            def record_event(
+                kind: str, counts: dict[str, int] = event_counts,
+                attempt_number: int = attempt, start_time: float = started,
+            ) -> None:
+                counts[kind] += 1
+                if counts[kind] == 1:
+                    logger.info(
+                        "llm_stream_first_event model=%s attempt=%d kind=%s elapsed_ms=%d",
+                        self._model, attempt_number, kind,
+                        int((time.monotonic() - start_time) * 1000),
+                    )
+
             try:
                 stream_iter = current_llm.astream(
                     lc_messages, config=self._langchain_config(),
@@ -820,15 +841,25 @@ class LangChainTransport(LLMTransport):
                         with contextlib.suppress(BaseException):
                             await next_chunk_task
                         cancelled = True
+                        outcome = "cancelled"
                         break
                     try:
                         chunk = next_chunk_task.result()
                     except StopAsyncIteration:
+                        outcome = "completed"
                         break
+                    chunk_count += 1
+                    if chunk_count == 1:
+                        logger.info(
+                            "llm_stream_first_chunk model=%s attempt=%d elapsed_ms=%d",
+                            self._model, attempt,
+                            int((time.monotonic() - started) * 1000),
+                        )
                     chunks.append(chunk)
                     text = getattr(chunk, "content", None)
                     if isinstance(text, str) and text:
                         emitted = True
+                        record_event("text")
                         yield TextDeltaEvent(delta=text)
                     elif isinstance(text, list):
                         for block in text:
@@ -836,6 +867,7 @@ class LangChainTransport(LLMTransport):
                                 delta = block.get("text", "")
                                 if delta:
                                     emitted = True
+                                    record_event("text")
                                     yield TextDeltaEvent(delta=delta)
 
                     # Extended-thinking / reasoning deltas (Claude extended
@@ -850,6 +882,7 @@ class LangChainTransport(LLMTransport):
                             reasoning_delta = block.get("reasoning", "")
                             if reasoning_delta:
                                 emitted = True
+                                record_event("reasoning")
                                 yield ThinkingDeltaEvent(delta=reasoning_delta)
 
                     # Tool-call argument deltas — used by Agent.step()'s streaming
@@ -876,6 +909,7 @@ class LangChainTransport(LLMTransport):
                         if not args_delta and not name and not tc_id:
                             continue
                         emitted = True
+                        record_event("tool")
                         yield ToolCallDeltaEvent(
                             index=tc_chunk.get("index") or 0,
                             id=tc_id,
@@ -884,6 +918,8 @@ class LangChainTransport(LLMTransport):
                         )
                 break
             except Exception as exc:
+                outcome = "error"
+                error_type = type(exc).__name__
                 # A 400 raised while opening the stream is safe to retry —
                 # nothing has reached the client yet. The same `except`
                 # also catches a failure mid-stream (after some chunks
@@ -944,6 +980,14 @@ class LangChainTransport(LLMTransport):
                     self._model, fallback_mode, exc,
                 )
             finally:
+                logger.info(
+                    "llm_stream_end model=%s attempt=%d outcome=%s elapsed_ms=%d "
+                    "chunks=%d text_events=%d reasoning_events=%d tool_events=%d error_type=%s",
+                    self._model, attempt, outcome,
+                    int((time.monotonic() - started) * 1000), chunk_count,
+                    event_counts["text"], event_counts["reasoning"], event_counts["tool"],
+                    error_type,
+                )
                 # Best-effort: never let cleanup mask the real outcome (an
                 # exception from `except Exception` above, or the
                 # cancelled/natural-completion break already decided).

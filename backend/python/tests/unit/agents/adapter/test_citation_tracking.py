@@ -56,12 +56,27 @@ def _tool_scope(spec: AgentSpec, registry: ToolRegistry) -> ToolScope:
 
 
 def _agent_context() -> AgentContext:
-    context = AgentContext(org_id="org-1", user_id="user-1", user_email="u@example.com", logger=MagicMock())
+    context = AgentContext(org_id="org-1", user_id="user-1", user_email="u@example.com", logger=MagicMock(), has_knowledge=True)
     context.tool_state["virtual_record_id_to_result"] = {"rec1": {"content": "hi"}}
     return context
 
 
 class TestCitationTrackingRegistersOnce:
+    async def test_attachment_records_do_not_enable_indexed_fetch(self) -> None:
+        registry = ToolRegistry()
+        context = _agent_context()
+        context.has_knowledge = False
+        spec = _spec("caller", tool_names=["analyze_image"])
+        scope = _tool_scope(spec, registry)
+        middleware = citation_tracking(context, CitationCollector(context))
+        ctx = ToolResultContext(
+            tool_path="/tools/data/analyze_image", tool_use_id=uuid4(),
+            tool_response=ToolOutput(success=True, data="ok"), scope=scope,
+        )
+        await middleware(ctx, _noop_next)
+        assert not registry.has(_FETCH_FULL_RECORD_TOOL_NAME)
+        assert _FETCH_FULL_RECORD_TOOL_NAME not in spec.tool_names
+
     async def test_registers_tool_and_grants_to_caller_spec(self) -> None:
         registry = ToolRegistry()
         context = _agent_context()
@@ -150,7 +165,7 @@ class TestCitationTrackingRegistersForNavigationalTools:
     def _run(self, spec: AgentSpec, *, known_ids: set[str] | None) -> ToolRegistry:
         registry = ToolRegistry()
         context = AgentContext(
-            org_id="org-1", user_id="user-1", user_email="u@example.com", logger=MagicMock(),
+            org_id="org-1", user_id="user-1", user_email="u@example.com", logger=MagicMock(), has_knowledge=True,
         )
         if known_ids is not None:
             context.tool_state["known_record_ids"] = known_ids

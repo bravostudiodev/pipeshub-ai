@@ -194,6 +194,7 @@ async def register_dynamic_client(
     authorization_url: str,
     token_url: str,
     client_name: str = "PipesHub",
+    token_endpoint_auth_method: str = "client_secret_post",
 ) -> DCRClient:
     """RFC 7591 dynamic client registration against `registration_endpoint`.
 
@@ -208,7 +209,7 @@ async def register_dynamic_client(
         "redirect_uris": [redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
-        "token_endpoint_auth_method": "client_secret_post",
+        "token_endpoint_auth_method": token_endpoint_auth_method,
     }
     try:
         async with httpx.AsyncClient(timeout=DCR_REQUEST_TIMEOUT_SECONDS) as client:

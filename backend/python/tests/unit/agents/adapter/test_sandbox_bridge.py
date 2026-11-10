@@ -1434,3 +1434,23 @@ class TestRegisterCodingSandboxHooksIntegration:
         )
         result = await hooks.on(HookEvent.POST_TOOL_USE).dispatch(ctx)
         assert result.tool_response.data["stdout"] == "Saved at: /tmp/pipeshub_sandbox/x/output/a.pdf"
+
+
+def test_preinstalled_package_list_matches_the_sandbox_image() -> None:
+    """The bridge's list of image packages must match what the sandbox
+    Dockerfile installs: a missing entry brings back the slow, network-bound
+    install for that package; an extra entry makes a missing one look present."""
+    import re
+    from pathlib import Path
+
+    from app.agents.agent_loop.sandbox_bridge import _IMAGE_PREINSTALLED_PACKAGES
+
+    dockerfile = (Path(__file__).resolve().parents[6] / "deployment/sandbox/Dockerfile").read_text()
+    python_block = re.search(r"uv pip install --system --no-cache \\\n(.*?)\n\n", dockerfile, re.S).group(1)
+    npm_block = re.search(r"npm install --save \\\n(.*?)&&", dockerfile, re.S).group(1)
+
+    def names(block: str) -> set[str]:
+        return {token.strip("\\").lower() for token in block.split() if token.strip("\\")}
+
+    assert names(python_block) == set(_IMAGE_PREINSTALLED_PACKAGES["python"])
+    assert names(npm_block) == set(_IMAGE_PREINSTALLED_PACKAGES["typescript"])

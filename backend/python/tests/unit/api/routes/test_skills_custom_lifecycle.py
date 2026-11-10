@@ -332,15 +332,54 @@ class TestEnableDisable:
 
 
 class TestBuiltinSkillsRejectContentMutations:
-    """Content mutations of an EXISTING builtin-sourced skill (update/
-    patch/rollback/deprecate/delete, resource write/delete) stay 403
-    even for an org admin. Enable/disable is the exception — see
-    `TestBuiltinAdminAvailability`."""
+    """Members cannot edit builtins; deletion and deprecation remain blocked for admins."""
+
+    async def test_admin_can_edit_builtin_and_resource_without_affecting_other_org(self, graph: _LifecycleGraphProvider) -> None:
+        req = _request("user-a", "org-1", graph)
+        other = _request("user-b", "org-2", graph)
+        await _seed_builtin(req)
+        await _seed_builtin(other)
+        with _as_role("admin"):
+            response = await update_skill(req, "seeded-builtin", SkillWriteRequest(description="Updated", body="New instructions"))
+            assert response.status_code == 200
+            await write_resource(req, "seeded-builtin", ResourceWriteRequest(path="references/test.md", content="custom"))
+        edited = json.loads((await get_skill(req, "seeded-builtin")).body)
+        untouched = json.loads((await get_skill(other, "seeded-builtin")).body)
+        assert edited["body"] == "New instructions" and edited["source"] == "builtin"
+        assert untouched["body"] != "New instructions"
+        assert graph._col("agentSkills")["org-1_seeded-builtin"]["updatedBy"] == "user-a-key"
+
+    async def test_admin_can_patch_and_restore_builtin_revision(self, graph: _LifecycleGraphProvider) -> None:
+        req = _request("user-a", "org-1", graph)
+        await _seed_builtin(req)
+        with _as_role("admin"):
+            await update_skill(req, "seeded-builtin", SkillWriteRequest(description="Updated", body="First edit"))
+            await patch_skill_body(req, "seeded-builtin", PatchBodyRequest(old_string="First", new_string="Second"))
+            restored = await rollback_skill(req, "seeded-builtin", RollbackRequest(version="1.0.1"))
+            assert restored.status_code == 200
+        assert json.loads((await get_skill(req, "seeded-builtin")).body)["body"] == "First edit"
+
+    async def test_admin_can_edit_builtin_seeded_by_another_user(self, graph: _LifecycleGraphProvider) -> None:
+        creator = _request("user-a", "org-1", graph)
+        admin = _request("user-b", "org-1", graph)
+        await _seed_builtin(creator)
+        with _as_role("admin"):
+            result = await update_skill(admin, "seeded-builtin", SkillWriteRequest(description="Updated", body="Admin edit"))
+        assert result.status_code == 200
+        assert json.loads((await get_skill(creator, "seeded-builtin")).body)["body"] == "Admin edit"
+
+    async def test_unknown_role_fails_closed_for_builtin_edits(self, graph: _LifecycleGraphProvider) -> None:
+        req = _request("user-a", "org-1", graph)
+        await _seed_builtin(req)
+        with patch("app.api.routes.skills.fetch_caller_role", new=AsyncMock(return_value=CallerRole(CallerRoleStatus.UNKNOWN))):
+            with pytest.raises(HTTPException) as exc:
+                await update_skill(req, "seeded-builtin", SkillWriteRequest(description="Updated", body="Changed"))
+        assert exc.value.status_code == 403
 
     async def test_update_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)
         await _seed_builtin(req)
-        with _as_role("admin"):
+        with _as_role("member"):
             with pytest.raises(HTTPException) as exc:
                 await update_skill(req, "seeded-builtin", SkillWriteRequest(description="hijacked", body="new"))
         assert exc.value.status_code == 403
@@ -348,7 +387,7 @@ class TestBuiltinSkillsRejectContentMutations:
     async def test_patch_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)
         await _seed_builtin(req)
-        with _as_role("admin"):
+        with _as_role("member"):
             with pytest.raises(HTTPException) as exc:
                 await patch_skill_body(
                     req, "seeded-builtin", PatchBodyRequest(old_string="body", new_string="hijacked"),
@@ -358,7 +397,7 @@ class TestBuiltinSkillsRejectContentMutations:
     async def test_rollback_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)
         await _seed_builtin(req)
-        with _as_role("admin"):
+        with _as_role("member"):
             with pytest.raises(HTTPException) as exc:
                 await rollback_skill(req, "seeded-builtin", RollbackRequest(version="1.0.0"))
         assert exc.value.status_code == 403
@@ -366,7 +405,7 @@ class TestBuiltinSkillsRejectContentMutations:
     async def test_write_resource_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)
         await _seed_builtin(req)
-        with _as_role("admin"):
+        with _as_role("member"):
             with pytest.raises(HTTPException) as exc:
                 await write_resource(
                     req, "seeded-builtin", ResourceWriteRequest(path="scripts/hijack.py", content="print(1)"),
@@ -376,7 +415,7 @@ class TestBuiltinSkillsRejectContentMutations:
     async def test_remove_resource_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)
         await _seed_builtin(req)
-        with _as_role("admin"):
+        with _as_role("member"):
             with pytest.raises(HTTPException) as exc:
                 await remove_resource(req, "seeded-builtin", path="scripts/hijack.py")
         assert exc.value.status_code == 403
@@ -399,8 +438,7 @@ class TestBuiltinSkillsRejectContentMutations:
 
 
 class TestBuiltinAdminAvailability:
-    """Builtin enable/disable is org-admin only. Members 403; an admin
-    round-trips. Content mutations remain blocked (class above)."""
+    """Builtin enable/disable is org-admin only. Members 403; an admin round-trips."""
 
     async def test_member_disable_rejects_403(self, graph: _LifecycleGraphProvider) -> None:
         req = _request("user-a", "org-1", graph)

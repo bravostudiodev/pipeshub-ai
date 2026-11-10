@@ -101,11 +101,11 @@ def unknown_sandbox_guidance(error: Exception) -> str:
     one sentence and saves the retry.
     """
     return (
-        f"{error}. Sandboxes exist only for the turn that created them, so a "
-        "sandbox_id from an earlier turn or one inferred from a filename is never "
-        "valid. Do not retry with another id: start a fresh sandbox by calling "
-        "run_code with no sandbox_id, and re-stage any file you need as an input "
-        "artifact rather than reading it out of a previous sandbox."
+        f"{error}. Sandboxes exist only for the user message that created them, "
+        "so a sandbox_id from an earlier message or one inferred from a filename "
+        "is never valid. Call run_code with no sandbox_id: within one message, "
+        "files you wrote earlier are still in the working directory; files from "
+        "an earlier message must be re-staged as input artifacts."
     )
 
 
@@ -121,6 +121,41 @@ def sandbox_limit_guidance(error: Exception) -> str:
         "code. Reuse an existing sandbox_id from earlier in this turn if you "
         "have one, or retry this call shortly."
     )
+
+
+async def _acquire_coding_sandbox(
+    manager: Any, sandbox_id: str | None,
+) -> "tuple[str, Any, bool] | ToolOutput":
+    """Reserve the coding sandbox for a call: `(id, backend, fell_back)`, or an
+    error `ToolOutput`.
+
+    An id the manager does not know falls back to this request's own sandbox
+    instead of failing. Models mistype ids (two swapped hex digits is common)
+    or reuse a dead one; a hard failure costs a step and leads the model to
+    rebuild its whole project from scratch.
+    """
+    try:
+        resolved_id, backend = await manager.get_or_create(
+            SandboxType.CODING, sandbox_id, reserve=True, reuse_idle=True,
+        )
+        return resolved_id, backend, False
+    except UnknownSandboxError as e:
+        if sandbox_id is None:
+            return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
+        _logger.warning("unknown sandbox %s, using this request's sandbox instead: %s", sandbox_id, e)
+    except SandboxLimitExceeded as e:
+        _logger.warning("coding sandbox capacity denied: %s", e)
+        return ToolOutput(success=False, error=sandbox_limit_guidance(e))
+    try:
+        resolved_id, backend = await manager.get_or_create(
+            SandboxType.CODING, None, reserve=True, reuse_idle=True,
+        )
+        return resolved_id, backend, True
+    except UnknownSandboxError as e:
+        return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
+    except SandboxLimitExceeded as e:
+        _logger.warning("coding sandbox capacity denied: %s", e)
+        return ToolOutput(success=False, error=sandbox_limit_guidance(e))
 
 
 def detect_language_mismatch(code: str, declared: str) -> str | None:
@@ -303,6 +338,10 @@ async def _upload_staged_files(backend: Any) -> list[str]:
 class CodingSandboxTool(Tool):
     """`run_code` — write and run a standalone TypeScript/Python program."""
 
+    def minimum_timeout(self, code: str) -> float:
+        """Lower bound on the timeout for `code`, for known long-running work."""
+        return 0.0
+
     def __init__(
         self,
         manager: SandboxManager,
@@ -418,7 +457,7 @@ class CodingSandboxTool(Tool):
             ),
             ToolParameter(
                 name="sandbox_id", type=ParameterType.STRING, required=False, default=None,
-                description="Sandbox to reuse, from a previous run_code/install_packages call's result. Omit to create a fresh sandbox.",
+                description="Sandbox to reuse, from a previous run_code/install_packages call's result. Omit to use this answer's idle sandbox, or a new one if none is free.",
             ),
             ToolParameter(
                 name="timeout", type=ParameterType.FLOAT, required=False, default=self._default_timeout,
@@ -443,14 +482,19 @@ class CodingSandboxTool(Tool):
             language, packages, sandbox_id, is_fresh_sandbox,
             self._allow_network, len(code),
         )
+        acquired = await _acquire_coding_sandbox(self._manager, sandbox_id)
+        if isinstance(acquired, ToolOutput):
+            return acquired
+        resolved_id, backend, _ = acquired
         try:
-            resolved_id, backend = await self._manager.get_or_create(SandboxType.CODING, sandbox_id)
-        except UnknownSandboxError as e:
-            _logger.error("CodingSandboxTool.execute: unknown sandbox %s: %s", sandbox_id, e)
-            return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
-        except SandboxLimitExceeded as e:
-            _logger.warning("CodingSandboxTool.execute: capacity denied: %s", e)
-            return ToolOutput(success=False, error=sandbox_limit_guidance(e))
+            return await self._run(backend, resolved_id, code, language, packages, timeout)
+        finally:
+            self._manager.release(SandboxType.CODING, resolved_id)
+
+    async def _run(
+        self, backend: Any, resolved_id: str, code: str, language: str,
+        packages: list[str] | None, timeout: float | None,
+    ) -> ToolOutput:
 
         _logger.info(
             "CodingSandboxTool.execute: resolved sandbox_id=%s backend=%s "
@@ -475,6 +519,7 @@ class CodingSandboxTool(Tool):
             language = detected
 
         resolved_timeout = timeout if timeout is not None else self._default_timeout
+        resolved_timeout = max(resolved_timeout, self.minimum_timeout(code))
         request = CodeRequest(
             code=code,
             language=language,
@@ -560,7 +605,7 @@ class InstallPackagesTool(Tool):
             ),
             ToolParameter(
                 name="sandbox_id", type=ParameterType.STRING, required=False, default=None,
-                description="Sandbox to reuse. Omit to create a fresh sandbox.",
+                description="Sandbox to reuse. Omit to use this answer's idle sandbox, or a new one if none is free.",
             ),
         ]
 
@@ -573,12 +618,20 @@ class InstallPackagesTool(Tool):
     ) -> ToolOutput:
         sandbox_id = _reuse_id(sandbox_id)
         is_fresh_sandbox = sandbox_id is None
+        acquired = await _acquire_coding_sandbox(self._manager, sandbox_id)
+        if isinstance(acquired, ToolOutput):
+            return acquired
+        resolved_id, backend, fell_back = acquired
+        is_fresh_sandbox = is_fresh_sandbox or fell_back
         try:
-            resolved_id, backend = await self._manager.get_or_create(SandboxType.CODING, sandbox_id)
-        except UnknownSandboxError as e:
-            return ToolOutput(success=False, error=unknown_sandbox_guidance(e))
-        except SandboxLimitExceeded as e:
-            return ToolOutput(success=False, error=sandbox_limit_guidance(e))
+            return await self._install(backend, resolved_id, packages, language, is_fresh_sandbox)
+        finally:
+            self._manager.release(SandboxType.CODING, resolved_id)
+
+    async def _install(
+        self, backend: Any, resolved_id: str, packages: list[str], language: str,
+        is_fresh_sandbox: bool,
+    ) -> ToolOutput:
 
         # Same staged-input upload `run_code` does on a fresh sandbox —
         # a child that pre-warms its environment with install_packages

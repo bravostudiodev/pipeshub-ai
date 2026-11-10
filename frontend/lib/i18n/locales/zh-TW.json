@@ -536,7 +536,6 @@
     "language": "語言",
     "english": "英文",
     "german": "德文",
-    "rotateLandscape": "旋轉您的裝置以獲得最佳體驗",
     "errorOccurred": "發生錯誤。請重試。",
     "beta": {
       "label": "測試版",
@@ -2748,6 +2747,7 @@
         "scopes": "範圍",
         "scopesPlaceholder": "新增範圍",
         "useAdminAuth": "對所有使用者使用共用的管理員驗證",
+        "useAdminAuthHint": "僅供 OBSales 使用；員工會自動使用此共用權杖。",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "憑證（選填）",
@@ -2935,7 +2935,7 @@
         "conflictDescription": "請重新載入最新版本，然後再次套用您的編輯。",
         "conflictReload": "重新載入"
       },
-      "builtinReadOnly": "這是內建技能，無法編輯。",
+      "builtinReadOnly": "只有工作區管理員可以編輯此內建技能。",
       "editorPanel": {
         "createTitle": "新增技能",
         "reviewTitle": "審核並編輯候選項目",

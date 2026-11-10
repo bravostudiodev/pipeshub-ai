@@ -182,8 +182,8 @@ class GovernorSettings(BaseModel):
     separate settings model so ``SandboxSettings`` has no import-time
     dependency on the governor module."""
 
-    max_total_sandboxes: int | None = 50
-    max_per_org: int | None = 10
+    max_total_sandboxes: int | None = 100
+    max_per_org: int | None = 30
 
 
 class SandboxSettings(BaseModel):
@@ -282,8 +282,8 @@ class EnvSandboxSettingsLoader:
             max_lifetime_s=_env_float(self._ENV_MAX_LIFETIME_S, 1800.0),
             provision_timeout_s=_env_float(self._ENV_PROVISION_TIMEOUT_S, 60.0),
             governor=GovernorSettings(
-                max_total_sandboxes=_env_cap(self._ENV_MAX_TOTAL, 50),
-                max_per_org=_env_cap(self._ENV_MAX_PER_ORG, 10),
+                max_total_sandboxes=_env_cap(self._ENV_MAX_TOTAL, 100),
+                max_per_org=_env_cap(self._ENV_MAX_PER_ORG, 30),
             ),
         )
 

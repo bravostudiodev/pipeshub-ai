@@ -5,6 +5,7 @@ import {
   sanitizeRootId,
 } from "../context/request-context";
 import { Logger } from "../services/logger.service";
+import { redactSensitiveQueryParams } from "../utils/log-redaction.utils";
 
 /**
  * Interface for the request context object.
@@ -63,7 +64,7 @@ const createRequestContext = (req: Request): RequestContext => {
     correlationId: req.get("X-Correlation-ID") || undefined,
     requestId: resolveRequestId(req.get("X-Request-ID")),
     origin: req.get("origin") || undefined,
-    referer: req.get("referer") || undefined,
+    referer: req.get("referer") ? redactSensitiveQueryParams(req.get("referer")!) : undefined,
     language: req.get("accept-language") || undefined,
   };
 
@@ -73,10 +74,10 @@ const createRequestContext = (req: Request): RequestContext => {
     timestamp: Date.now(),
     headers,
     meta: {
-      path: req.path,
+      path: redactSensitiveQueryParams(req.path),
       method: req.method,
       protocol: req.protocol,
-      originalUrl: req.originalUrl,
+      originalUrl: redactSensitiveQueryParams(req.originalUrl),
     },
   };
 };

@@ -536,7 +536,6 @@
     "language": "语言",
     "english": "英语",
     "german": "德语",
-    "rotateLandscape": "旋转您的设备以获得最佳体验",
     "errorOccurred": "发生错误。请重试。",
     "beta": {
       "label": "测试版",
@@ -2748,6 +2747,7 @@
         "scopes": "权限范围",
         "scopesPlaceholder": "添加权限范围",
         "useAdminAuth": "为所有用户使用共享的管理员认证",
+        "useAdminAuthHint": "仅用于 OBSales；员工会自动使用此共享令牌。",
         "headerValue": "{{headerName}}",
         "apiToken": "API Token",
         "credentialsHeading": "凭证（可选）",
@@ -2935,7 +2935,7 @@
         "conflictDescription": "请重新加载最新版本，然后再次应用您的编辑。",
         "conflictReload": "重新加载"
       },
-      "builtinReadOnly": "这是内置技能，无法编辑。",
+      "builtinReadOnly": "只有工作区管理员可以编辑此内置技能。",
       "editorPanel": {
         "createTitle": "新建技能",
         "reviewTitle": "审核并编辑候选技能",

@@ -22,6 +22,7 @@ import type {
   GmailConnectionStatus,
   GoogleDriveConnectionStatus,
   GoogleCalendarConnectionStatus,
+  TabilityConnectionStatus,
   SuperhumanDocsConnectionStatus,
   McpRetrievalTraceResponse,
 } from './types';
@@ -170,6 +171,16 @@ export const McpServersApi = {
 
   async getGoogleCalendarConnection(): Promise<GoogleCalendarConnectionStatus> {
     const { data } = await apiClient.get(`${BASE_URL}/google-calendar-connection`);
+    return data;
+  },
+
+  async getTabilityConnection(): Promise<TabilityConnectionStatus> {
+    const { data } = await apiClient.get(`${BASE_URL}/tability-connection`);
+    return data;
+  },
+
+  async getObSalesConnection(): Promise<{ configured: boolean; isConnected: boolean }> {
+    const { data } = await apiClient.get(`${BASE_URL}/obsales-connection`);
     return data;
   },
 

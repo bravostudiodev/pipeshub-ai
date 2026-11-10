@@ -22,6 +22,26 @@ token, or another user's credential as a fallback. A connected status is based
 on saved user credentials; tool discovery is a separate diagnostic action and
 must not be required to complete authorization.
 
+OBSales shared-token exception: shared administrator auth is permitted only for a
+custom instance explicitly named `OBSales` (case-insensitive), using Streamable
+HTTP and API-token authentication. This name plus custom/transport/auth-mode
+combination is the designation boundary; do not identify it by an arbitrary URL
+or catalog type. The token remains in the server-side administrator credential
+record. Other MCP instances retain per-user credential behavior. OBSales access
+is shared by policy. Every OBSales tool receives `requesting_user_email` for its
+access log: OddJeeves replaces any model-supplied value with the authenticated
+caller's graph-record email, after checking the caller's organization and the
+provider's allowed domains (`oddbytes.com` and `chirp.me`). Calls fail closed
+when that identity cannot be established, including synthetic service-account
+callers; an unverified `callerEmail` override is never used as identity.
+Provider contract verified against the available `mcp__obsales` server metadata:
+its namespace instructions say every tool call must include
+`requesting_user_email` for the person asking, at `@oddbytes.com` or `@chirp.me`;
+the `crm_guide` schema describes it as used for the access log only. The
+schemas of all 19 exposed tools include that parameter; see the reproducible
+[provider metadata snapshot](obsales-mcp-contract.md). This is attribution,
+not source-side verification or an authorization credential.
+
 The current chat cards cover:
 
 | Card | Connection model | Configuration and implementation |
@@ -32,8 +52,10 @@ The current chat cards cover:
 | Jira | Live Atlassian Rovo MCP and per-user OAuth | Uses the designated Atlassian Rovo instance. The card is labeled Jira for employees. |
 | Gmail | Live Google MCP and per-user OAuth | Uses the organization-configured Gmail MCP instance. |
 | Google Drive | Live Google MCP and per-user OAuth | Uses the organization-configured Drive MCP instance. |
-| Google Calendar | Live Google MCP and per-user OAuth | Uses the organization-configured Calendar MCP instance with Google's documented read-only OAuth scopes. The service is currently in Google's Developer Preview. |
+| Google Calendar | Live Google MCP and per-user OAuth | Uses the official Calendar MCP instance. Employee consent requests the read scopes and `calendar.events`, which allows creating events with attendees (invitations) and responding to invitations; `calendar.events.owned` cannot invite others. Existing users must reconnect to grant the new scope. Google controls the actual grant and write operations; the service is in Developer Preview. |
+| Tability | Live custom MCP and per-user OAuth | Custom instance for `https://mcp.tability.app/mcp` (Streamable HTTP, OAuth, not shared admin auth); matched by URL, not by name. Tability issues only public OAuth clients, so dynamic registration for this instance sends `token_endpoint_auth_method: none`; every other server still registers with `client_secret_post`. Only the US cloud host is matched. |
 | Superhuman Docs | Live MCP with a personal, read-only API token | Organization config provides the endpoint. Each employee supplies their own token in chat; `/superhuman-guide/` explains how to create it and links to the exact provider settings page. |
+| OBSales | Custom Streamable HTTP MCP with one administrator-managed shared bearer/API token | Reserved custom instance name `OBSales` (case-insensitive), `typeId` absent, Streamable HTTP transport, API-token auth, and `useAdminAuth=true`. The credential is stored under the instance creator and resolved server-side for employees in that organization. No employee credential setup or Connect action. The card probes discovery and reports only connected/unavailable. Token changes rotate the credential generation; deleting the instance credential revokes the shared connection. |
 
 The MCP cards are implemented in
 `frontend/app/(main)/chat/components/slack-connection-card.tsx` (the filename
@@ -133,7 +155,8 @@ refreshed or reconnected. A callback reports success only after credentials are
 saved. No employee setup, scope, provider matching or model-routing changes are
 required for this hardening.
 
-Token and header instances cannot use one shared administrator credential
+Except for the explicitly designated OBSales API-token instance described above,
+token and header instances cannot use one shared administrator credential
 (`useAdminAuth`): saving one is refused, and an existing one is reported to the
 user and model as needing per-user sign-in, never as a temporary outage. OAuth
 is always per user. A service-account agent's MCP sign-in, and its tool catalog
@@ -275,6 +298,239 @@ service-account agent credentials continue to refresh only their agent-scoped
 sidebar. Old in-flight builder listings cannot replace newer grant or identity
 results, and a failed listing shows a load error instead of "no servers".
 Remaining Phase 6 OAuth/status integration and live UI verification are pending.
+
+## Artifact sharing (in development)
+
+### Sharing model
+
+An authenticated artifact owner can choose **Share** on an artifact card or
+in its chat preview header and publish the currently displayed version.
+Conversation readers cannot publish the owner's
+artifact. The owner chooses an expiry of 1, 7, or 30 days (default 7) and can
+stop an active share. Anyone who can access the link can view that artifact,
+including a recipient without access to its source records; the link can be
+forwarded and the owner accepts responsibility for its contents. This exception
+covers only the published artifact, not the conversation, other artifacts,
+source records, or credentials.
+
+New links use `/share/<token>` on the current origin so the authentication
+gateway can preserve the token in its return path. The token is a bearer secret:
+the initial request, gateway login/return URLs and gateway/proxy logs can see it.
+Earlier `/share/?token=<token>` and `/share/#<token>` links remain supported.
+New shares store a hash for lookup and an encrypted token for authenticated,
+owner-only recovery; the owner can copy an active link again from the share dialog.
+The encryption uses the server's `SECRET_KEY`; changing or losing it makes saved
+links unrecoverable, though their hashes still allow use and revocation. Older
+hash-only shares cannot be recovered; the owner can create a new link instead.
+Expiry or revocation blocks subsequent requests, but cannot remove downloaded
+copies. A deleted, disabled, missing, or service-account owner, a missing or
+hidden artifact, or lost owner access also makes a link unavailable. Unknown,
+expired, revoked, and failed lookups receive the same unavailable response.
+
+### Delivery and preview
+
+The standalone viewer submits the token in the request body to
+`POST /api/v1/artifact-shares/metadata` and
+`POST /api/v1/artifact-shares/content`, never in the request URL. Each request rechecks the share, active owner, pinned
+version, visibility, and ownership. The connector receives a short-lived,
+dedicated service token, rechecks artifact authority, uses the existing blob
+storage and version mapping, and verifies the bytes against the SHA-256 hash
+recorded at publication. Missing or changed hashes fail closed; no signed
+storage URL is returned to the viewer. Node streams the verified response to
+the viewer rather than imposing a separate 25 MiB share limit or buffering an
+additional copy. Metadata checks currently fetch and verify the artifact bytes
+too, so opening a link can be expensive. The filename and MIME type are captured at
+publication from current artifact metadata; historical versions do not have
+independently versioned MIME metadata and may be labelled incorrectly.
+
+The shared viewer uses the same preview renderer selection as chat, including
+HTML, images, text, Markdown, audio/video, spreadsheets, DOCX, and PDF. For
+PowerPoint and legacy Word, a share-content request asks the connector to convert
+the verified pinned bytes to PDF using LibreOffice; the original download remains
+unchanged. Conversion failure leaves the download available. PowerPoint previews
+in chat and shares offer a slide-by-slide **Present** mode using the browser's
+Fullscreen API, with arrow-key navigation and Escape to exit. Slidev also offers
+**Present** on its isolated iframe. Browsers or embedding policies may refuse
+fullscreen; browser security indicators and OS behavior remain browser-controlled.
+HTML uses the existing artifact HTML renderer in an opaque-origin iframe. **This
+is not a complete network-isolation boundary:** its CSP blocks common subresource
+and fetch requests, but untrusted HTML can navigate the iframe, including through
+meta refresh.
+
+### Slidev presentation previews
+
+The Slidev skill builds the deck in the sandbox with `/opt/slidev/build_deck.py`
+and registers a ZIP containing a self-contained `dist/index.html` plus the
+editable source. The deck must be self-contained: the preview iframe has an
+opaque origin, so its requests for separate JS, CSS, font, or image files carry
+no Cloudflare Access cookie and get 401, leaving a blank frame. The helper
+builds without code splitting, embeds every file as inline code or a `data:`
+URI (including backtick-quoted paths in minified JS), and refuses to write a
+deck that still references another file. Because the agent cannot see the
+slides, the helper also renders Slidev's print view (every slide, every click
+revealed) in headless Chromium and refuses the deck on text that runs off the
+slide, is cut off by its box, overlaps other text, or has under 3:1 contrast
+with the colour behind it; on an OddBytes logo variant that does not suit its
+background (recognised by content after inlining), an accent (`_Primary_`) logo
+on a red background, or a logo wider than 35% of the slide (15% for an icon);
+on images more than 10%
+outside the slide; and when fewer slides render than `slides.md` defines (it
+first inserts the blank line Slidev needs after each `---`). `data-layout-ignore`
+exempts deliberate decorative overlaps. The check is mandatory: if Chromium
+cannot run, the build fails rather than delivering an unverified deck. The Vite
+config enables the print view without enabling Slidev's download button. The
+sandbox applies the same idea to charts: `sitecustomize.py` patches matplotlib's
+`Figure.savefig` (`deployment/sandbox/python/`) so a figure with overflowing,
+overlapping, tiny or low-contrast text raises instead of writing a file.
+Decks built before this helper load
+separate files and do not preview behind the gateway; regenerate them.
+ZIPs with other filenames can also be previewed when the selected version
+contains `dist/index.html`; ordinary ZIPs remain download-only.
+Chat opens the selected artifact version at `/decks/<artifactId>/<version>/...`;
+shared links use `/decks/shared/<share-token>/...` and are resolved against the
+share's pinned version. Decks are registered as `PRESENTATION` artifacts and
+shown by title (the chat card, artifacts gallery, preview panel, and share page
+never show `.zip`). Downloading a deck saves the built `index.html` as one
+self-contained HTML file; the source ZIP stays available as the fallback and as
+a secondary download on the share page. The existing artifact share link is
+used, so a recipient receives no conversation access.
+
+The helper names the ZIP after the deck's `title:` (or first heading) and pins
+that name in the project's `.oddjeeves-deck.json`, so every rebuild, including
+one in a later message, versions the same artifact instead of adding a card.
+Because each message gets a new sandbox, every build (pass or fail) also saves
+the project source to `.oddjeeves/deck-draft.zip`; the bridge stores it as a
+hidden (`STAGING`) artifact named `deck-draft.zip` and unpacks it into `deck/`
+before the first `run_code` of the next message
+(`backend/python/app/agents/agent_loop/deck_drafts.py`). The run-end scratch
+rescue skips deck project folders, so a failed deck never turns its fonts and
+source files into loose artifact cards.
+
+Both private and shared files are served by Node from the current application
+origin and backed by the Python artifact registry. Private preview capabilities
+name one user, organization, artifact, and immutable version, and Python checks
+the caller's artifact ACL on each file request. Node calls Python with an
+`artifact-deck:content` service token, which must stay in
+`ACCEPTED_SERVICE_SCOPES` (`backend/python/app/api/middlewares/token_policy.py`);
+without it every in-chat preview fails as "Presentation is unavailable" while
+shared links, which use `artifact-share:content`, still work. Shared requests revalidate the
+share and owner and read the exact pinned hash/version. A bounded in-memory
+cache stores validated file bytes keyed by organization, user, artifact, version,
+and content hash; authorization and active-account checks happen before every
+cache lookup, so access decisions are never cached. Only `dist/` files are
+served; source files are retained for download. ZIP path traversal, duplicate
+paths, symlinks, encryption, unsupported entry kinds, and archive/member size
+limits are checked without extracting files to disk. Styles, scripts, fonts,
+images, and transitions inside the built site are not filtered or altered, aside
+from the storage compatibility shim, which also makes a click advance the deck
+like the right arrow. The skill tells the agent to put deck-wide
+CSS in `style.css`: Slidev scopes `<style>` blocks in `slides.md` to one slide,
+so brand variables declared there never apply and the deck builds unstyled.
+
+Slidev runs in an iframe with `sandbox="allow-scripts"` and no
+`allow-same-origin`; the served index also carries a sandbox CSP. A small
+in-memory `localStorage`/`sessionStorage` shim is injected before Slidev boots,
+because the opaque origin otherwise causes Slidev to fail. Cross-origin
+resource headers let its built modules, fonts, and assets load from the same
+`/decks/` path. No wildcard domain or separate preview deployment is required:
+`/decks/` is an Express route on the existing application origin, before the
+static SPA fallback. In the contributor split setup, Next proxies `/decks/` to
+Express on port 3000 so the browser still uses its current origin. The bundled
+Helm values and AWS installer add `/decks` as a Prefix path to the same Node
+Service/port as `/`; chart rendering verifies the backend mapping. Responses use
+no-store/no-referrer headers. Shared tokens are redacted from Node request logs;
+`/decks/` asset requests are excluded from those logs. Preview URLs are bearer
+credentials for one artifact version; do not copy or log them. The Helm ingress
+example routes `/decks/` to Node; any separate external zero-trust gateway must
+also protect this path and redact capability/share-token segments.
+
+This work does not add vision-model QA, Docker live tests, or a broad browser
+test suite. A focused headless-Chrome route smoke is reproducible with a built
+Slidev `dist/` using `SLIDEV_DIST=/path/to/dist CHROME_BIN=/path/to/chrome
+TS_NODE_PROJECT=tsconfig.test.json node -r ts-node/register
+../../../scripts/smoke-slidev-route.cjs` from `backend/nodejs/apps`. It loads
+private and shared decks through the real Express `/decks` router, checks their
+scoped service tokens, requests built assets, and advances a slide; the internal
+Python fetch and share database are mocked. Python tests separately verify the
+archive validation and authorization paths.
+
+### Deployment and verification
+
+The administrator must protect the viewer **and both direct share APIs** with
+the external zero-trust gateway and prevent bypassing it. The application does
+not detect or verify that gateway; recipients do not need an OddJeeves login.
+Node suppresses parser-error details and redacts share/deck capabilities from
+request context and error logs. The bundled Helm values and AWS installer route
+`/decks` as a Prefix to the same Node Service as `/`, verified by rendered chart
+configuration; Node access logs omit `/decks`. The separate external zero-trust
+gateway is not configured in this repository. Before deployment, verify that it
+protects the viewer and both direct share APIs, preserves `/decks/` unchanged,
+and redacts `/share/<token>`, `/decks/<artifact>/<version>/<capability>/...`,
+`/decks/shared/<share-token>/...`, and the `token` query parameter from logs and
+traces. Do not record share request bodies or bearer tokens. Gateway redirect
+preservation and these external policies cannot be enforced or tested by
+OddJeeves here. Responses use no-store and no-referrer policies.
+
+The viewer calls share APIs on the current origin. In the contributor split
+setup, the Next development server proxies those calls to Node on port 3000 (or
+`NEXT_PUBLIC_API_BASE_URL`); static production exports are served by Node.
+Implementation lives under `backend/nodejs/apps/src/modules/artifacts/`,
+`backend/python/app/services/artifact_registry/`,
+`frontend/app/(main)/chat/components/message-area/artifact-share-dialog.tsx`,
+and `frontend/app/(public)/share/`.
+
+Focused tests cover token and owner policy, request privacy, UI rendering,
+archive validation, and the private/shared browser route smoke. They do not
+establish full end-to-end behavior across running services, storage backends,
+restarts, replicas, or the deployed external gateway; those checks remain open.
+
+## Chat source lookup
+
+Chat does not prefetch or grant indexed knowledge search, even if an old
+client requests it. The agent uses connected live service tools for company
+questions; MCP authentication remains per user. The Internal Search toggle is
+removed from chat. Graph storage remains in use for identity, permissions,
+attachments and other product functions. Connector sync and indexing features
+are unchanged and existing indexed data is not deleted. Public web search
+retains its existing separate Labs setting and user toggle. Attachment history
+is still rehydrated, but the indexed full-record fetch tool is not exposed when
+knowledge is disabled; missing attachment content requires reattachment.
+See `live-mcp-only-plan.md` for scope and verification.
+
+## Chat image analysis
+
+Chat agent runs register a built-in `analyze_image` tool. Image attachment
+references are presented to the text model as hints; execution checks the
+persisted conversation through Node's scoped `conversation:image-membership`
+service endpoint and independently checks the authenticated caller's record
+access before loading the image. The current membership endpoint permits only
+caller-owned conversations; shared conversations and service-account uploads
+without a human caller's access fail closed. Supplied history is never treated
+as membership authority.
+
+The analyzer accepts one PNG, JPEG or WebP stored image per call, at most 5 MiB
+and 20 million pixels, and rejects animated images and URLs. It selects the
+existing AI Models configuration whose exact model name is
+`IMAGE_ANALYSIS_MODEL_NAME` (default `qwen3-vl-32b-instruct`), through the
+existing model factory and the configuration's endpoint and credentials.
+The model must be marked multimodal and its name must be unique. There is no
+fallback to the chat, indexing, or default model. The vision call receives only the image and a fixed description instruction,
+not the user's question or chat history. Images are proportionally downscaled
+without upscaling to `IMAGE_ANALYSIS_MAX_DIMENSION` (default 1280, allowed
+256–2048) before the call. Calls have a 45-second timeout and bounded text
+output. `image_analysis` logs record the instruction, model, gateway hostname,
+image dimensions and byte counts, outcome, safe error type/status and available
+token usage; they never include images, conversation text, credentials, URL
+paths or provider responses. HTML and PPTX rendering and visual QA are not provided by this tool and are deferred to
+the coding sandbox. See `chat-image-analysis-plan.md` for implementation notes
+and remaining verification.
+
+Chat model streaming diagnostics (`llm_stream_start`, `llm_stream_first_chunk`,
+`llm_stream_first_event`, and `llm_stream_end`) record per-attempt timing,
+chunk and event counts, outcome, and error type without message or tool content.
+These describe what the LangChain transport received and yielded, not whether
+the browser displayed it. A running stream has no end log until it completes,
+fails, or is cancelled.
 
 ## Agent context budget and tool exposure
 
@@ -440,6 +696,17 @@ not run that local server must configure an embedding provider in the app. The
 chart profile does not inject a second adapter that overrides that selection.
 The baked FastEmbed BM25 cache is separate; it serves the sparse/entity-index
 path, not dense embeddings.
+
+## Built-in skills
+
+Organization administrators can edit the content, metadata, and resources of
+built-in skills in the workspace Skills editor and restore earlier revisions.
+The server checks the caller's current organization-admin role for every such
+edit; members can read built-ins but cannot modify them. Deleting or deprecating
+built-ins remains blocked, and the agent runtime cannot modify them through its
+skill tools. Edits are per organization. An administrator's content or resource
+changes mark that organization's copy as customized, so later built-in pack
+upgrades do not overwrite them; unmodified copies continue receiving updates.
 
 ## Usage telemetry and Hugging Face
 

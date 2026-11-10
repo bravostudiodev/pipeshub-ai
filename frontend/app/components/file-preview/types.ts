@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { RecordDetailsResponse } from '@/app/(main)/knowledge-base/types';
 
 /**
@@ -166,6 +167,9 @@ export interface FilePreviewProps {
    * to keep behaviour stable for previews that don't expect it.
    */
   showDownload?: boolean;
+
+  /** Optional caller-provided action displayed beside the preview controls. */
+  headerAction?: ReactNode;
 
   /**
    * Highest known version for `file` — enables the version-switcher header

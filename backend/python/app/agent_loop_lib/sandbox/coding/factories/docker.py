@@ -35,6 +35,9 @@ class DockerFactoryConfig(BaseModel):
     npm_registry: str = "https://registry.npmjs.org"
     working_dir_root: str | None = None
     image_node_modules: str | None = None
+    # Packages the image already ships, per language: a request for one of
+    # them is satisfied without starting an install container.
+    preinstalled_packages: dict[str, list[str]] = Field(default_factory=dict)
     allow_network: bool = False
     # Private ranges networked containers may still reach, e.g. a package mirror.
     egress_allow_cidrs: list[str] = Field(default_factory=list)
@@ -110,6 +113,7 @@ class DockerCodingSandboxFactory(SandboxBackendFactory):
             package_allowlist=allowlist,
             package_denylist=denylist,
             image_node_modules=cfg.image_node_modules,
+            preinstalled_packages=cfg.preinstalled_packages,
             allow_network=cfg.allow_network,
             egress_allow_cidrs=tuple(cfg.egress_allow_cidrs),
             sandbox_user=cfg.sandbox_user,

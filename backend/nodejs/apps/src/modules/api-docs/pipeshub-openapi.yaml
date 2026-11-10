@@ -14383,7 +14383,7 @@ components:
         source:
           type: string
           enum: [builtin, manual, imported, learned]
-          description: "`builtin` skills are seeded by `BuiltinSkillSeeder` and read-only for end users."
+          description: "`builtin` skills are seeded per organization and editable only by organization administrators."
         license:
           type: string
           nullable: true
@@ -16377,6 +16377,51 @@ paths:
         '403':
           description: Caller is not permitted to use this API
 
+  /mcp-servers/tability-connection:
+    get:
+      tags:
+        - MCP Servers
+      summary: Get the current user's Tability MCP connection status
+      description: |
+        Returns whether the organization's designated Tability MCP instance is
+        configured and whether the authenticated user has their own saved OAuth
+        credentials. The instance must use https://mcp.tability.app/mcp,
+        Streamable HTTP, and per-user OAuth. Credentials are never returned.
+      operationId: getTabilityMcpConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tability connection status for the authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  instanceId:
+                    type: string
+                  isConnected:
+                    type: boolean
+                  hasCredentials:
+                    type: boolean
+                  needsReauth:
+                    type: boolean
+                    description: The provider rejected the saved credential; the user must reconnect.
+                  statusDetail:
+                    type: string
+                    nullable: true
+                  grantVersion:
+                    type: string
+                    nullable: true
+                    description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
   /mcp-servers/superhuman-docs-connection:
     get:
       tags:
@@ -16416,6 +16461,32 @@ paths:
                     type: string
                     nullable: true
                     description: Opaque caller-bound generation used to verify a completed reconnect.
+        '401':
+          description: Authentication required
+        '403':
+          description: Caller is not permitted to use this API
+
+  /mcp-servers/obsales-connection:
+    get:
+      tags: [MCP Servers]
+      summary: Get OBSales shared connection availability
+      description: Reports whether the designated OBSales MCP connection is available. The shared administrator token is never returned.
+      operationId: getObSalesConnection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OBSales connection availability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured, isConnected]
+                properties:
+                  configured:
+                    type: boolean
+                  isConnected:
+                    type: boolean
         '401':
           description: Authentication required
         '403':
@@ -20045,6 +20116,10 @@ paths:
                         updatedAtTimestamp:
                           type: integer
                           description: "Epoch milliseconds of `updatedAt` (absent if field is null)"
+                        lastActiveTimestamp:
+                          type: integer
+                          format: int64
+                          description: "Epoch milliseconds of most recent recorded human session activity; absent until observed. Updated at most once every five minutes."
                         profilePicture:
                           type: string
                           description: "Base64 data URI (`data:image/jpeg;base64,...`). Absent when no picture uploaded."
@@ -24911,6 +24986,200 @@ paths:
           description: The storage scoped token was missing or invalid.
         '404':
           description: No such document.
+  /artifacts/{artifactId}/shares:
+    parameters:
+      - in: path
+        name: artifactId
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Artifacts]
+      summary: Publish one artifact version
+      description: Requires artifact ownership. The bearer is encrypted at rest and can be recovered only by the owner while the share is active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, expiresInDays]
+              properties:
+                version:
+                  type: integer
+                  minimum: 1
+                expiresInDays:
+                  type: integer
+                  enum: [1, 7, 30]
+      responses:
+        '201':
+          description: Share created; the response contains a bearer secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, token, expiresAt]
+                properties:
+                  id:
+                    type: string
+                  token:
+                    type: string
+                    description: Bearer secret; do not log or cache.
+                  expiresAt:
+                    type: string
+                    format: date-time
+        '404':
+          description: Artifact or version unavailable.
+    get:
+      tags: [Artifacts]
+      summary: List the caller's active shares for an artifact
+      responses:
+        '200':
+          description: Active shares without bearer tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shares]
+                properties:
+                  shares:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        version:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                        expiresAt:
+                          type: string
+                          format: date-time
+                        canCopy:
+                          type: boolean
+                          description: False for legacy hash-only shares whose token cannot be recovered.
+  /artifacts/{artifactId}/shares/{shareId}/link:
+    get:
+      tags: [Artifacts]
+      summary: Recover an active share token as its owner
+      description: Returns the bearer secret only to the authenticated owner in the same organization. Legacy hash-only shares cannot be recovered.
+      parameters:
+        - in: path
+          name: artifactId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: shareId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Owner-only bearer token; never cache or log.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token:
+                    type: string
+        '404':
+          description: Share unavailable or not recoverable.
+  /artifacts/{artifactId}/shares/{shareId}:
+    delete:
+      tags: [Artifacts]
+      summary: Revoke the caller's share
+      parameters:
+        - in: path
+          name: artifactId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: shareId
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Share revoked.
+        '404':
+          description: Share unavailable.
+  /artifact-shares/metadata:
+    post:
+      tags: [Artifacts]
+      summary: Check availability of a published artifact version
+      description: The gateway must protect this endpoint. Submit the bearer token in the body.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: The pinned artifact version is available.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, name, mimeType]
+                properties:
+                  version:
+                    type: integer
+                  name:
+                    type: string
+                  mimeType:
+                    type: string
+                  isDeck:
+                    type: boolean
+                    description: The pinned ZIP contains a previewable built site.
+        '404':
+          description: The artifact is unavailable.
+  /artifact-shares/content:
+    post:
+      tags:
+        - Artifacts
+      summary: Download or preview a published artifact version
+      description: |
+        Validates the bearer share token on every request. Access to this
+        endpoint must be protected by the deployment's zero-trust gateway.
+        The token is sent in the request body, never the URL. Set previewPdf
+        only to preview a PowerPoint or legacy Word file as PDF; downloads
+        always return the original pinned artifact.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                previewPdf:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Original artifact bytes or converted PDF bytes, served as an attachment.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: The artifact is unavailable.
   /artifacts:
     get:
       tags:
@@ -25032,6 +25301,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /artifacts/{artifactId}/deck-preview:
+    post:
+      tags: [Artifacts]
+      summary: Create a private preview capability for one artifact version
+      description: Returns a no-expiry, artifact-scoped viewer URL. Do not log, cache, or share this URL; artifact access is rechecked for every requested file.
+      operationId: createArtifactDeckPreview
+      security:
+        - bearerAuth: []
+        - oauth2: [kb:read]
+      parameters:
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Private preview URL for the requested version.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [previewUrl]
+                properties:
+                  previewUrl:
+                    type: string
+                    description: Bearer capability scoped to one artifact and version; never log or share.
+        '404':
+          description: Artifact or version unavailable.
 
   /artifacts/{artifactId}/versions:
     get:
@@ -28721,6 +29037,44 @@ paths:
             example, the initial conversation row could not be persisted).
             Once the stream is open, terminal failures are surfaced as a
             `RUN_ERROR` SSE event instead of an HTTP status change.
+
+  /conversations/internal/image-attachment-membership:
+    post:
+      summary: Check whether an image attachment belongs to a caller-owned conversation
+      description: Internal service-only check. The caller identity and organization come from a scoped service token, not the request body. Shared conversations are not currently included.
+      tags:
+        - Conversations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversationId, virtualRecordId]
+              properties:
+                conversationId:
+                  type: string
+                virtualRecordId:
+                  type: string
+      responses:
+        '200':
+          description: Membership decision
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [allowed]
+                properties:
+                  allowed:
+                    type: boolean
+        '400':
+          description: Invalid identity or reference
+        '401':
+          description: Invalid service token
+        '403':
+          description: Missing service scope
 
   /conversations/attachments/upload:
     post:
@@ -39248,7 +39602,7 @@ paths:
       tags:
         - Skills
       summary: Update a skill
-      description: Full update of a skill's content and metadata from structured form fields. Builtin skills can only be edited by the seeding identity — a non-owner attempt surfaces as 404/409.
+      description: Full update of a skill's content and metadata from structured form fields. Built-in skills require a current organization administrator; custom skills are creator-scoped.
       operationId: updateSkill
       security:
         - bearerAuth: []
@@ -39363,7 +39717,7 @@ paths:
       tags:
         - Skills
       summary: Patch a skill's body with an exact string replacement
-      description: Fails 400 if `old_string` doesn't exist, or exists more than once, in the current body.
+      description: Built-in skills require an organization administrator. Fails 400 if `old_string` doesn't exist, or exists more than once, in the current body.
       operationId: patchSkillBody
       security:
         - bearerAuth: []
@@ -39434,7 +39788,7 @@ paths:
 
         Custom skills: only the creator can disable (a non-owner gets 404,
         matching GET). Builtin skills: only an organization admin; members
-        get 403. Content edits of builtins remain 403.
+        get 403. Organization admins can also edit builtin content.
       operationId: disableSkill
       security:
         - bearerAuth: []
@@ -39593,6 +39947,7 @@ paths:
       tags:
         - Skills
       summary: Roll back a skill to a prior version
+      description: Rolling back a built-in skill requires an organization administrator.
       operationId: rollbackSkill
       security:
         - bearerAuth: []
@@ -39663,7 +40018,7 @@ paths:
       summary: Write a bundled resource
       description: |
         Creates or overwrites a text resource file under the skill's directory.
-        Rejects (400) path traversal, absolute paths, `SKILL.md`, and payloads
+        Built-in skills require an organization administrator. Rejects (400) path traversal, absolute paths, `SKILL.md`, and payloads
         that exceed the per-file/per-skill byte budget. Binary resources are
         not yet supported (deferred to a blob-storage follow-up).
       operationId: writeSkillResource
@@ -39697,6 +40052,7 @@ paths:
       tags:
         - Skills
       summary: Remove a bundled resource
+      description: Removing a built-in skill resource requires an organization administrator.
       operationId: removeSkillResource
       security:
         - bearerAuth: []

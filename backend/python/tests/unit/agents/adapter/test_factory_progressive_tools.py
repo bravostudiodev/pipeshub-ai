@@ -103,17 +103,17 @@ class TestEntityToolGrant:
     async def test_search_entities_granted_find_records_deferred(self) -> None:
         _context, agent, runtime = await _create()
 
-        assert SEARCH_ENTITIES_TOOL_NAME in agent.spec.tool_names
-        assert runtime.tool_registry.has(PROGRESSIVE_FIND_RECORDS_TOOL_NAME)
+        assert SEARCH_ENTITIES_TOOL_NAME not in agent.spec.tool_names
+        assert not runtime.tool_registry.has(PROGRESSIVE_FIND_RECORDS_TOOL_NAME)
         assert PROGRESSIVE_FIND_RECORDS_TOOL_NAME not in agent.spec.tool_names
-        assert "knowledgegraph__search" in agent.spec.tool_names
+        assert "knowledgegraph__search" not in agent.spec.tool_names
 
     async def test_entity_tools_hidden_without_entity_store(self) -> None:
         _context, agent, _runtime = await _create(with_store=False)
 
         assert SEARCH_ENTITIES_TOOL_NAME not in agent.spec.tool_names
         assert PROGRESSIVE_FIND_RECORDS_TOOL_NAME not in agent.spec.tool_names
-        assert "knowledgegraph__search" in agent.spec.tool_names
+        assert "knowledgegraph__search" not in agent.spec.tool_names
 
     async def test_find_records_granted_when_history_used_entity_tools(self) -> None:
         history = [
@@ -124,7 +124,7 @@ class TestEntityToolGrant:
         ]
         _context, agent, _runtime = await _create(history=history)
 
-        assert PROGRESSIVE_FIND_RECORDS_TOOL_NAME in agent.spec.tool_names
+        assert PROGRESSIVE_FIND_RECORDS_TOOL_NAME not in agent.spec.tool_names
 
     async def test_deep_mode_orchestrator_gets_no_entity_tools(self) -> None:
         _context, agent, _runtime = await _create("deep")

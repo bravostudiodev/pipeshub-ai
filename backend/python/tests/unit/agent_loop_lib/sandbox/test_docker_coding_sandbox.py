@@ -584,6 +584,40 @@ class TestInstallPackagesIdempotency:
             assert fake_client.containers.create.call_count == 1
 
 
+class TestPreinstalledPackages:
+    """A package the image already ships must never start an install
+    container: with an unreachable registry that install hung for five
+    minutes while the chat showed nothing."""
+
+    async def test_image_package_is_satisfied_without_a_container(self, tmp_path) -> None:
+        sandbox = DockerCodingSandbox(
+            working_dir=str(tmp_path / "wd"),
+            preinstalled_packages={"typescript": ["exceljs", "docx"], "python": ["python_docx"]},
+        )
+        fake_client = MagicMock()
+        _with_egress_network(fake_client, "sandbox_egress")
+
+        with patch("docker.from_env", return_value=fake_client):
+            node = await sandbox.install_packages(["exceljs@4", "docx"], "typescript")
+            python = await sandbox.install_packages(["python-docx"], "python")
+
+        assert node.success is True and node.installed == []
+        assert python.success is True and python.installed == []
+        fake_client.containers.create.assert_not_called()
+
+    async def test_a_real_install_fails_fast_when_the_registry_is_unreachable(self, tmp_path) -> None:
+        sandbox = DockerCodingSandbox(working_dir=str(tmp_path / "wd"))
+        fake_client = MagicMock()
+        fake_client.containers.create.return_value = _fake_container(exit_code=0)
+        _with_egress_network(fake_client, "sandbox_egress")
+
+        with patch("docker.from_env", return_value=fake_client):
+            await sandbox.install_packages(["left-pad"], "typescript")
+
+        command = fake_client.containers.create.call_args.kwargs["command"][6]
+        assert "--fetch-timeout=20000" in command and "--fetch-retries=1" in command
+
+
 class TestInstallFailsClosed:
     """pip builds sdists and npm runs lifecycle scripts, so an install is
     never retried on the bridge without the firewall."""
@@ -735,9 +769,25 @@ class TestTarFiles:
         tar_bytes = _tar_files(files)
 
         with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
-            assert set(tar.getnames()) == set(files)
+            assert {m.name for m in tar.getmembers() if m.isfile()} == set(files)
             for name, content in files.items():
                 assert tar.extractfile(name).read() == content
+
+    def test_entries_stay_writable_by_the_unprivileged_sandbox_user(self) -> None:
+        """put_archive unpacks as root; with default 0644 files and implicit
+        root-owned parents, a later call could not overwrite a file it wrote
+        earlier (PermissionError rebuilding a deck project in place)."""
+        tar_bytes = _tar_files({"deck/public/logo/a.svg": b"<svg/>", "deck/slides.md": b"# hi"})
+
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+            members = {m.name: m for m in tar.getmembers()}
+        assert {"deck", "deck/public", "deck/public/logo"} <= set(members)
+        names = list(members)
+        assert names.index("deck/public/logo") < names.index("deck/public/logo/a.svg")
+        for m in members.values():
+            assert m.mode == (0o777 if m.isdir() else 0o666)
+            # A 1970 mtime (TarInfo's default) makes ZIP refuse the file later.
+            assert m.mtime > 315532800
 
     def test_empty_map_yields_empty_tar(self) -> None:
         tar_bytes = _tar_files({})

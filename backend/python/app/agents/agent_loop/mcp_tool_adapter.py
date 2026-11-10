@@ -9,6 +9,7 @@ instead of `MCPClientManager.connect()`'s per-call connect/disconnect.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import time
@@ -31,6 +32,7 @@ from app.agents.agent_loop.tool_adapter import (
 )
 from app.agents.mcp.client import MCPReauthRequiredError
 from app.agents.mcp.retrieval_trace import invocation_fields, record_event
+from app.agents.mcp.service import uses_shared_admin_credential
 from app.utils.url_redaction import redact_urls_in_text
 
 if TYPE_CHECKING:
@@ -58,6 +60,22 @@ def _credential_values(value: Any, key: str = "") -> list[str]:  # noqa: ANN401
     if key.lower().replace("_", "") in _SENSITIVE_CREDENTIAL_KEYS and isinstance(value, str):
         return [value] if value else []
     return []
+
+
+def _redact_obsales_result(value: Any, secrets: list[str]) -> Any:  # noqa: ANN401
+    """Redact credential echoes from JSON-compatible successful tool results."""
+    if isinstance(value, str):
+        for secret in secrets:
+            value = value.replace(secret, "[REDACTED]")
+        return value
+    if isinstance(value, list):
+        return [_redact_obsales_result(item, secrets) for item in value]
+    if isinstance(value, dict):
+        return {_redact_obsales_result(key, secrets): _redact_obsales_result(item, secrets)
+                for key, item in value.items()}
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    raise ValueError("Unsupported OBSales result")
 
 
 def safe_error_text(error: Any, credentials: dict[str, Any]) -> str:  # noqa: ANN401
@@ -168,6 +186,10 @@ class MCPToolAdapter(Tool):
             raise ValueError("MCP tool has an invalid object input schema")
         if len(json.dumps(schema, ensure_ascii=True)) > 128_000:
             raise ValueError("MCP tool schema exceeds the expanded schema budget")
+        if uses_shared_admin_credential(self._server.instance):
+            # Attribution is supplied by the server, never requested from the model.
+            schema = {**schema, "properties": {k: v for k, v in properties.items() if k != "requesting_user_email"}}
+            schema["required"] = [name for name in required if name != "requesting_user_email"]
         return schema
 
     def _properties_with_authoritative_type(self) -> frozenset[str]:
@@ -221,6 +243,9 @@ class MCPToolAdapter(Tool):
         params_by_name = {p.name: p for p in self.parameters}
         typed_properties = self._properties_with_authoritative_type()
         for param in params_by_name.values():
+            if param.name == "requesting_user_email" and uses_shared_admin_credential(self._server.instance):
+                # Server-controlled attribution is injected at execution, not supplied by the model.
+                continue
             if param.name not in kwargs:
                 if param.required:
                     raise ToolValidationError(
@@ -263,6 +288,22 @@ class MCPToolAdapter(Tool):
 
     async def execute(self, **kwargs: Any) -> ToolOutput:  # noqa: ANN401
         started = time.perf_counter()
+        if uses_shared_admin_credential(self._server.instance):
+            # OBSales requires this argument for its access log. Do not trust model input,
+            # service-account callerEmail overrides, or the agent creator's prompt identity.
+            context = getattr(self._session_manager, "_context", None)
+            caller_id = getattr(context, "authenticated_user_id", None)
+            graph = getattr(context, "graph_provider", None)
+            org_id = getattr(context, "org_id", None)
+            try:
+                user = await graph.get_user_by_user_id(caller_id) if graph and caller_id and org_id else None
+                email = user.get("email", "").strip() if isinstance(user, dict) and isinstance(user.get("email"), str) else ""
+                local, sep, domain = email.rpartition("@")
+                if not isinstance(user, dict) or user.get("orgId") != org_id or not local or not sep or domain.lower() not in {"oddbytes.com", "chirp.me"}:
+                    raise ValueError("unavailable caller identity")
+            except Exception:
+                return ToolOutput(success=False, error="OBSales requires an authenticated employee email for access logging.")
+            kwargs = {**kwargs, "requesting_user_email": email}
         try:
             raw_result = await self._session_manager.call(self._server, self._tool_info.name, kwargs)
         except Exception as exc:
@@ -285,7 +326,31 @@ class MCPToolAdapter(Tool):
             )
             return ToolOutput(success=False, error=safe_error_text(exc, self._server.auth))
         context = getattr(self._session_manager, "_context", None)
+        is_obsales = uses_shared_admin_credential(self._server.instance)
+        if is_obsales and any(getattr(block, "type", None) != "text" for block in (getattr(raw_result, "content", None) or [])):
+            # Do not admit opaque media that cannot be checked for credential echoes.
+            return ToolOutput(success=False, error="OBSales returned an unsupported response.")
+        if is_obsales:
+            # Redact before the converter caps text: otherwise a token crossing the
+            # truncation boundary could survive as an unrecognizable partial secret.
+            try:
+                raw_result = copy.deepcopy(raw_result)
+                secrets = _credential_values(self._server.auth)
+                for block in getattr(raw_result, "content", None) or []:
+                    block.text = _redact_obsales_result(block.text, secrets)
+                for field in ("structured_content", "structuredContent"):
+                    value = getattr(raw_result, field, None)
+                    if value is not None:
+                        setattr(raw_result, field, _redact_obsales_result(value, secrets))
+                        break
+            except Exception:
+                return ToolOutput(success=False, error="OBSales returned an unsupported response.")
         output = await mcp_result_to_tool_output(raw_result, context)
+        if is_obsales and output.success:
+            try:
+                output.data = _redact_obsales_result(output.data, _credential_values(self._server.auth))
+            except (TypeError, ValueError):
+                return ToolOutput(success=False, error="OBSales returned an unsupported response.")
         succeeded = output.success
         if not succeeded:
             output = ToolOutput(success=False, error=safe_error_text(output.error, self._server.auth))
@@ -295,7 +360,7 @@ class MCPToolAdapter(Tool):
             "invocation",
             invocation_fields(
                 self._server, self._tool_info.name, kwargs, started,
-                result=raw_result, tool_succeeded=succeeded,
+                result=None if is_obsales else raw_result, tool_succeeded=succeeded,
             ),
         )
         if not succeeded:

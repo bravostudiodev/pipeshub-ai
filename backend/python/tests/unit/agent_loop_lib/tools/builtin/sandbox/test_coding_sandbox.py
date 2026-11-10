@@ -200,15 +200,18 @@ class TestBlankSandboxId:
         assert result.success, result.error
         assert result.data["input_files"] == [PARENT_RESULTS_INPUT_PATH]
 
-    async def test_unknown_sandbox_id_still_fails(self) -> None:
+    async def test_unknown_sandbox_id_falls_back_to_request_sandbox(self) -> None:
+        """A mistyped id (models swap hex digits) must not cost a step: the
+        call runs in this request's sandbox, where earlier files still are."""
         manager = SandboxManager()
         manager.register_backend_factory(SandboxType.CODING, _UploadCapturingBackend)
         tool = CodingSandboxTool(manager)
 
-        result = await tool.execute(code="print(1)", language="python", sandbox_id="nope")
+        first = await tool.execute(code="print(1)", language="python")
+        second = await tool.execute(code="print(2)", language="python", sandbox_id="nope")
 
-        assert not result.success
-        assert "nope" in result.error
+        assert second.success, second.error
+        assert second.data["sandbox_id"] == first.data["sandbox_id"]
 
 
 class TestDetectLanguageMismatch:

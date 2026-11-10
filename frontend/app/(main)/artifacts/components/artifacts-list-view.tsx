@@ -7,6 +7,7 @@ import { FileIcon } from '@/app/components/ui';
 import { formatSize, formatDate } from '@/lib/utils/formatters';
 import { useTranslation } from 'react-i18next';
 import type { ArtifactListItem, ArtifactsSortField } from '../types';
+import { artifactDisplayName as displayName, isDeckItem } from '../deck-items';
 
 interface ArtifactsListViewProps {
   items: ArtifactListItem[];
@@ -116,7 +117,7 @@ export function ArtifactsListView({
             align="center"
             role="button"
             tabIndex={0}
-            aria-label={item.name}
+            aria-label={displayName(item)}
             style={{
               padding: 'var(--space-2) var(--space-4)',
               borderBottom: '1px solid var(--olive-3)',
@@ -126,9 +127,9 @@ export function ArtifactsListView({
             onKeyDown={activatePreview(item)}
           >
             <Flex align="center" gap="2" style={{ flex: 2, minWidth: 0, paddingRight: 'var(--space-2)' }}>
-              <FileIcon filename={item.name} mimeType={item.mimeType || undefined} size={18} />
+              <FileIcon extension={isDeckItem(item) ? 'pptx' : undefined} filename={item.name} mimeType={item.mimeType || undefined} size={18} />
               <Text size="2" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {item.name}
+                {displayName(item)}
               </Text>
             </Flex>
             <Text size="2" style={{ width: '140px', color: 'var(--slate-11)' }}>

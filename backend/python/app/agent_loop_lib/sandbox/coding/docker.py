@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import os
+import posixpath
 import shutil
 import tarfile
 import tempfile
@@ -178,6 +179,7 @@ class DockerCodingSandbox(CodingSandboxBackend):
         package_allowlist: list[str] | None = None,
         package_denylist: list[str] | None = None,
         image_node_modules: str | None = None,
+        preinstalled_packages: dict[str, list[str]] | None = None,
         egress_allow_cidrs: tuple[str, ...] = (),
         sandbox_user: str = "sandbox",
         context: SandboxContext | None = None,
@@ -208,7 +210,13 @@ class DockerCodingSandbox(CodingSandboxBackend):
         self._image_node_modules = image_node_modules
         self._egress_allow_cidrs = parse_cidrs(egress_allow_cidrs)
         self._sandbox_user = sandbox_user
-        self._installed: dict[str, set[str]] = {"typescript": set(), "python": set()}
+        self._installed: dict[str, set[str]] = {
+            language: {
+                canonical_package_key(name, language)
+                for name in (preinstalled_packages or {}).get(language, [])
+            }
+            for language in ("typescript", "python")
+        }
         self._reflection = ReflectionEngine()
         self._provisioned = False
 
@@ -763,7 +771,11 @@ class DockerCodingSandbox(CodingSandboxBackend):
         if language == "python":
             cmd = [
                 "sh", "-c",
+                # Short timeouts: an unreachable index must fail in about a
+                # minute, not hold the tool call (and the chat) for the full
+                # container wait below.
                 "pip install --quiet --no-cache-dir --target /deps "
+                "--timeout 20 --retries 1 "
                 f"--index-url {self._pip_index_url} " + " ".join(to_install),
             ]
             extract_path = "/deps"
@@ -772,6 +784,7 @@ class DockerCodingSandbox(CodingSandboxBackend):
             cmd = [
                 "sh", "-c",
                 "mkdir -p /install && npm install --prefix /install --no-save "
+                "--fetch-timeout=20000 --fetch-retries=1 "
                 f"--loglevel=error --registry={self._npm_registry} "
                 + " ".join(to_install),
             ]
@@ -923,11 +936,31 @@ def _tar_files(files: dict[str, bytes]) -> bytes:
     listing), this preserves whatever nested structure the paths encode
     (e.g. `input/artifacts/foo.png`) without touching disk beyond what the
     caller already read."""
+    # Entries are unpacked as root, but code runs as the unprivileged `sandbox`
+    # user, which must be able to overwrite files carried over from an earlier
+    # call (e.g. edit and rebuild a project) and add files beside them.
+    # TarInfo defaults to a 1970 mtime, which ZIP cannot store; zipping a
+    # carried-over file then fails with "timestamps before 1980".
+    now = int(time.time())
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
+        dirs: set[str] = set()
+        for rel_path in files:
+            parent = posixpath.dirname(rel_path)
+            while parent and parent not in dirs:
+                dirs.add(parent)
+                parent = posixpath.dirname(parent)
+        for d in sorted(dirs):
+            info = tarfile.TarInfo(name=d)
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o777
+            info.mtime = now
+            tar.addfile(info)
         for rel_path, content in files.items():
             info = tarfile.TarInfo(name=rel_path)
             info.size = len(content)
+            info.mode = 0o666
+            info.mtime = now
             tar.addfile(info, io.BytesIO(content))
     buf.seek(0)
     return buf.read()

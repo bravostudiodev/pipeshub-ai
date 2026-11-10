@@ -456,7 +456,6 @@
     "language": "भाषा",
     "english": "अंग्रेज़ी",
     "german": "जर्मन",
-    "rotateLandscape": "सर्वोत्तम अनुभव के लिए अपना डिवाइस घुमाएँ",
     "errorOccurred": "एक त्रुटि हुई। कृपया पुनः प्रयास करें।",
     "beta": {
       "label": "बीटा",
@@ -2606,6 +2605,7 @@
         "scopes": "स्कोप्स",
         "scopesPlaceholder": "एक स्कोप जोड़ें",
         "useAdminAuth": "सभी उपयोगकर्ताओं के लिए साझा एडमिन प्रमाणीकरण का उपयोग करें",
+        "useAdminAuthHint": "केवल OBSales के लिए; कर्मचारी इस साझा टोकन का अपने-आप उपयोग करेंगे।",
         "headerValue": "{{headerName}}",
         "apiToken": "API टोकन",
         "credentialsHeading": "प्रमाण-पत्र (वैकल्पिक)",
@@ -3385,7 +3385,7 @@
         "conflictDescription": "नवीनतम संस्करण फिर से लोड करें, फिर अपने बदलाव दोबारा लागू करें।",
         "conflictReload": "पुनः लोड करें"
       },
-      "builtinReadOnly": "यह एक अंतर्निहित skill है और इसे संपादित नहीं किया जा सकता।",
+      "builtinReadOnly": "केवल कार्यक्षेत्र व्यवस्थापक इस अंतर्निहित skill को संपादित कर सकते हैं।",
       "editorPanel": {
         "createTitle": "नई Skill",
         "reviewTitle": "उम्मीदवार की समीक्षा और संपादन",

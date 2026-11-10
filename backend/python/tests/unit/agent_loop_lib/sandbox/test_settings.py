@@ -43,8 +43,8 @@ class TestSandboxSettingsDefaults:
 
     def test_governor_settings_defaults(self) -> None:
         g = GovernorSettings()
-        assert g.max_total_sandboxes == 50
-        assert g.max_per_org == 10
+        assert g.max_total_sandboxes == 100
+        assert g.max_per_org == 30
 
 
 class TestEnvSandboxSettingsLoader:
